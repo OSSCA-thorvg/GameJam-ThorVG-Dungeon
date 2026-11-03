@@ -9,6 +9,10 @@ npm install
 npm run dev
 ```
 
+## Team
+
+- [@alpakaDurumi](https://github.com/alpakaDurumi): solo developer
+
 ## Credits
 
 | Asset | Author | Source | License | Changes |
