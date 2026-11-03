@@ -9,3 +9,8 @@ SPDX-License-Identifier = "MIT"
 path = "assets/icons/cathelineau/**"
 SPDX-FileCopyrightText = "Cathelineau"
 SPDX-License-Identifier = "CC-BY-3.0"
+
+[[annotations]]
+path = "assets/splash/**"
+SPDX-FileCopyrightText = "ThorVG project"
+SPDX-License-Identifier = "LicenseRef-ThorVG-Splash"

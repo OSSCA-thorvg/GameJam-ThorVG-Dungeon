@@ -6,6 +6,7 @@ import { findPath } from './path';
 import { createCharacter, createRoomView } from './render';
 import { parseRoom, type Point } from './room';
 import startRoom from './rooms/start.txt?raw';
+import { playSplash } from './splash';
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -19,6 +20,9 @@ const canvas = new TVG.Canvas('#canvas', {
   width: window.innerWidth,
   height: window.innerHeight,
 });
+
+await playSplash(TVG, canvas);
+document.querySelector('footer')!.hidden = false;
 
 const room = parseRoom(startRoom);
 if (!room.start) {

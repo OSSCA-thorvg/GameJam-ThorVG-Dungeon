@@ -1,0 +1,10 @@
+ThorVG splash animation
+
+Source: https://app.lottiefiles.com/share/9fb04dcc-0426-4f7b-852d-643e6aaf252c
+
+The OSSCA ThorVG GameJam provides this animation as the required splash screen
+for its entries. The event rules require it to be rendered with ThorVG and
+played without modifying the animation:
+https://ossca-thorvg.github.io/site/project/#event
+
+The source does not state any other license terms.
