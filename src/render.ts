@@ -1,4 +1,4 @@
-import type { Paint, Picture, Scene, ThorVGNamespace } from '@thorvg/webcanvas';
+import type { Paint, Picture, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { Point, Room } from './room';
 
 type Color = [r: number, g: number, b: number];
@@ -7,8 +7,18 @@ export interface RoomView {
   scene: Scene;
   // Moves a paint onto a tile and into that tile's draw layer.
   place(paint: Paint, x: number, y: number): void;
+  // Moves a paint onto a tile, drawn above the whole room.
+  placeOverlay(paint: Paint, x: number, y: number): void;
+  // Takes a placed paint out of the room.
+  remove(paint: Paint): void;
   // Returns the tile whose floor contains a position in scene coordinates.
   tileAt(sceneX: number, sceneY: number): Point | null;
+}
+
+export interface HealthBar {
+  scene: Scene;
+  // Makes the bar visible, filled to a ratio from 0 to 1.
+  show(ratio: number): void;
 }
 
 // 2:1 isometric tile from https://clintbellanger.net/articles/isometric_math/
@@ -20,12 +30,19 @@ const WALL_HEIGHT = 0.6 * Math.sqrt((TILE_WIDTH ** 2 - TILE_HEIGHT ** 2) / 2);
 
 const CHARACTER_SIZE = TILE_WIDTH * 0.75;
 
+const HEALTH_BAR_WIDTH = CHARACTER_SIZE * 0.8;
+const HEALTH_BAR_HEIGHT = 5;
+const HEALTH_BAR_GAP = 4;
+
 const FLOOR_LIGHT: Color = [96, 100, 110];
 const FLOOR_DARK: Color = [86, 90, 100];
 const DOOR: Color = [150, 104, 60];
 const WALL_TOP: Color = [130, 134, 144];
 const WALL_LEFT: Color = [70, 74, 84];
 const WALL_RIGHT: Color = [50, 54, 64];
+const DUMMY_ENEMY: Color = [196, 64, 64];
+const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
+const HEALTH_BAR_FILL: Color = [90, 200, 90];
 
 function mapToScreen(x: number, y: number): Point {
   return {
@@ -48,6 +65,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     scene.add(layer);
     return layer;
   });
+
+  const overlay = new TVG.Scene();
+  scene.add(overlay);
 
   const roomCenter = mapToScreen((room.width - 1) / 2, (room.height - 1) / 2);
   const offsetX = -roomCenter.x;
@@ -96,16 +116,26 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
 
   const paintLayers = new Map<Paint, Scene>();
 
+  const placeInLayer = (paint: Paint, layer: Scene, x: number, y: number) => {
+    paintLayers.get(paint)?.remove(paint);
+    layer.add(paint);
+    paintLayers.set(paint, layer);
+
+    const center = tileCenter(x, y);
+    paint.translate(center.x, center.y);
+  };
+
   return {
     scene,
     place(paint, x, y) {
+      placeInLayer(paint, layers[x + y], x, y);
+    },
+    placeOverlay(paint, x, y) {
+      placeInLayer(paint, overlay, x, y);
+    },
+    remove(paint) {
       paintLayers.get(paint)?.remove(paint);
-      const layer = layers[x + y];
-      layer.add(paint);
-      paintLayers.set(paint, layer);
-
-      const center = tileCenter(x, y);
-      paint.translate(center.x, center.y);
+      paintLayers.delete(paint);
     },
     tileAt(sceneX, sceneY) {
       const screenX = (sceneX - offsetX) / (TILE_WIDTH / 2);
@@ -124,4 +154,40 @@ export function createCharacter(TVG: ThorVGNamespace, svg: string): Picture {
   picture.size(CHARACTER_SIZE, CHARACTER_SIZE);
   picture.origin(0.5, 1);
   return picture;
+}
+
+// A placeholder enemy with its feet on the shape's local origin.
+export function createDummyEnemy(TVG: ThorVGNamespace): Shape {
+  const size = CHARACTER_SIZE;
+  const shape = new TVG.Shape();
+  shape.appendRect(-size / 4, -size * 0.6, size / 2, size * 0.6);
+  shape.appendCircle(0, -size * 0.8, size / 5);
+  shape.fill(...DUMMY_ENEMY);
+  return shape;
+}
+
+// A hidden bar centered below the scene's local origin.
+export function createHealthBar(TVG: ThorVGNamespace): HealthBar {
+  const left = -HEALTH_BAR_WIDTH / 2;
+
+  const background = new TVG.Shape();
+  background.appendRect(left, HEALTH_BAR_GAP, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
+  background.fill(...HEALTH_BAR_BACKGROUND);
+
+  const fill = new TVG.Shape();
+
+  const scene = new TVG.Scene();
+  scene.add(background);
+  scene.add(fill);
+  scene.visible(false);
+
+  return {
+    scene,
+    show(ratio) {
+      fill.reset();
+      fill.appendRect(left, HEALTH_BAR_GAP, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT);
+      fill.fill(...HEALTH_BAR_FILL);
+      scene.visible(true);
+    },
+  };
 }

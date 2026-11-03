@@ -2,8 +2,9 @@ import ThorVG from '@thorvg/webcanvas';
 // The package does not export this path, so it is imported by file path.
 import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import playerIcon from '../assets/icons/cathelineau/swordman.svg?raw';
+import { attackEnemy, createEnemy, type Enemy } from './enemy';
 import { findPath } from './path';
-import { createCharacter, createRoomView } from './render';
+import { createCharacter, createDummyEnemy, createHealthBar, createRoomView } from './render';
 import { parseRoom, type Point } from './room';
 import startRoom from './rooms/start.txt?raw';
 import { playSplash } from './splash';
@@ -37,6 +38,16 @@ const player = createCharacter(TVG, playerIcon);
 let playerPosition = room.start;
 roomView.place(player, playerPosition.x, playerPosition.y);
 
+const enemies = room.monsters.map((position) => {
+  const paint = createDummyEnemy(TVG);
+  roomView.place(paint, position.x, position.y);
+
+  const healthBar = createHealthBar(TVG);
+  roomView.placeOverlay(healthBar.scene, position.x, position.y);
+
+  return { enemy: createEnemy(position, healthBar), paint };
+});
+
 canvas.render();
 
 window.addEventListener('resize', () => {
@@ -48,12 +59,28 @@ window.addEventListener('resize', () => {
 const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas')!;
 
 let path: Point[] = [];
+let attackTarget: Enemy | null = null;
 let isWalking = false;
+
+function attack(enemy: Enemy) {
+  attackEnemy(enemy);
+  if (enemy.hp === 0) {
+    const index = enemies.findIndex((entry) => entry.enemy === enemy);
+    roomView.remove(enemies[index].paint);
+    roomView.remove(enemy.healthBar.scene);
+    enemies.splice(index, 1);
+  }
+  canvas.update().render();
+}
 
 function walk() {
   const next = path.shift();
   if (!next) {
     isWalking = false;
+    if (attackTarget) {
+      attack(attackTarget);
+      attackTarget = null;
+    }
     return;
   }
 
@@ -64,16 +91,43 @@ function walk() {
   setTimeout(walk, STEP_INTERVAL_MS);
 }
 
+function occupiedTiles(except?: Enemy): Point[] {
+  return enemies.filter(({ enemy }) => enemy !== except).map(({ enemy }) => enemy.position);
+}
+
+// Returns the tiles to walk through to stand next to an enemy.
+function pathToAttack(enemy: Enemy): Point[] {
+  const isAdjacent =
+    Math.abs(enemy.position.x - playerPosition.x) <= 1 &&
+    Math.abs(enemy.position.y - playerPosition.y) <= 1;
+  return isAdjacent
+    ? []
+    : findPath(room, playerPosition, enemy.position, occupiedTiles(enemy)).slice(0, -1);
+}
+
 canvasElement.addEventListener('click', (event) => {
   const target = roomView.tileAt(
     (event.offsetX - window.innerWidth / 2) / zoom,
     (event.offsetY - window.innerHeight / 2) / zoom,
   );
-  if (!target) {
+
+  // The enemy's body is checked first, because it stands above the floor tile behind it.
+  const clicked = enemies.find(
+    ({ enemy, paint }) =>
+      paint.intersects(event.offsetX * canvas.dpr, event.offsetY * canvas.dpr, 1, 1) ||
+      (target && enemy.position.x === target.x && enemy.position.y === target.y),
+  );
+
+  if (clicked) {
+    path = pathToAttack(clicked.enemy);
+    attackTarget = clicked.enemy;
+  } else if (target) {
+    path = findPath(room, playerPosition, target, occupiedTiles());
+    attackTarget = null;
+  } else {
     return;
   }
 
-  path = findPath(room, playerPosition, target);
   if (!isWalking) {
     walk();
   }

@@ -11,6 +11,7 @@ export interface Room {
   // Indexed as tiles[y][x].
   tiles: Tile[][];
   start?: Point;
+  monsters: Point[];
 }
 
 const GLYPHS = new Map<string, Tile>([
@@ -18,12 +19,14 @@ const GLYPHS = new Map<string, Tile>([
   ['.', 'floor'],
   ['+', 'door'],
   ['@', 'floor'],
+  ['1', 'floor'],
 ]);
 
 export function parseRoom(text: string): Room {
   const rows = text.trimEnd().split(/\r?\n/);
   const width = rows[0].length;
   let start: Point | undefined;
+  const monsters: Point[] = [];
 
   const tiles = rows.map((row, y) => {
     if (row.length !== width) {
@@ -40,11 +43,14 @@ export function parseRoom(text: string): Room {
         }
         start = { x, y };
       }
+      if (glyph === '1') {
+        monsters.push({ x, y });
+      }
       return tile;
     });
   });
 
-  return { width, height: rows.length, tiles, start };
+  return { width, height: rows.length, tiles, start, monsters };
 }
 
 export function isWalkable(room: Room, x: number, y: number): boolean {

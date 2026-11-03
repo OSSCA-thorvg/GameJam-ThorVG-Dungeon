@@ -14,8 +14,11 @@ const STEPS: Point[] = [
 
 // Breadth-first search from the target, so the links from `from` read in walking order.
 // Returns the tiles to walk through, ending at `to`, or nothing if `to` is unreachable.
-export function findPath(room: Room, from: Point, to: Point): Point[] {
-  if (!isWalkable(room, to.x, to.y)) {
+export function findPath(room: Room, from: Point, to: Point, occupied: Point[]): Point[] {
+  const canEnter = ({ x, y }: Point) =>
+    isWalkable(room, x, y) && !occupied.some((tile) => tile.x === x && tile.y === y);
+
+  if (!canEnter(to)) {
     return [];
   }
 
@@ -27,7 +30,7 @@ export function findPath(room: Room, from: Point, to: Point): Point[] {
     const current = queue[head];
     for (const step of STEPS) {
       const neighbor = { x: current.x + step.x, y: current.y + step.y };
-      if (isWalkable(room, neighbor.x, neighbor.y) && !nextTile.has(key(neighbor))) {
+      if (canEnter(neighbor) && !nextTile.has(key(neighbor))) {
         nextTile.set(key(neighbor), current);
         queue.push(neighbor);
       }
