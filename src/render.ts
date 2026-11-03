@@ -1,4 +1,4 @@
-import type { Paint, Picture, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
+import type { Paint, Picture, Scene, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { Point, Room } from './room';
 
 type Color = [r: number, g: number, b: number];
@@ -9,6 +9,8 @@ export interface RoomView {
   place(paint: Paint, x: number, y: number): void;
   // Moves a paint onto a tile, drawn above the whole room.
   placeOverlay(paint: Paint, x: number, y: number): void;
+  // Draws a paint away from its tile by an offset, without changing its draw layer.
+  nudge(paint: Paint, tile: Point, offset: Point): void;
   // Takes a placed paint out of the room.
   remove(paint: Paint): void;
   // Returns the tile whose floor contains a position in scene coordinates.
@@ -49,6 +51,13 @@ function mapToScreen(x: number, y: number): Point {
     x: (x - y) * (TILE_WIDTH / 2),
     y: (x + y) * (TILE_HEIGHT / 2),
   };
+}
+
+// Returns the on-screen distance between two tiles, before any zoom.
+export function tileDistance(from: Point, to: Point): Point {
+  const start = mapToScreen(from.x, from.y);
+  const end = mapToScreen(to.x, to.y);
+  return { x: end.x - start.x, y: end.y - start.y };
 }
 
 function lift(point: Point): Point {
@@ -133,6 +142,10 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     placeOverlay(paint, x, y) {
       placeInLayer(paint, overlay, x, y);
     },
+    nudge(paint, tile, offset) {
+      const center = tileCenter(tile.x, tile.y);
+      paint.translate(center.x + offset.x, center.y + offset.y);
+    },
     remove(paint) {
       paintLayers.get(paint)?.remove(paint);
       paintLayers.delete(paint);
@@ -156,14 +169,18 @@ export function createCharacter(TVG: ThorVGNamespace, svg: string): Picture {
   return picture;
 }
 
-// A placeholder enemy with its feet on the shape's local origin.
-export function createDummyEnemy(TVG: ThorVGNamespace): Shape {
+// A placeholder enemy with its feet on the scene's local origin.
+// It is a Scene because scene effects, such as the hit flash, only apply to scenes.
+export function createDummyEnemy(TVG: ThorVGNamespace): Scene {
   const size = CHARACTER_SIZE;
   const shape = new TVG.Shape();
   shape.appendRect(-size / 4, -size * 0.6, size / 2, size * 0.6);
   shape.appendCircle(0, -size * 0.8, size / 5);
   shape.fill(...DUMMY_ENEMY);
-  return shape;
+
+  const scene = new TVG.Scene();
+  scene.add(shape);
+  return scene;
 }
 
 // A hidden bar centered below the scene's local origin.
