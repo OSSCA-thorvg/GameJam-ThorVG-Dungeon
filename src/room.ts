@@ -53,6 +53,11 @@ export function parseRoom(text: string): Room {
   return { width, height: rows.length, tiles, start, monsters };
 }
 
+// Diagonal tiles count as adjacent.
+export function isAdjacent(a: Point, b: Point): boolean {
+  return Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
+}
+
 export function isWalkable(room: Room, x: number, y: number): boolean {
   const tile = room.tiles[y]?.[x];
   return tile === 'floor' || tile === 'door';

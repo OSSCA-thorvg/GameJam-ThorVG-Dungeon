@@ -7,12 +7,17 @@ const RECOVER_MS = 110;
 
 const KNOCKBACK_PX = 6;
 
+// Game feel guides suggest 8 to 10 px for a strong hit. It fades out over the whole reaction.
+const SHAKE_PX = 8;
+const SHAKE_MS = HIT_STOP_MS + RECOVER_MS;
+
 export interface AttackEffect {
   // The attacker's offset from its tile when the hit lands.
   lunge: Point;
   moveAttacker(offset: Point): void;
   moveTarget(offset: Point): void;
   flashTarget(isFlashing: boolean): void;
+  shake?(offset: Point): void;
   render(): void;
   onHit(): void;
   onEnd(): void;
@@ -48,6 +53,7 @@ export function playAttackEffect(effect: AttackEffect): () => void {
     effect.moveAttacker(none);
     effect.moveTarget(none);
     effect.flashTarget(false);
+    effect.shake?.(none);
     effect.onEnd();
     effect.render();
   };
@@ -70,6 +76,12 @@ export function playAttackEffect(effect: AttackEffect): () => void {
       effect.moveAttacker(scaled(effect.lunge, (1 - recover) ** 2));
       effect.moveTarget(scaled(direction, KNOCKBACK_PX * Math.sin(Math.PI * recover)));
       effect.flashTarget(sinceHit < HIT_STOP_MS);
+
+      const shake = SHAKE_PX * Math.max(0, 1 - sinceHit / SHAKE_MS);
+      effect.shake?.({
+        x: (Math.random() * 2 - 1) * shake,
+        y: (Math.random() * 2 - 1) * shake,
+      });
     }
 
     effect.render();

@@ -25,10 +25,34 @@
       footer a {
         color: inherit;
       }
+      #game-over {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: rgb(0 0 0 / 60%);
+        font: 28px sans-serif;
+        color: #e8e8ec;
+      }
+      #game-over[hidden] {
+        display: none;
+      }
+      #game-over button {
+        padding: 8px 20px;
+        font: 16px sans-serif;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
     <canvas id="canvas"></canvas>
+    <div id="game-over" hidden>
+      You died
+      <button id="restart">Try again</button>
+    </div>
     <footer hidden>
       <a href="https://game-icons.net/1x1/cathelineau/swordman.html">Swordman</a> by Cathelineau,
       modified, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>

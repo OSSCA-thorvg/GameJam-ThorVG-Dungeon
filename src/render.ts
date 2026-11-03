@@ -1,4 +1,4 @@
-import type { Paint, Picture, Scene, ThorVGNamespace } from '@thorvg/webcanvas';
+import type { Paint, Scene, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { Point, Room } from './room';
 
 type Color = [r: number, g: number, b: number];
@@ -160,13 +160,17 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   };
 }
 
-// The picture's bottom center stands on the tile center.
-export function createCharacter(TVG: ThorVGNamespace, svg: string): Picture {
+// The picture's bottom center stands on the scene's local origin.
+// It is a Scene because scene effects, such as the hit flash, only apply to scenes.
+export function createCharacter(TVG: ThorVGNamespace, svg: string): Scene {
   const picture = new TVG.Picture();
   picture.load(svg, { type: 'svg' });
   picture.size(CHARACTER_SIZE, CHARACTER_SIZE);
   picture.origin(0.5, 1);
-  return picture;
+
+  const scene = new TVG.Scene();
+  scene.add(picture);
+  return scene;
 }
 
 // A placeholder enemy with its feet on the scene's local origin.

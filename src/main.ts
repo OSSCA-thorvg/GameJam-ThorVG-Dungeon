@@ -3,7 +3,14 @@ import ThorVG from '@thorvg/webcanvas';
 import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import playerIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
-import { attackEnemy, createEnemy, type Enemy } from './enemy';
+import {
+  attackEnemy,
+  chasePlayer,
+  createEnemy,
+  ENEMY_ATTACK_DAMAGE,
+  PLAYER_MAX_HP,
+  type Enemy,
+} from './enemy';
 import { findPath } from './path';
 import {
   createCharacter,
@@ -12,7 +19,7 @@ import {
   createRoomView,
   tileDistance,
 } from './render';
-import { parseRoom, type Point } from './room';
+import { isAdjacent, parseRoom, type Point } from './room';
 import startRoom from './rooms/start.txt?raw';
 import { playSplash } from './splash';
 
@@ -44,54 +51,169 @@ const room = parseRoom(startRoom);
 if (!room.start) {
   throw new Error('The start room needs a "@" tile');
 }
+const playerStart = room.start;
 
-const roomView = createRoomView(TVG, room);
-roomView.scene.translate(window.innerWidth / 2, window.innerHeight / 2);
-canvas.add(roomView.scene);
+const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
 
-const player = createCharacter(TVG, playerIcon);
-let playerPosition = room.start;
-roomView.place(player, playerPosition.x, playerPosition.y);
+function createLevel() {
+  return {
+    roomView: createRoomView(TVG, room),
+    player: createCharacter(TVG, playerIcon),
+    playerHealthBar: createHealthBar(TVG),
+    enemies: room.monsters.map((position) =>
+      createEnemy(position, createDummyEnemy(TVG), createHealthBar(TVG), chasePlayer),
+    ),
+  };
+}
 
-const enemies = room.monsters.map((position) => {
-  const paint = createDummyEnemy(TVG);
-  roomView.place(paint, position.x, position.y);
+let { roomView, player, playerHealthBar, enemies } = createLevel();
+let playerPosition = playerStart;
+let playerHp = PLAYER_MAX_HP;
+let path: Point[] = [];
+let attackTarget: Enemy | null = null;
+let isWalking = false;
+let isGameOver = false;
+let finishAttackEffect: (() => void) | null = null;
+let zoom = 1;
 
-  const healthBar = createHealthBar(TVG);
-  roomView.placeOverlay(healthBar.scene, position.x, position.y);
+function moveCamera(offset: Point = { x: 0, y: 0 }) {
+  roomView.scene.translate(window.innerWidth / 2 + offset.x, window.innerHeight / 2 + offset.y);
+}
 
-  return { enemy: createEnemy(position, healthBar), paint };
-});
+function placePlayer(tile: Point) {
+  playerPosition = tile;
+  roomView.place(player, tile.x, tile.y);
+  roomView.placeOverlay(playerHealthBar.scene, tile.x, tile.y);
+}
 
-canvas.render();
+function placeEnemy(enemy: Enemy, tile: Point) {
+  enemy.position = tile;
+  roomView.place(enemy.paint, tile.x, tile.y);
+  roomView.placeOverlay(enemy.healthBar.scene, tile.x, tile.y);
+}
+
+// Sets up the current level's scene and state for a new attempt.
+function startLevel() {
+  playerHp = PLAYER_MAX_HP;
+  path = [];
+  attackTarget = null;
+  isWalking = false;
+  isGameOver = false;
+  finishAttackEffect = null;
+
+  moveCamera();
+  roomView.scene.scale(zoom);
+  canvas.add(roomView.scene);
+
+  placePlayer(playerStart);
+  playerHealthBar.show(1);
+  for (const enemy of enemies) {
+    placeEnemy(enemy, enemy.position);
+  }
+
+  gameOverScreen.hidden = true;
+  canvas.update().render();
+}
+
+startLevel();
 
 window.addEventListener('resize', () => {
   canvas.resize(window.innerWidth, window.innerHeight);
-  roomView.scene.translate(window.innerWidth / 2, window.innerHeight / 2);
+  moveCamera();
   canvas.update().render();
 });
 
 const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas')!;
 
-let path: Point[] = [];
-let attackTarget: Enemy | null = null;
-let isWalking = false;
+function occupiedTiles(except?: Enemy): Point[] {
+  return enemies.filter((enemy) => enemy !== except).map((enemy) => enemy.position);
+}
 
-let finishAttackEffect: (() => void) | null = null;
+function endGame() {
+  isGameOver = true;
+  roomView.remove(player);
+  roomView.remove(playerHealthBar.scene);
+  gameOverScreen.hidden = false;
+}
 
-function attack(enemy: Enemy) {
-  const index = enemies.findIndex((entry) => entry.enemy === enemy);
-  const { paint } = enemies[index];
+function playEnemyAttack(enemy: Enemy, onDone: () => void) {
+  const attackerTile = enemy.position;
+
+  finishAttackEffect = playAttackEffect({
+    lunge: scalePoint(tileDistance(attackerTile, playerPosition), LUNGE_DISTANCE),
+    moveAttacker: (offset) => roomView.nudge(enemy.paint, attackerTile, offset),
+    moveTarget: (offset) => roomView.nudge(player, playerPosition, offset),
+    flashTarget: (isFlashing) => {
+      player.resetEffects();
+      if (isFlashing) {
+        player.fillEffect(220, 60, 60, 255);
+      }
+    },
+    shake: moveCamera,
+    render: () => canvas.update().render(),
+    onHit: () => {
+      playerHp = Math.max(0, playerHp - ENEMY_ATTACK_DAMAGE);
+      playerHealthBar.show(playerHp / PLAYER_MAX_HP);
+      // Being hit stops the walk, so the player can decide again.
+      path = [];
+      attackTarget = null;
+    },
+    onEnd: () => {
+      finishAttackEffect = null;
+      if (playerHp === 0) {
+        endGame();
+      }
+      onDone();
+    },
+  });
+}
+
+// Lets each enemy act once, one after another.
+function runEnemyTurn(onDone: () => void) {
+  const waiting = [...enemies];
+
+  const actNext = () => {
+    const enemy = waiting.shift();
+    if (!enemy || isGameOver) {
+      canvas.update().render();
+      onDone();
+      return;
+    }
+
+    const action = enemy.behavior(enemy, {
+      room,
+      player: playerPosition,
+      occupied: occupiedTiles(enemy),
+    });
+
+    switch (action.type) {
+      case 'move':
+        placeEnemy(enemy, action.to);
+        actNext();
+        break;
+      case 'attack':
+        playEnemyAttack(enemy, actNext);
+        break;
+      case 'wait':
+        actNext();
+        break;
+    }
+  };
+
+  actNext();
+}
+
+function playPlayerAttack(enemy: Enemy) {
   const attackerTile = playerPosition;
 
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE),
     moveAttacker: (offset) => roomView.nudge(player, attackerTile, offset),
-    moveTarget: (offset) => roomView.nudge(paint, enemy.position, offset),
+    moveTarget: (offset) => roomView.nudge(enemy.paint, enemy.position, offset),
     flashTarget: (isFlashing) => {
-      paint.resetEffects();
+      enemy.paint.resetEffects();
       if (isFlashing) {
-        paint.fillEffect(255, 255, 255, 255);
+        enemy.paint.fillEffect(255, 255, 255, 255);
       }
     },
     render: () => canvas.update().render(),
@@ -99,70 +221,82 @@ function attack(enemy: Enemy) {
     onEnd: () => {
       finishAttackEffect = null;
       if (enemy.hp === 0) {
-        roomView.remove(paint);
+        roomView.remove(enemy.paint);
         roomView.remove(enemy.healthBar.scene);
-        enemies.splice(enemies.findIndex((entry) => entry.enemy === enemy), 1);
+        enemies.splice(enemies.indexOf(enemy), 1);
       }
+      runEnemyTurn(() => {});
     },
   });
 }
 
-function walk() {
-  const next = path.shift();
-  if (!next) {
-    isWalking = false;
-    if (attackTarget) {
-      attack(attackTarget);
-      attackTarget = null;
-    }
-    return;
-  }
-
-  isWalking = true;
-  playerPosition = next;
-  roomView.place(player, next.x, next.y);
-  canvas.update().render();
-  setTimeout(walk, STEP_INTERVAL_MS);
-}
-
-function occupiedTiles(except?: Enemy): Point[] {
-  return enemies.filter(({ enemy }) => enemy !== except).map(({ enemy }) => enemy.position);
-}
-
 // Returns the tiles to walk through to stand next to an enemy.
 function pathToAttack(enemy: Enemy): Point[] {
-  const isAdjacent =
-    Math.abs(enemy.position.x - playerPosition.x) <= 1 &&
-    Math.abs(enemy.position.y - playerPosition.y) <= 1;
-  return isAdjacent
+  return isAdjacent(enemy.position, playerPosition)
     ? []
     : findPath(room, playerPosition, enemy.position, occupiedTiles(enemy)).slice(0, -1);
 }
 
+function walk() {
+  if (isGameOver) {
+    return;
+  }
+
+  // The target may have moved on its turn.
+  if (attackTarget) {
+    path = pathToAttack(attackTarget);
+  }
+
+  const next = path.shift();
+  if (!next) {
+    isWalking = false;
+    if (attackTarget && isAdjacent(attackTarget.position, playerPosition)) {
+      playPlayerAttack(attackTarget);
+    }
+    attackTarget = null;
+    return;
+  }
+
+  // An enemy may have stepped onto the path.
+  if (occupiedTiles().some((tile) => tile.x === next.x && tile.y === next.y)) {
+    path = [];
+    attackTarget = null;
+    isWalking = false;
+    return;
+  }
+
+  isWalking = true;
+  placePlayer(next);
+  runEnemyTurn(() => setTimeout(walk, STEP_INTERVAL_MS));
+}
+
 canvasElement.addEventListener('click', (event) => {
-  // A new input ends the running effect, so the effect never delays play.
-  finishAttackEffect?.();
+  // A new input ends the running effects, so they never delay play.
+  while (finishAttackEffect) {
+    finishAttackEffect();
+  }
+  if (isGameOver) {
+    return;
+  }
 
   const target = roomView.tileAt(
     (event.offsetX - window.innerWidth / 2) / zoom,
     (event.offsetY - window.innerHeight / 2) / zoom,
   );
+  if (!target) {
+    return;
+  }
 
-  // The enemy's body is checked first, because it stands above the floor tile behind it.
   const clicked = enemies.find(
-    ({ enemy, paint }) =>
-      paint.intersects(event.offsetX * canvas.dpr, event.offsetY * canvas.dpr, 1, 1) ||
-      (target && enemy.position.x === target.x && enemy.position.y === target.y),
+    (enemy) => enemy.position.x === target.x && enemy.position.y === target.y,
   );
 
   if (clicked) {
-    path = pathToAttack(clicked.enemy);
-    attackTarget = clicked.enemy;
-  } else if (target) {
+    path = pathToAttack(clicked);
+    attackTarget = clicked;
+  } else {
     path = findPath(room, playerPosition, target, occupiedTiles());
     attackTarget = null;
-  } else {
-    return;
   }
 
   if (!isWalking) {
@@ -170,13 +304,17 @@ canvasElement.addEventListener('click', (event) => {
   }
 });
 
+document.querySelector('#restart')!.addEventListener('click', () => {
+  canvas.remove(roomView.scene);
+  ({ roomView, player, playerHealthBar, enemies } = createLevel());
+  startLevel();
+});
+
 // Same wheel sensitivity as defaultWheelDelta in d3-zoom.
 function wheelExponent(event: WheelEvent): number {
   const unit = event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : 0.002;
   return -event.deltaY * unit * (event.ctrlKey ? 10 : 1);
 }
-
-let zoom = 1;
 
 canvasElement.addEventListener(
   'wheel',

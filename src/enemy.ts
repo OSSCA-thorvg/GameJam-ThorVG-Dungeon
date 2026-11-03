@@ -1,18 +1,49 @@
+import type { Scene } from '@thorvg/webcanvas';
+import { findPath } from './path';
 import type { HealthBar } from './render';
-import type { Point } from './room';
+import { isAdjacent, type Point, type Room } from './room';
 
 // Placeholder values for testing combat.
 const ENEMY_MAX_HP = 10;
 const PLAYER_ATTACK_DAMAGE = 2;
+export const PLAYER_MAX_HP = 20;
+export const ENEMY_ATTACK_DAMAGE = 2;
+
+export type EnemyAction = { type: 'wait' } | { type: 'move'; to: Point } | { type: 'attack' };
+
+export interface EnemyContext {
+  room: Room;
+  player: Point;
+  // Tiles held by the other enemies.
+  occupied: Point[];
+}
+
+// Decides what an enemy does on its turn. New enemy types add a new behavior.
+export type EnemyBehavior = (enemy: Enemy, context: EnemyContext) => EnemyAction;
 
 export interface Enemy {
   position: Point;
   hp: number;
+  paint: Scene;
   healthBar: HealthBar;
+  behavior: EnemyBehavior;
 }
 
-export function createEnemy(position: Point, healthBar: HealthBar): Enemy {
-  return { position, hp: ENEMY_MAX_HP, healthBar };
+export const chasePlayer: EnemyBehavior = (enemy, { room, player, occupied }) => {
+  if (isAdjacent(enemy.position, player)) {
+    return { type: 'attack' };
+  }
+  const [next] = findPath(room, enemy.position, player, occupied);
+  return next ? { type: 'move', to: next } : { type: 'wait' };
+};
+
+export function createEnemy(
+  position: Point,
+  paint: Scene,
+  healthBar: HealthBar,
+  behavior: EnemyBehavior,
+): Enemy {
+  return { position, hp: ENEMY_MAX_HP, paint, healthBar, behavior };
 }
 
 export function attackEnemy(enemy: Enemy): void {
