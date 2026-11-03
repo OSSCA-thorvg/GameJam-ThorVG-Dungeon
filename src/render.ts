@@ -15,6 +15,8 @@ export interface RoomView {
   remove(paint: Paint): void;
   // Returns the tile whose floor contains a position in scene coordinates.
   tileAt(sceneX: number, sceneY: number): Point | null;
+  // Returns the center of a tile's floor in scene coordinates.
+  tileCenter(tile: Point): Point;
 }
 
 export interface HealthBar {
@@ -156,6 +158,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       const x = Math.round((screenX + screenY) / 2);
       const y = Math.round((screenY - screenX) / 2);
       return room.tiles[y]?.[x] ? { x, y } : null;
+    },
+    tileCenter(tile) {
+      return tileCenter(tile.x, tile.y);
     },
   };
 }

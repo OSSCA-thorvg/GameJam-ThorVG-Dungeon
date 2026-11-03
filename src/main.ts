@@ -32,6 +32,11 @@ const STEP_INTERVAL_MS = 100;
 // How far an attacker moves toward its target, as a fraction of the distance between tiles.
 const LUNGE_DISTANCE = 0.5;
 
+// Same as the panFollow intensity in HeroSprite.move() of Shattered Pixel Dungeon.
+const CAMERA_FOLLOW_INTENSITY = 20;
+// The camera snaps to its target below this distance, which is too small to see.
+const CAMERA_SETTLE_DISTANCE = 0.1;
+
 const scalePoint = (point: Point, factor: number): Point => ({
   x: point.x * factor,
   y: point.y * factor,
@@ -75,15 +80,56 @@ let isWalking = false;
 let isGameOver = false;
 let finishAttackEffect: (() => void) | null = null;
 let zoom = 1;
+let cameraFocus: Point = { x: 0, y: 0 };
+let cameraShake: Point = { x: 0, y: 0 };
+let cameraFrame = 0;
 
-function moveCamera(offset: Point = { x: 0, y: 0 }) {
-  roomView.scene.translate(window.innerWidth / 2 + offset.x, window.innerHeight / 2 + offset.y);
+// Keeps the camera focus at the center of the window.
+function applyCamera() {
+  roomView.scene.translate(
+    window.innerWidth / 2 - cameraFocus.x * zoom + cameraShake.x,
+    window.innerHeight / 2 - cameraFocus.y * zoom + cameraShake.y,
+  );
+}
+
+// Moves the camera toward the player by a part of the remaining distance each frame.
+function followPlayer() {
+  if (cameraFrame) {
+    return;
+  }
+
+  let lastTime: number | null = null;
+
+  const step = (time: number) => {
+    const target = roomView.tileCenter(playerPosition);
+    const amount =
+      lastTime === null ? 0 : Math.min(1, ((time - lastTime) / 1000) * CAMERA_FOLLOW_INTENSITY);
+    lastTime = time;
+
+    cameraFocus = {
+      x: cameraFocus.x + (target.x - cameraFocus.x) * amount,
+      y: cameraFocus.y + (target.y - cameraFocus.y) * amount,
+    };
+
+    const isSettled =
+      Math.hypot(target.x - cameraFocus.x, target.y - cameraFocus.y) < CAMERA_SETTLE_DISTANCE;
+    if (isSettled) {
+      cameraFocus = target;
+    }
+
+    applyCamera();
+    canvas.update().render();
+    cameraFrame = isSettled ? 0 : requestAnimationFrame(step);
+  };
+
+  cameraFrame = requestAnimationFrame(step);
 }
 
 function placePlayer(tile: Point) {
   playerPosition = tile;
   roomView.place(player, tile.x, tile.y);
   roomView.placeOverlay(playerHealthBar.scene, tile.x, tile.y);
+  followPlayer();
 }
 
 function placeEnemy(enemy: Enemy, tile: Point) {
@@ -101,7 +147,6 @@ function startLevel() {
   isGameOver = false;
   finishAttackEffect = null;
 
-  moveCamera();
   roomView.scene.scale(zoom);
   canvas.add(roomView.scene);
 
@@ -111,6 +156,13 @@ function startLevel() {
     placeEnemy(enemy, enemy.position);
   }
 
+  // A new attempt starts with the camera already on the player.
+  cancelAnimationFrame(cameraFrame);
+  cameraFrame = 0;
+  cameraFocus = roomView.tileCenter(playerStart);
+  cameraShake = { x: 0, y: 0 };
+  applyCamera();
+
   gameOverScreen.hidden = true;
   canvas.update().render();
 }
@@ -119,7 +171,7 @@ startLevel();
 
 window.addEventListener('resize', () => {
   canvas.resize(window.innerWidth, window.innerHeight);
-  moveCamera();
+  applyCamera();
   canvas.update().render();
 });
 
@@ -149,7 +201,10 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
         player.fillEffect(220, 60, 60, 255);
       }
     },
-    shake: moveCamera,
+    shake: (offset) => {
+      cameraShake = offset;
+      applyCamera();
+    },
     render: () => canvas.update().render(),
     onHit: () => {
       playerHp = Math.max(0, playerHp - ENEMY_ATTACK_DAMAGE);
@@ -280,8 +335,8 @@ canvasElement.addEventListener('click', (event) => {
   }
 
   const target = roomView.tileAt(
-    (event.offsetX - window.innerWidth / 2) / zoom,
-    (event.offsetY - window.innerHeight / 2) / zoom,
+    (event.offsetX - window.innerWidth / 2) / zoom + cameraFocus.x,
+    (event.offsetY - window.innerHeight / 2) / zoom + cameraFocus.y,
   );
   if (!target) {
     return;
@@ -322,6 +377,7 @@ canvasElement.addEventListener(
     event.preventDefault();
     zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * 2 ** wheelExponent(event)));
     roomView.scene.scale(zoom);
+    applyCamera();
     canvas.update().render();
   },
   { passive: false },
