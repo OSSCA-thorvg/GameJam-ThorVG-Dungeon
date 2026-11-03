@@ -1,4 +1,4 @@
-import type { Canvas, ThorVGNamespace } from '@thorvg/webcanvas';
+import type { Scene, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { Room } from './room';
 
 interface Point {
@@ -33,7 +33,10 @@ function lift(point: Point): Point {
   return { x: point.x, y: point.y - WALL_HEIGHT };
 }
 
-export function drawRoom(TVG: ThorVGNamespace, canvas: Canvas, room: Room, center: Point): void {
+// Builds a Scene with the room centered on its local origin.
+export function createRoomScene(TVG: ThorVGNamespace, room: Room): Scene {
+  const scene = new TVG.Scene();
+
   const addPolygon = (points: Point[], [r, g, b]: Color) => {
     const shape = new TVG.Shape();
     shape.moveTo(points[0].x, points[0].y);
@@ -41,12 +44,12 @@ export function drawRoom(TVG: ThorVGNamespace, canvas: Canvas, room: Room, cente
       shape.lineTo(point.x, point.y);
     }
     shape.close().fill(r, g, b);
-    canvas.add(shape);
+    scene.add(shape);
   };
 
   const roomCenter = mapToScreen((room.width - 1) / 2, (room.height - 1) / 2);
-  const offsetX = center.x - roomCenter.x;
-  const offsetY = center.y - roomCenter.y + WALL_HEIGHT / 2;
+  const offsetX = -roomCenter.x;
+  const offsetY = -roomCenter.y + WALL_HEIGHT / 2;
 
   // Row order draws each tile after the two neighbors behind it, (x - 1, y) and (x, y - 1).
   for (let y = 0; y < room.height; y++) {
@@ -75,4 +78,6 @@ export function drawRoom(TVG: ThorVGNamespace, canvas: Canvas, room: Room, cente
       }
     }
   }
+
+  return scene;
 }
