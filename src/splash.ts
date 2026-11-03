@@ -70,4 +70,5 @@ export async function playSplash(TVG: ThorVGNamespace, canvas: Canvas): Promise<
   window.removeEventListener('resize', onResize);
   canvas.remove(picture);
   animation.dispose();
+  canvas.update().render();
 }
