@@ -11,4 +11,4 @@ npm run dev
 
 ## License
 
-[MIT](LICENSE)
+The code is licensed under [MIT](LICENSE). Icons in `assets/icons` have their own licenses, listed in [CREDITS.md](CREDITS.md).

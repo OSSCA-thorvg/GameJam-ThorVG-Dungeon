@@ -1,0 +1,11 @@
+version = 1
+
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "2026 alpakaDurumi"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "assets/icons/cathelineau/**"
+SPDX-FileCopyrightText = "Cathelineau"
+SPDX-License-Identifier = "CC-BY-3.0"
