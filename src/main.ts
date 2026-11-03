@@ -60,13 +60,20 @@ const playerStart = room.start;
 
 const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
 
+const renderCanvas = () => canvas.update().render();
+
 function createLevel() {
   return {
     roomView: createRoomView(TVG, room),
     player: createCharacter(TVG, playerIcon),
-    playerHealthBar: createHealthBar(TVG),
+    playerHealthBar: createHealthBar(TVG, renderCanvas),
     enemies: room.monsters.map((position) =>
-      createEnemy(position, createDummyEnemy(TVG), createHealthBar(TVG), chasePlayer),
+      createEnemy(
+        position,
+        createDummyEnemy(TVG),
+        createHealthBar(TVG, renderCanvas),
+        chasePlayer,
+      ),
     ),
   };
 }

@@ -1,4 +1,4 @@
-import type { Paint, Scene, ThorVGNamespace } from '@thorvg/webcanvas';
+import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { Point, Room } from './room';
 
 type Color = [r: number, g: number, b: number];
@@ -21,7 +21,7 @@ export interface RoomView {
 
 export interface HealthBar {
   scene: Scene;
-  // Makes the bar visible, filled to a ratio from 0 to 1.
+  // Makes the bar visible, filled to a ratio from 0 to 1. Lost health trails behind.
   show(ratio: number): void;
 }
 
@@ -38,6 +38,10 @@ const HEALTH_BAR_WIDTH = CHARACTER_SIZE * 0.8;
 const HEALTH_BAR_HEIGHT = 5;
 const HEALTH_BAR_GAP = 4;
 
+// No standard exists for these. Lost health stays visible briefly, then catches up.
+const HEALTH_TRAIL_HOLD_MS = 300;
+const HEALTH_TRAIL_SHRINK_MS = 250;
+
 const FLOOR_LIGHT: Color = [96, 100, 110];
 const FLOOR_DARK: Color = [86, 90, 100];
 const DOOR: Color = [150, 104, 60];
@@ -47,6 +51,7 @@ const WALL_RIGHT: Color = [50, 54, 64];
 const DUMMY_ENEMY: Color = [196, 64, 64];
 const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
 const HEALTH_BAR_FILL: Color = [90, 200, 90];
+const HEALTH_BAR_TRAIL: Color = [220, 80, 60];
 
 function mapToScreen(x: number, y: number): Point {
   return {
@@ -192,28 +197,68 @@ export function createDummyEnemy(TVG: ThorVGNamespace): Scene {
   return scene;
 }
 
-// A hidden bar centered below the scene's local origin.
-export function createHealthBar(TVG: ThorVGNamespace): HealthBar {
+// A hidden, full bar centered below the scene's local origin.
+export function createHealthBar(TVG: ThorVGNamespace, render: () => void): HealthBar {
   const left = -HEALTH_BAR_WIDTH / 2;
 
   const background = new TVG.Shape();
-  background.appendRect(left, HEALTH_BAR_GAP, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
-  background.fill(...HEALTH_BAR_BACKGROUND);
-
+  const trail = new TVG.Shape();
   const fill = new TVG.Shape();
 
   const scene = new TVG.Scene();
   scene.add(background);
+  scene.add(trail);
   scene.add(fill);
   scene.visible(false);
+
+  const drawBar = (shape: Shape, ratio: number, color: Color) => {
+    const radius = HEALTH_BAR_HEIGHT / 2;
+    shape.reset();
+    shape.appendRect(left, HEALTH_BAR_GAP, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT, {
+      rx: radius,
+      ry: radius,
+    });
+    shape.fill(...color);
+  };
+
+  drawBar(background, 1, HEALTH_BAR_BACKGROUND);
+
+  let trailRatio = 1;
+  let trailFrame = 0;
 
   return {
     scene,
     show(ratio) {
-      fill.reset();
-      fill.appendRect(left, HEALTH_BAR_GAP, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT);
-      fill.fill(...HEALTH_BAR_FILL);
+      drawBar(fill, ratio, HEALTH_BAR_FILL);
       scene.visible(true);
+
+      cancelAnimationFrame(trailFrame);
+      if (ratio >= trailRatio) {
+        trailRatio = ratio;
+        drawBar(trail, trailRatio, HEALTH_BAR_TRAIL);
+        return;
+      }
+      drawBar(trail, trailRatio, HEALTH_BAR_TRAIL);
+
+      // Each hit restarts the wait, from wherever the trail is now.
+      const startRatio = trailRatio;
+      let startTime: number | null = null;
+
+      const step = (time: number) => {
+        startTime ??= time;
+        const progress = (time - startTime - HEALTH_TRAIL_HOLD_MS) / HEALTH_TRAIL_SHRINK_MS;
+
+        if (progress > 0) {
+          trailRatio = startRatio + (ratio - startRatio) * Math.min(1, progress);
+          drawBar(trail, trailRatio, HEALTH_BAR_TRAIL);
+          render();
+        }
+        if (progress < 1) {
+          trailFrame = requestAnimationFrame(step);
+        }
+      };
+
+      trailFrame = requestAnimationFrame(step);
     },
   };
 }
