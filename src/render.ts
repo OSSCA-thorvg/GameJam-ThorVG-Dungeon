@@ -21,8 +21,9 @@ export interface RoomView {
 
 export interface HealthBar {
   scene: Scene;
-  // Makes the bar visible, filled to a ratio from 0 to 1. Lost health trails behind.
-  show(ratio: number): void;
+  // Makes the bar visible, filled to a ratio from 0 to 1. Lost health trails behind,
+  // unless the bar should jump straight to the ratio.
+  show(ratio: number, options?: { jump: boolean }): void;
 }
 
 // 2:1 isometric tile from https://clintbellanger.net/articles/isometric_math/
@@ -45,6 +46,11 @@ const HEALTH_TRAIL_SHRINK_MS = 250;
 const FLOOR_LIGHT: Color = [96, 100, 110];
 const FLOOR_DARK: Color = [86, 90, 100];
 const DOOR: Color = [150, 104, 60];
+const STAIRS_STEPS: Color[] = [
+  [62, 65, 74],
+  [44, 46, 54],
+  [26, 27, 33],
+];
 const WALL_TOP: Color = [130, 134, 144];
 const WALL_LEFT: Color = [70, 74, 84];
 const WALL_RIGHT: Color = [50, 54, 64];
@@ -114,7 +120,19 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       const bottom = { x: center.x, y: center.y + TILE_HEIGHT / 2 };
       const left = { x: center.x - TILE_WIDTH / 2, y: center.y };
 
+      // Shrinks the tile's diamond toward its center.
+      const inset = (scale: number) =>
+        [top, right, bottom, left].map((point) => ({
+          x: center.x + (point.x - center.x) * scale,
+          y: center.y + (point.y - center.y) * scale,
+        }));
+
       switch (room.tiles[y][x]) {
+        case 'void':
+          break;
+        case 'stairs':
+          STAIRS_STEPS.forEach((color, step) => addPolygon(inset(1 - step * 0.28), color));
+          break;
         case 'floor':
           addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
           break;
@@ -228,12 +246,12 @@ export function createHealthBar(TVG: ThorVGNamespace, render: () => void): Healt
 
   return {
     scene,
-    show(ratio) {
+    show(ratio, options) {
       drawBar(fill, ratio, HEALTH_BAR_FILL);
       scene.visible(true);
 
       cancelAnimationFrame(trailFrame);
-      if (ratio >= trailRatio) {
+      if (options?.jump || ratio >= trailRatio) {
         trailRatio = ratio;
         drawBar(trail, trailRatio, HEALTH_BAR_TRAIL);
         return;

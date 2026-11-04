@@ -25,6 +25,13 @@
       footer a {
         color: inherit;
       }
+      #floor {
+        position: fixed;
+        top: 10px;
+        left: 12px;
+        font: 16px sans-serif;
+        color: #c8cad2;
+      }
       #game-over {
         position: fixed;
         inset: 0;
@@ -49,6 +56,7 @@
   </head>
   <body>
     <canvas id="canvas"></canvas>
+    <div id="floor"></div>
     <div id="game-over" hidden>
       You died
       <button id="restart">Try again</button>

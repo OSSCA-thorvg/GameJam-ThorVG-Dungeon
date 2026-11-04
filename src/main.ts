@@ -11,7 +11,9 @@ import {
   PLAYER_MAX_HP,
   type Enemy,
 } from './enemy';
+import { generateMap } from './mapgen';
 import { findPath } from './path';
+import { createRandom, randomInt } from './random';
 import {
   createCharacter,
   createDummyEnemy,
@@ -19,9 +21,9 @@ import {
   createRoomView,
   tileDistance,
 } from './render';
-import { isAdjacent, parseRoom, type Point } from './room';
-import startRoom from './rooms/start.txt?raw';
+import { isAdjacent, type Point } from './room';
 import { playSplash } from './splash';
+import { normalTemplates, startTemplates } from './templates';
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -31,6 +33,10 @@ const STEP_INTERVAL_MS = 100;
 
 // How far an attacker moves toward its target, as a fraction of the distance between tiles.
 const LUNGE_DISTANCE = 0.5;
+
+// Placeholder values for the size of a floor.
+const MIN_ROOMS = 10;
+const MAX_ROOMS = 14;
 
 // Same as the panFollow intensity in HeroSprite.move() of Shattered Pixel Dungeon.
 const CAMERA_FOLLOW_INTENSITY = 20;
@@ -52,18 +58,30 @@ const canvas = new TVG.Canvas('#canvas', {
 await playSplash(TVG, canvas);
 document.querySelector('footer')!.hidden = false;
 
-const room = parseRoom(startRoom);
-if (!room.start) {
-  throw new Error('The start room needs a "@" tile');
-}
-const playerStart = room.start;
-
 const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
+const floorLabel = document.querySelector<HTMLElement>('#floor')!;
 
 const renderCanvas = () => canvas.update().render();
 
+// A "seed" URL parameter repeats the same maps, for testing.
+const fixedSeed = new URLSearchParams(location.search).get('seed');
+const newRunSeed = () =>
+  fixedSeed === null ? Math.floor(Math.random() * 2 ** 31) : Number(fixedSeed);
+
+let runSeed = newRunSeed();
+let floor = 1;
+
 function createLevel() {
+  const random = createRandom(runSeed + floor);
+  const room = generateMap({
+    startTemplates,
+    normalTemplates,
+    roomCount: randomInt(random, MIN_ROOMS, MAX_ROOMS),
+    random,
+  });
+
   return {
+    room,
     roomView: createRoomView(TVG, room),
     player: createCharacter(TVG, playerIcon),
     playerHealthBar: createHealthBar(TVG, renderCanvas),
@@ -78,8 +96,8 @@ function createLevel() {
   };
 }
 
-let { roomView, player, playerHealthBar, enemies } = createLevel();
-let playerPosition = playerStart;
+let { room, roomView, player, playerHealthBar, enemies } = createLevel();
+let playerPosition = room.start;
 let playerHp = PLAYER_MAX_HP;
 let path: Point[] = [];
 let attackTarget: Enemy | null = null;
@@ -145,9 +163,8 @@ function placeEnemy(enemy: Enemy, tile: Point) {
   roomView.placeOverlay(enemy.healthBar.scene, tile.x, tile.y);
 }
 
-// Sets up the current level's scene and state for a new attempt.
+// Sets up the current level's scene and state.
 function startLevel() {
-  playerHp = PLAYER_MAX_HP;
   path = [];
   attackTarget = null;
   isWalking = false;
@@ -157,21 +174,28 @@ function startLevel() {
   roomView.scene.scale(zoom);
   canvas.add(roomView.scene);
 
-  placePlayer(playerStart);
-  playerHealthBar.show(1);
+  placePlayer(room.start);
+  playerHealthBar.show(playerHp / PLAYER_MAX_HP, { jump: true });
   for (const enemy of enemies) {
     placeEnemy(enemy, enemy.position);
   }
 
-  // A new attempt starts with the camera already on the player.
+  // A new level starts with the camera already on the player.
   cancelAnimationFrame(cameraFrame);
   cameraFrame = 0;
-  cameraFocus = roomView.tileCenter(playerStart);
+  cameraFocus = roomView.tileCenter(room.start);
   cameraShake = { x: 0, y: 0 };
   applyCamera();
 
   gameOverScreen.hidden = true;
+  floorLabel.textContent = `Floor ${floor}`;
   canvas.update().render();
+}
+
+function replaceLevel() {
+  canvas.remove(roomView.scene);
+  ({ room, roomView, player, playerHealthBar, enemies } = createLevel());
+  startLevel();
 }
 
 startLevel();
@@ -329,6 +353,14 @@ function walk() {
 
   isWalking = true;
   placePlayer(next);
+
+  // The stairs only work as a destination, so paths can cross them.
+  if (path.length === 0 && next.x === room.stairs.x && next.y === room.stairs.y) {
+    floor++;
+    replaceLevel();
+    return;
+  }
+
   runEnemyTurn(() => setTimeout(walk, STEP_INTERVAL_MS));
 }
 
@@ -367,9 +399,10 @@ canvasElement.addEventListener('click', (event) => {
 });
 
 document.querySelector('#restart')!.addEventListener('click', () => {
-  canvas.remove(roomView.scene);
-  ({ roomView, player, playerHealthBar, enemies } = createLevel());
-  startLevel();
+  runSeed = newRunSeed();
+  floor = 1;
+  playerHp = PLAYER_MAX_HP;
+  replaceLevel();
 });
 
 // Same wheel sensitivity as defaultWheelDelta in d3-zoom.

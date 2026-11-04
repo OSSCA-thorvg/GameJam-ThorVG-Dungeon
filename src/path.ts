@@ -49,3 +49,24 @@ export function findPath(room: Room, from: Point, to: Point, occupied: Point[]):
   }
   return path;
 }
+
+// Returns the walking distance to every tile, indexed as distances[y][x].
+// Unreachable tiles are at -1.
+export function distancesFrom(room: Room, from: Point): number[][] {
+  const distances = room.tiles.map((row) => row.map(() => -1));
+  distances[from.y][from.x] = 0;
+  const queue = [from];
+
+  for (let head = 0; head < queue.length; head++) {
+    const current = queue[head];
+    for (const step of STEPS) {
+      const x = current.x + step.x;
+      const y = current.y + step.y;
+      if (isWalkable(room, x, y) && distances[y][x] === -1) {
+        distances[y][x] = distances[current.y][current.x] + 1;
+        queue.push({ x, y });
+      }
+    }
+  }
+  return distances;
+}

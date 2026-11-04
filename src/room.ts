@@ -1,4 +1,4 @@
-export type Tile = 'wall' | 'floor' | 'door';
+export type Tile = 'void' | 'wall' | 'floor' | 'door' | 'stairs';
 
 export interface Point {
   x: number;
@@ -15,6 +15,7 @@ export interface Room {
 }
 
 const GLYPHS = new Map<string, Tile>([
+  [' ', 'void'],
   ['x', 'wall'],
   ['.', 'floor'],
   ['+', 'door'],
@@ -23,16 +24,14 @@ const GLYPHS = new Map<string, Tile>([
 ]);
 
 export function parseRoom(text: string): Room {
-  const rows = text.trimEnd().split(/\r?\n/);
-  const width = rows[0].length;
+  const rows = text.replace(/(\r?\n)+$/, '').split(/\r?\n/);
+  // Short rows end in void, so rooms that are not rectangles need no trailing spaces.
+  const width = Math.max(...rows.map((row) => row.length));
   let start: Point | undefined;
   const monsters: Point[] = [];
 
-  const tiles = rows.map((row, y) => {
-    if (row.length !== width) {
-      throw new Error(`Room row ${y} has ${row.length} tiles, expected ${width}`);
-    }
-    return [...row].map((glyph, x) => {
+  const tiles = rows.map((row, y) =>
+    [...row.padEnd(width)].map((glyph, x) => {
       const tile = GLYPHS.get(glyph);
       if (!tile) {
         throw new Error(`Unknown room glyph "${glyph}" at (${x}, ${y})`);
@@ -47,8 +46,8 @@ export function parseRoom(text: string): Room {
         monsters.push({ x, y });
       }
       return tile;
-    });
-  });
+    }),
+  );
 
   return { width, height: rows.length, tiles, start, monsters };
 }
@@ -60,5 +59,20 @@ export function isAdjacent(a: Point, b: Point): boolean {
 
 export function isWalkable(room: Room, x: number, y: number): boolean {
   const tile = room.tiles[y]?.[x];
-  return tile === 'floor' || tile === 'door';
+  return tile === 'floor' || tile === 'door' || tile === 'stairs';
+}
+
+export const DIRECTIONS: readonly Point[] = [
+  { x: 1, y: 0 },
+  { x: 0, y: 1 },
+  { x: -1, y: 0 },
+  { x: 0, y: -1 },
+];
+
+// Returns the way out of a room through a door: a walkable tile behind it and open space ahead.
+export function doorDirection(room: Room, x: number, y: number): Point | undefined {
+  return DIRECTIONS.find(
+    (d) =>
+      (room.tiles[y + d.y]?.[x + d.x] ?? 'void') === 'void' && isWalkable(room, x - d.x, y - d.y),
+  );
 }
