@@ -108,6 +108,19 @@ let zoom = 1;
 let cameraFocus: Point = { x: 0, y: 0 };
 let cameraShake: Point = { x: 0, y: 0 };
 let cameraFrame = 0;
+// Stays null for touch input, which has no cursor.
+let mousePosition: Point | null = null;
+
+function tileUnder({ x, y }: Point) {
+  return roomView.tileAt(
+    (x - window.innerWidth / 2) / zoom + cameraFocus.x,
+    (y - window.innerHeight / 2) / zoom + cameraFocus.y,
+  );
+}
+
+function updateCursorTile() {
+  return roomView.setCursorTile(mousePosition && tileUnder(mousePosition));
+}
 
 // Keeps the camera focus at the center of the window.
 function applyCamera() {
@@ -115,6 +128,7 @@ function applyCamera() {
     window.innerWidth / 2 - cameraFocus.x * zoom + cameraShake.x,
     window.innerHeight / 2 - cameraFocus.y * zoom + cameraShake.y,
   );
+  updateCursorTile();
 }
 
 // Moves the camera toward the player by a part of the remaining distance each frame.
@@ -374,10 +388,7 @@ canvasElement.addEventListener('click', (event) => {
     return;
   }
 
-  const target = roomView.tileAt(
-    (event.offsetX - window.innerWidth / 2) / zoom + cameraFocus.x,
-    (event.offsetY - window.innerHeight / 2) / zoom + cameraFocus.y,
-  );
+  const target = tileUnder({ x: event.offsetX, y: event.offsetY });
   if (!target) {
     return;
   }
@@ -396,6 +407,20 @@ canvasElement.addEventListener('click', (event) => {
 
   if (!isWalking) {
     walk();
+  }
+});
+
+canvasElement.addEventListener('pointermove', (event) => {
+  mousePosition = event.pointerType === 'mouse' ? { x: event.offsetX, y: event.offsetY } : null;
+  if (updateCursorTile()) {
+    renderCanvas();
+  }
+});
+
+canvasElement.addEventListener('pointerleave', () => {
+  mousePosition = null;
+  if (updateCursorTile()) {
+    renderCanvas();
   }
 });
 

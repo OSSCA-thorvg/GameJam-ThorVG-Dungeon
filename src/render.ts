@@ -1,5 +1,5 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
-import type { Point, Room } from './room';
+import { isWalkable, type Point, type Room } from './room';
 
 type Color = [r: number, g: number, b: number];
 
@@ -9,6 +9,8 @@ export interface RoomView {
   place(paint: Paint, x: number, y: number): void;
   // Cuts a hole in the walls in front of a tile, but only when they cover that tile.
   cutAwayWalls(tile: Point): void;
+  // Shows a walkable tile through the walls with an outline. Returns whether anything changed.
+  setCursorTile(tile: Point | null): boolean;
   // Moves a paint onto a tile, drawn above the whole room.
   placeOverlay(paint: Paint, x: number, y: number): void;
   // Draws a paint away from its tile by an offset, without changing its draw layer.
@@ -37,9 +39,12 @@ const WALL_HEIGHT = 0.6 * Math.sqrt((TILE_WIDTH ** 2 - TILE_HEIGHT ** 2) / 2);
 
 const CHARACTER_SIZE = TILE_WIDTH * 0.75;
 
-// Placeholder values. The hole is fully open up to this fraction of its radius, then fades out.
+// Placeholder values. A hole is fully open up to this fraction of its radius, then fades out.
 const CUTAWAY_RADIUS = TILE_WIDTH * 1.75;
+const CURSOR_CUTAWAY_RADIUS = TILE_WIDTH * 0.9;
 const CUTAWAY_OPEN_FRACTION = 0.7;
+
+const CURSOR_OUTLINE_WIDTH = 2;
 
 const HEALTH_BAR_WIDTH = CHARACTER_SIZE * 0.8;
 const HEALTH_BAR_HEIGHT = 5;
@@ -60,6 +65,7 @@ const STAIRS_STEPS: Color[] = [
 const WALL_TOP: Color = [130, 134, 144];
 const WALL_LEFT: Color = [70, 74, 84];
 const WALL_RIGHT: Color = [50, 54, 64];
+const CURSOR_OUTLINE: Color = [255, 255, 255];
 const DUMMY_ENEMY: Color = [196, 64, 64];
 const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
 const HEALTH_BAR_FILL: Color = [90, 200, 90];
@@ -77,6 +83,32 @@ export function tileDistance(from: Point, to: Point): Point {
   const start = mapToScreen(from.x, from.y);
   const end = mapToScreen(to.x, to.y);
   return { x: end.x - start.x, y: end.y - start.y };
+}
+
+interface Wall {
+  tile: Point;
+  center: Point;
+  faces: Shape[];
+}
+
+const layerOf = ({ x, y }: Point) => x + y;
+
+// Whether any part of a wall is within a distance of a point.
+function wallReaches(wall: Wall, point: Point, distance: number): boolean {
+  const dx = Math.max(Math.abs(wall.center.x - point.x) - TILE_WIDTH / 2, 0);
+  const wallTop = wall.center.y - WALL_HEIGHT - TILE_HEIGHT / 2;
+  const wallBottom = wall.center.y + TILE_HEIGHT / 2;
+  const dy = Math.max(wallTop - point.y, point.y - wallBottom, 0);
+  return dx * dx + dy * dy < distance * distance;
+}
+
+function appendTileDiamond(shape: Shape): Shape {
+  return shape
+    .moveTo(0, -TILE_HEIGHT / 2)
+    .lineTo(TILE_WIDTH / 2, 0)
+    .lineTo(0, TILE_HEIGHT / 2)
+    .lineTo(-TILE_WIDTH / 2, 0)
+    .close();
 }
 
 function lift(point: Point): Point {
@@ -97,9 +129,16 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   const overlay = new TVG.Scene();
   scene.add(overlay);
 
-  const walls: { tile: Point; center: Point; faces: Shape[] }[] = [];
-  const cutLayers = new Map<number, { scene: Scene; hole: Shape }>();
-  let cutWalls: typeof walls = [];
+  const cursorOutline = appendTileDiamond(new TVG.Shape());
+  cursorOutline.stroke({ width: CURSOR_OUTLINE_WIDTH, color: CURSOR_OUTLINE });
+  cursorOutline.opacity(0);
+  overlay.add(cursorOutline);
+
+  const walls: Wall[] = [];
+  const cutLayers = new Map<number, { scene: Scene; playerHole: Shape; cursorHole: Shape }>();
+  let cutWalls = new Set<Wall>();
+  let coveredPlayerTile: Point | null = null;
+  let cursorTile: Point | null = null;
 
   const roomCenter = mapToScreen((room.width - 1) / 2, (room.height - 1) / 2);
   const offsetX = -roomCenter.x;
@@ -176,31 +215,103 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     paint.translate(center.x, center.y);
   };
 
-  // A paint keeps its mask once set, so each layer gets one scene that always has the hole.
+  const createHole = (radius: number) => {
+    const gradient = new TVG.RadialGradient(0, 0, radius);
+    gradient.addStop(0, [0, 0, 0, 255]);
+    gradient.addStop(CUTAWAY_OPEN_FRACTION, [0, 0, 0, 255]);
+    gradient.addStop(1, [0, 0, 0, 0]);
+    gradient.build();
+
+    const hole = new TVG.Shape();
+    hole.appendCircle(0, 0, radius);
+    hole.fill(gradient);
+    return hole;
+  };
+
+  // A paint keeps its mask once set, so each layer gets one scene that always has the holes.
   const cutLayer = (index: number) => {
     let cut = cutLayers.get(index);
     if (!cut) {
-      const gradient = new TVG.RadialGradient(0, 0, CUTAWAY_RADIUS);
-      gradient.addStop(0, [0, 0, 0, 255]);
-      gradient.addStop(CUTAWAY_OPEN_FRACTION, [0, 0, 0, 255]);
-      gradient.addStop(1, [0, 0, 0, 0]);
-      gradient.build();
+      const playerHole = createHole(CUTAWAY_RADIUS);
+      const cursorHole = createHole(CURSOR_CUTAWAY_RADIUS);
 
-      const hole = new TVG.Shape();
-      hole.appendCircle(0, 0, CUTAWAY_RADIUS);
-      hole.fill(gradient);
+      const holes = new TVG.Scene();
+      holes.add(playerHole);
+      holes.add(cursorHole);
 
       const cutScene = new TVG.Scene();
-      cutScene.mask(hole, TVG.MaskMethod.InvAlpha);
+      cutScene.mask(holes, TVG.MaskMethod.InvAlpha);
       layers[index].add(cutScene);
 
-      cut = { scene: cutScene, hole };
+      cut = { scene: cutScene, playerHole, cursorHole };
       cutLayers.set(index, cut);
     }
     return cut;
   };
 
   const isWall = (x: number, y: number) => room.tiles[y]?.[x] === 'wall';
+  const isCovered = ({ x, y }: Point) =>
+    isWall(x + 1, y) || isWall(x, y + 1) || isWall(x + 1, y + 1);
+
+  // Moves walls in and out of the masked scenes, then places the holes.
+  const updateCuts = () => {
+    const playerCenter = coveredPlayerTile && tileCenter(coveredPlayerTile.x, coveredPlayerTile.y);
+    const playerHolePoint = playerCenter && {
+      x: playerCenter.x,
+      y: playerCenter.y - CHARACTER_SIZE / 2,
+    };
+    const coveredCursorTile = cursorTile && isCovered(cursorTile) ? cursorTile : null;
+    const cursorPoint =
+      coveredCursorTile && tileCenter(coveredCursorTile.x, coveredCursorTile.y);
+
+    const wanted = new Set(
+      walls.filter(
+        (wall) =>
+          (coveredPlayerTile &&
+            playerHolePoint &&
+            layerOf(wall.tile) > layerOf(coveredPlayerTile) &&
+            wallReaches(wall, playerHolePoint, CUTAWAY_RADIUS)) ||
+          (coveredCursorTile &&
+            cursorPoint &&
+            layerOf(wall.tile) > layerOf(coveredCursorTile) &&
+            wallReaches(wall, cursorPoint, CURSOR_CUTAWAY_RADIUS)),
+      ),
+    );
+
+    for (const wall of cutWalls) {
+      if (!wanted.has(wall)) {
+        const index = layerOf(wall.tile);
+        for (const face of wall.faces) {
+          cutLayer(index).scene.remove(face);
+          layers[index].add(face);
+        }
+      }
+    }
+    for (const wall of wanted) {
+      if (!cutWalls.has(wall)) {
+        const index = layerOf(wall.tile);
+        for (const face of wall.faces) {
+          layers[index].remove(face);
+          cutLayer(index).scene.add(face);
+        }
+      }
+    }
+    cutWalls = wanted;
+
+    // A hole only applies to the layers in front of its tile.
+    for (const [index, cut] of cutLayers) {
+      const showPlayerHole = coveredPlayerTile && index > layerOf(coveredPlayerTile);
+      cut.playerHole.opacity(showPlayerHole ? 255 : 0);
+      if (playerHolePoint) {
+        cut.playerHole.translate(playerHolePoint.x, playerHolePoint.y);
+      }
+      const showCursorHole = coveredCursorTile && index > layerOf(coveredCursorTile);
+      cut.cursorHole.opacity(showCursorHole ? 255 : 0);
+      if (cursorPoint) {
+        cut.cursorHole.translate(cursorPoint.x, cursorPoint.y);
+      }
+    }
+  };
 
   return {
     scene,
@@ -208,44 +319,23 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       placeInLayer(paint, layers[x + y], x, y);
     },
     cutAwayWalls(tile) {
-      for (const wall of cutWalls) {
-        const index = wall.tile.x + wall.tile.y;
-        for (const face of wall.faces) {
-          cutLayer(index).scene.remove(face);
-          layers[index].add(face);
-        }
-      }
-      cutWalls = [];
-
-      if (
-        !isWall(tile.x + 1, tile.y) &&
-        !isWall(tile.x, tile.y + 1) &&
-        !isWall(tile.x + 1, tile.y + 1)
-      ) {
-        return;
+      coveredPlayerTile = isCovered(tile) ? tile : null;
+      updateCuts();
+    },
+    setCursorTile(tile) {
+      const next = tile && isWalkable(room, tile.x, tile.y) ? tile : null;
+      if (next?.x === cursorTile?.x && next?.y === cursorTile?.y) {
+        return false;
       }
 
-      const center = tileCenter(tile.x, tile.y);
-      const holeCenter = { x: center.x, y: center.y - CHARACTER_SIZE / 2 };
-
-      for (const wall of walls) {
-        const index = wall.tile.x + wall.tile.y;
-        const dx = Math.max(Math.abs(wall.center.x - holeCenter.x) - TILE_WIDTH / 2, 0);
-        const wallTop = wall.center.y - WALL_HEIGHT - TILE_HEIGHT / 2;
-        const wallBottom = wall.center.y + TILE_HEIGHT / 2;
-        const dy = Math.max(wallTop - holeCenter.y, holeCenter.y - wallBottom, 0);
-        if (index <= tile.x + tile.y || dx * dx + dy * dy >= CUTAWAY_RADIUS * CUTAWAY_RADIUS) {
-          continue;
-        }
-
-        const cut = cutLayer(index);
-        cut.hole.translate(holeCenter.x, holeCenter.y);
-        for (const face of wall.faces) {
-          layers[index].remove(face);
-          cut.scene.add(face);
-        }
-        cutWalls.push(wall);
+      cursorTile = next;
+      cursorOutline.opacity(next ? 255 : 0);
+      if (next) {
+        const center = tileCenter(next.x, next.y);
+        cursorOutline.translate(center.x, center.y);
       }
+      updateCuts();
+      return true;
     },
     placeOverlay(paint, x, y) {
       placeInLayer(paint, overlay, x, y);
