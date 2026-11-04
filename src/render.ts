@@ -4,7 +4,7 @@ import { isWalkable, type Point, type Room } from './room';
 type Color = [r: number, g: number, b: number];
 
 // What the cursor is pointing at, which decides the color of the tile outline.
-export type CursorTarget = 'floor' | 'enemy';
+export type CursorTarget = 'floor' | 'enemy' | 'item';
 
 export interface RoomView {
   scene: Scene;
@@ -41,6 +41,7 @@ const TILE_HEIGHT = 32;
 const WALL_HEIGHT = 0.6 * Math.sqrt((TILE_WIDTH ** 2 - TILE_HEIGHT ** 2) / 2);
 
 const CHARACTER_SIZE = TILE_WIDTH * 0.75;
+const ITEM_SIZE = TILE_WIDTH * 0.5;
 
 // Placeholder values. A hole is fully open up to this fraction of its radius, then fades out.
 const CUTAWAY_RADIUS = TILE_WIDTH * 1.75;
@@ -76,6 +77,7 @@ const WALL_RIGHT: Color = [50, 54, 64];
 const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
   floor: [255, 255, 255],
   enemy: [235, 60, 50],
+  item: [245, 205, 70],
 };
 const DUMMY_ENEMY: Color = [196, 64, 64];
 const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
@@ -388,6 +390,15 @@ export function createCharacter(TVG: ThorVGNamespace, svg: string): Scene {
   const scene = new TVG.Scene();
   scene.add(picture);
   return scene;
+}
+
+// An item lying on the tile, with its lower part on the paint's local origin.
+export function createItemPaint(TVG: ThorVGNamespace, svg: string): Paint {
+  const picture = new TVG.Picture();
+  picture.load(svg, { type: 'svg' });
+  picture.size(ITEM_SIZE, ITEM_SIZE);
+  picture.origin(0.5, 0.7);
+  return picture;
 }
 
 // A placeholder enemy with its feet on the scene's local origin.

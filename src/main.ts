@@ -1,4 +1,4 @@
-import ThorVG from '@thorvg/webcanvas';
+import ThorVG, { type Paint } from '@thorvg/webcanvas';
 // The package does not export this path, so it is imported by file path.
 import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import playerIcon from '../assets/icons/cathelineau/swordman.svg?raw';
@@ -11,6 +11,15 @@ import {
   PLAYER_MAX_HP,
   type Enemy,
 } from './enemy';
+import { createInventoryPanel } from './inventoryPanel';
+import {
+  addItem,
+  ITEMS,
+  removeItem,
+  type ItemContext,
+  type ItemKind,
+  type ItemStack,
+} from './items';
 import { generateMap } from './mapgen';
 import { findPath } from './path';
 import { createRandom, randomInt } from './random';
@@ -18,6 +27,7 @@ import {
   createCharacter,
   createDummyEnemy,
   createEnemyHealthBar,
+  createItemPaint,
   createPlayerHealthBar,
   createRoomView,
   tileDistance,
@@ -126,6 +136,26 @@ let cameraFrame = 0;
 let mousePosition: Point | null = null;
 let cameraDrag: { pointerId: number; start: Point; last: Point; isDragging: boolean } | null = null;
 const activePointers = new Map<number, Point>();
+let inventory: ItemStack[] = [];
+let groundItems: { kind: ItemKind; position: Point; paint: Paint }[] = [];
+
+function createItemContext(): ItemContext {
+  return {
+    hp: playerHp,
+    maxHp: PLAYER_MAX_HP,
+    heal(amount) {
+      playerHp = Math.min(PLAYER_MAX_HP, playerHp + amount);
+      showPlayerHp();
+    },
+  };
+}
+
+const inventoryPanel = createInventoryPanel({
+  getStacks: () => inventory,
+  getItemContext: createItemContext,
+  onOpen: stopWalking,
+  onUse: useItem,
+});
 let pinch: { center: Point; distance: number } | null = null;
 
 function screenToScene({ x, y }: Point): Point {
@@ -149,9 +179,32 @@ function enemyAt({ x, y }: Point) {
   return enemies.find(({ position }) => position.x === x && position.y === y);
 }
 
+function itemsAt({ x, y }: Point) {
+  return groundItems.filter(({ position }) => position.x === x && position.y === y);
+}
+
 function updateCursorTile() {
   const tile = mousePosition && tileUnder(mousePosition);
-  return roomView.setCursorTile(tile, tile && enemyAt(tile) ? 'enemy' : 'floor');
+  if (tile && enemyAt(tile)) {
+    return roomView.setCursorTile(tile, 'enemy');
+  }
+  return roomView.setCursorTile(tile, tile && itemsAt(tile).length > 0 ? 'item' : 'floor');
+}
+
+function dropItem(kind: ItemKind, position: Point) {
+  const paint = createItemPaint(TVG, ITEMS[kind].icon);
+  roomView.place(paint, position.x, position.y);
+  groundItems.push({ kind, position, paint });
+}
+
+function pickUpItems(tile: Point) {
+  for (const item of itemsAt(tile)) {
+    if (addItem(inventory, item.kind)) {
+      roomView.remove(item.paint);
+      groundItems.splice(groundItems.indexOf(item), 1);
+    }
+  }
+  inventoryPanel.refresh();
 }
 
 // Keeps the camera focus at the center of the window.
@@ -218,6 +271,7 @@ function placeEnemy(enemy: Enemy, tile: Point) {
 
 // Sets up the current level's scene and state.
 function startLevel() {
+  groundItems = [];
   path = [];
   attackTarget = null;
   isWalking = false;
@@ -362,6 +416,7 @@ function playPlayerAttack(enemy: Enemy) {
         roomView.remove(enemy.paint);
         roomView.remove(enemy.healthBar.scene);
         enemies.splice(enemies.indexOf(enemy), 1);
+        dropItem('healing-potion', enemy.position);
         updateCursorTile();
       }
       runEnemyTurn(() => {});
@@ -406,6 +461,7 @@ function walk() {
 
   isWalking = true;
   placePlayer(next);
+  pickUpItems(next);
 
   // The stairs only work as a destination, so paths can cross them.
   if (path.length === 0 && next.x === room.stairs.x && next.y === room.stairs.y) {
@@ -587,6 +643,25 @@ canvasElement.addEventListener('pointerleave', () => {
   }
 });
 
+function stopWalking() {
+  path = [];
+  attackTarget = null;
+}
+
+function useItem(kind: ItemKind) {
+  finishRunningEffects();
+  if (isGameOver) {
+    return;
+  }
+
+  stopWalking();
+  ITEMS[kind].use(createItemContext());
+  removeItem(inventory, kind);
+  inventoryPanel.refresh();
+  inventoryPanel.close();
+  runEnemyTurn(() => {});
+}
+
 function playWaitEffect() {
   const timing = { duration: WAIT_EFFECT_MS };
   const spin = (selector: string, degrees: number) =>
@@ -612,8 +687,7 @@ waitButton.addEventListener('click', () => {
 
   // While walking, the button stops the walk instead of spending another turn.
   if (isWalking) {
-    path = [];
-    attackTarget = null;
+    stopWalking();
     return;
   }
 
@@ -625,6 +699,8 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   runSeed = newRunSeed();
   floor = 1;
   playerHp = PLAYER_MAX_HP;
+  inventory = [];
+  inventoryPanel.refresh();
   replaceLevel();
 });
 
