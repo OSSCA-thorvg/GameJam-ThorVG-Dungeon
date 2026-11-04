@@ -40,6 +40,8 @@ const MAX_ROOMS = 14;
 
 // Same as the panFollow intensity in HeroSprite.move() of Shattered Pixel Dungeon.
 const CAMERA_FOLLOW_INTENSITY = 20;
+// Placeholder value. How long the clock on the wait button is shown.
+const WAIT_EFFECT_MS = 450;
 // Placeholder value. A press that moves this many pixels drags the camera instead of clicking.
 const CAMERA_DRAG_THRESHOLD = 8;
 // The camera snaps to its target below this distance, which is too small to see.
@@ -59,6 +61,9 @@ const canvas = new TVG.Canvas('#canvas', {
 
 await playSplash(TVG, canvas);
 document.querySelector('footer')!.hidden = false;
+
+const waitButton = document.querySelector<HTMLButtonElement>('#wait')!;
+waitButton.hidden = false;
 
 const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
 const floorLabel = document.querySelector<HTMLElement>('#floor')!;
@@ -402,11 +407,15 @@ function walk() {
   runEnemyTurn(() => setTimeout(walk, STEP_INTERVAL_MS));
 }
 
-function pressTileAt(position: Point) {
-  // A new input ends the running effects, so they never delay play.
+// A new input ends the running effects, so they never delay play.
+function finishRunningEffects() {
   while (finishAttackEffect) {
     finishAttackEffect();
   }
+}
+
+function pressTileAt(position: Point) {
+  finishRunningEffects();
   if (isGameOver) {
     return;
   }
@@ -566,6 +575,40 @@ canvasElement.addEventListener('pointerleave', () => {
   if (updateCursorTile()) {
     renderCanvas();
   }
+});
+
+function playWaitEffect() {
+  const timing = { duration: WAIT_EFFECT_MS };
+  const spin = (selector: string, degrees: number) =>
+    document
+      .querySelector(selector)!
+      .animate({ transform: ['rotate(0deg)', `rotate(${degrees}deg)`] }, timing);
+
+  spin('#wait-minute-hand', 360);
+  spin('#wait-hour-hand', 30);
+  document
+    .querySelector('#wait-clock')!
+    .animate({ opacity: [0, 1, 1, 0], offset: [0, 0.15, 0.75, 1] }, timing);
+  document
+    .querySelector('#wait-label')!
+    .animate({ opacity: [1, 0, 0, 1], offset: [0, 0.15, 0.75, 1] }, timing);
+}
+
+waitButton.addEventListener('click', () => {
+  finishRunningEffects();
+  if (isGameOver) {
+    return;
+  }
+
+  // While walking, the button stops the walk instead of spending another turn.
+  if (isWalking) {
+    path = [];
+    attackTarget = null;
+    return;
+  }
+
+  playWaitEffect();
+  runEnemyTurn(() => {});
 });
 
 document.querySelector('#restart')!.addEventListener('click', () => {
