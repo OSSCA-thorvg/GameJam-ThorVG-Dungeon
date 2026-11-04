@@ -1,6 +1,7 @@
 import { distancesFrom, findPath } from './path';
 import { pick, shuffle, type Random } from './random';
 import { DIRECTIONS, doorDirection, type Point, type Room, type Tile } from './room';
+import type { RoomSource } from './roomgen';
 
 export interface GeneratedMap extends Room {
   start: Point;
@@ -8,8 +9,8 @@ export interface GeneratedMap extends Room {
 }
 
 export interface MapOptions {
-  startTemplates: Room[];
-  normalTemplates: Room[];
+  startRooms: RoomSource[];
+  normalRooms: RoomSource[];
   roomCount: number;
   random: Random;
 }
@@ -89,8 +90,8 @@ function findDoors(room: Room): Door[] {
 // Builds a map by attaching template rooms to each other, door to door.
 // Based on attachRooms() and addLoops() in Brogue CE, using templates for the room shapes.
 export function generateMap({
-  startTemplates,
-  normalTemplates,
+  startRooms,
+  normalRooms,
   roomCount,
   random,
 }: MapOptions): GeneratedMap {
@@ -150,7 +151,7 @@ export function generateMap({
     );
   };
 
-  const startRoom = randomVariant(pick(random, startTemplates), random);
+  const startRoom = randomVariant(pick(random, startRooms)(random), random);
   if (!startRoom.start) {
     throw new Error('A start room needs a "@" tile');
   }
@@ -172,7 +173,7 @@ export function generateMap({
       break;
     }
     const door = pick(random, [...openDoors.values()]);
-    const room = randomVariant(pick(random, normalTemplates), random);
+    const room = randomVariant(pick(random, normalRooms)(random), random);
 
     // The new room's door has to face the existing room's door.
     const facing = findDoors(room).filter(

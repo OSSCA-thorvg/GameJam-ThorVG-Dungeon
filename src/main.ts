@@ -22,8 +22,8 @@ import {
   tileDistance,
 } from './render';
 import { isAdjacent, type Point } from './room';
+import { normalRooms, startRooms } from './roomSources';
 import { playSplash } from './splash';
-import { normalTemplates, startTemplates } from './templates';
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -74,8 +74,8 @@ let floor = 1;
 function createLevel() {
   const random = createRandom(runSeed + floor);
   const room = generateMap({
-    startTemplates,
-    normalTemplates,
+    startRooms,
+    normalRooms,
     roomCount: randomInt(random, MIN_ROOMS, MAX_ROOMS),
     random,
   });
