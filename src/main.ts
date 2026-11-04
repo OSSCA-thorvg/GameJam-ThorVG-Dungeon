@@ -40,6 +40,8 @@ const MAX_ROOMS = 14;
 
 // Same as the panFollow intensity in HeroSprite.move() of Shattered Pixel Dungeon.
 const CAMERA_FOLLOW_INTENSITY = 20;
+// Placeholder value. A press that moves this many pixels drags the camera instead of clicking.
+const CAMERA_DRAG_THRESHOLD = 8;
 // The camera snaps to its target below this distance, which is too small to see.
 const CAMERA_SETTLE_DISTANCE = 0.1;
 
@@ -110,12 +112,25 @@ let cameraShake: Point = { x: 0, y: 0 };
 let cameraFrame = 0;
 // Stays null for touch input, which has no cursor.
 let mousePosition: Point | null = null;
+let cameraDrag: { pointerId: number; start: Point; last: Point; isDragging: boolean } | null = null;
+const activePointers = new Map<number, Point>();
+let pinch: { center: Point; distance: number } | null = null;
 
-function tileUnder({ x, y }: Point) {
-  return roomView.tileAt(
-    (x - window.innerWidth / 2) / zoom + cameraFocus.x,
-    (y - window.innerHeight / 2) / zoom + cameraFocus.y,
-  );
+function screenToScene({ x, y }: Point): Point {
+  return {
+    x: (x - window.innerWidth / 2) / zoom + cameraFocus.x,
+    y: (y - window.innerHeight / 2) / zoom + cameraFocus.y,
+  };
+}
+
+function tileUnder(position: Point) {
+  const { x, y } = screenToScene(position);
+  return roomView.tileAt(x, y);
+}
+
+function setZoom(value: number) {
+  zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+  roomView.scene.scale(zoom);
 }
 
 function enemyAt({ x, y }: Point) {
@@ -137,8 +152,9 @@ function applyCamera() {
 }
 
 // Moves the camera toward the player by a part of the remaining distance each frame.
+// Only player movement calls this, so attacks leave the camera where the player dragged it.
 function followPlayer() {
-  if (cameraFrame) {
+  if (cameraFrame || cameraDrag?.isDragging || pinch) {
     return;
   }
 
@@ -386,7 +402,7 @@ function walk() {
   runEnemyTurn(() => setTimeout(walk, STEP_INTERVAL_MS));
 }
 
-canvasElement.addEventListener('click', (event) => {
+function pressTileAt(position: Point) {
   // A new input ends the running effects, so they never delay play.
   while (finishAttackEffect) {
     finishAttackEffect();
@@ -395,7 +411,7 @@ canvasElement.addEventListener('click', (event) => {
     return;
   }
 
-  const target = tileUnder({ x: event.offsetX, y: event.offsetY });
+  const target = tileUnder(position);
   if (!target) {
     return;
   }
@@ -413,10 +429,133 @@ canvasElement.addEventListener('click', (event) => {
   if (!isWalking) {
     walk();
   }
+}
+
+// Keeps the camera focus inside the map, so the map cannot be dragged out of sight.
+function clampToMap({ x, y }: Point): Point {
+  const left = roomView.tileCenter({ x: 0, y: room.height - 1 }).x;
+  const right = roomView.tileCenter({ x: room.width - 1, y: 0 }).x;
+  const top = roomView.tileCenter({ x: 0, y: 0 }).y;
+  const bottom = roomView.tileCenter({ x: room.width - 1, y: room.height - 1 }).y;
+  return {
+    x: Math.min(right, Math.max(left, x)),
+    y: Math.min(bottom, Math.max(top, y)),
+  };
+}
+
+function stopFollowingPlayer() {
+  cancelAnimationFrame(cameraFrame);
+  cameraFrame = 0;
+}
+
+function dragCamera(position: Point) {
+  if (!cameraDrag) {
+    return;
+  }
+
+  if (!cameraDrag.isDragging) {
+    const distance = Math.hypot(position.x - cameraDrag.start.x, position.y - cameraDrag.start.y);
+    if (distance < CAMERA_DRAG_THRESHOLD) {
+      return;
+    }
+    cameraDrag.isDragging = true;
+    cameraDrag.last = position;
+    stopFollowingPlayer();
+  }
+
+  cameraFocus = clampToMap({
+    x: cameraFocus.x - (position.x - cameraDrag.last.x) / zoom,
+    y: cameraFocus.y - (position.y - cameraDrag.last.y) / zoom,
+  });
+  cameraDrag.last = position;
+  applyCamera();
+  renderCanvas();
+}
+
+function measurePinch() {
+  const [a, b] = activePointers.values();
+  return {
+    center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    distance: Math.hypot(a.x - b.x, a.y - b.y),
+  };
+}
+
+// Keeps the point of the map between the fingers under them while zooming.
+function pinchCamera() {
+  if (!pinch) {
+    return;
+  }
+
+  const current = measurePinch();
+  const anchor = screenToScene(pinch.center);
+  if (pinch.distance > 0) {
+    setZoom((zoom * current.distance) / pinch.distance);
+  }
+  cameraFocus = clampToMap({
+    x: anchor.x - (current.center.x - window.innerWidth / 2) / zoom,
+    y: anchor.y - (current.center.y - window.innerHeight / 2) / zoom,
+  });
+  pinch = current;
+  applyCamera();
+  renderCanvas();
+}
+
+function releasePointer(pointerId: number) {
+  activePointers.delete(pointerId);
+  if (activePointers.size < 2) {
+    pinch = null;
+  }
+}
+
+canvasElement.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) {
+    return;
+  }
+  const position = { x: event.offsetX, y: event.offsetY };
+  canvasElement.setPointerCapture(event.pointerId);
+  activePointers.set(event.pointerId, position);
+
+  if (activePointers.size === 1) {
+    cameraDrag = { pointerId: event.pointerId, start: position, last: position, isDragging: false };
+  } else if (activePointers.size === 2) {
+    // A second finger makes this a pinch, so the touch no longer drags or presses a tile.
+    cameraDrag = null;
+    pinch = measurePinch();
+    stopFollowingPlayer();
+  }
+});
+
+// Handled here instead of in a click event, because a browser can skip the click on a tap.
+canvasElement.addEventListener('pointerup', (event) => {
+  releasePointer(event.pointerId);
+  if (cameraDrag?.pointerId !== event.pointerId) {
+    return;
+  }
+  const wasDragging = cameraDrag.isDragging;
+  cameraDrag = null;
+  if (!wasDragging) {
+    pressTileAt({ x: event.offsetX, y: event.offsetY });
+  }
+});
+
+canvasElement.addEventListener('pointercancel', (event) => {
+  releasePointer(event.pointerId);
+  if (cameraDrag?.pointerId === event.pointerId) {
+    cameraDrag = null;
+  }
 });
 
 canvasElement.addEventListener('pointermove', (event) => {
-  mousePosition = event.pointerType === 'mouse' ? { x: event.offsetX, y: event.offsetY } : null;
+  const position = { x: event.offsetX, y: event.offsetY };
+  if (activePointers.has(event.pointerId)) {
+    activePointers.set(event.pointerId, position);
+  }
+  if (pinch) {
+    pinchCamera();
+  } else if (cameraDrag?.pointerId === event.pointerId) {
+    dragCamera(position);
+  }
+  mousePosition = event.pointerType === 'mouse' ? position : null;
   if (updateCursorTile()) {
     renderCanvas();
   }
@@ -446,8 +585,7 @@ canvasElement.addEventListener(
   'wheel',
   (event) => {
     event.preventDefault();
-    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * 2 ** wheelExponent(event)));
-    roomView.scene.scale(zoom);
+    setZoom(zoom * 2 ** wheelExponent(event));
     applyCamera();
     canvas.update().render();
   },
