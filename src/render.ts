@@ -3,6 +3,9 @@ import { isWalkable, type Point, type Room } from './room';
 
 type Color = [r: number, g: number, b: number];
 
+// What the cursor is pointing at, which decides the color of the tile outline.
+export type CursorTarget = 'floor' | 'enemy';
+
 export interface RoomView {
   scene: Scene;
   // Moves a paint onto a tile and into that tile's draw layer.
@@ -10,7 +13,7 @@ export interface RoomView {
   // Cuts a hole in the walls in front of a tile, but only when they cover that tile.
   cutAwayWalls(tile: Point): void;
   // Shows a walkable tile through the walls with an outline. Returns whether anything changed.
-  setCursorTile(tile: Point | null): boolean;
+  setCursorTile(tile: Point | null, target: CursorTarget): boolean;
   // Moves a paint onto a tile, drawn above the whole room.
   placeOverlay(paint: Paint, x: number, y: number): void;
   // Draws a paint away from its tile by an offset, without changing its draw layer.
@@ -65,7 +68,10 @@ const STAIRS_STEPS: Color[] = [
 const WALL_TOP: Color = [130, 134, 144];
 const WALL_LEFT: Color = [70, 74, 84];
 const WALL_RIGHT: Color = [50, 54, 64];
-const CURSOR_OUTLINE: Color = [255, 255, 255];
+const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
+  floor: [255, 255, 255],
+  enemy: [235, 60, 50],
+};
 const DUMMY_ENEMY: Color = [196, 64, 64];
 const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
 const HEALTH_BAR_FILL: Color = [90, 200, 90];
@@ -130,7 +136,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   scene.add(overlay);
 
   const cursorOutline = appendTileDiamond(new TVG.Shape());
-  cursorOutline.stroke({ width: CURSOR_OUTLINE_WIDTH, color: CURSOR_OUTLINE });
+  cursorOutline.stroke({ width: CURSOR_OUTLINE_WIDTH, color: CURSOR_OUTLINES.floor });
   cursorOutline.opacity(0);
   overlay.add(cursorOutline);
 
@@ -139,6 +145,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   let cutWalls = new Set<Wall>();
   let coveredPlayerTile: Point | null = null;
   let cursorTile: Point | null = null;
+  let cursorTarget: CursorTarget = 'floor';
 
   const roomCenter = mapToScreen((room.width - 1) / 2, (room.height - 1) / 2);
   const offsetX = -roomCenter.x;
@@ -322,13 +329,15 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       coveredPlayerTile = isCovered(tile) ? tile : null;
       updateCuts();
     },
-    setCursorTile(tile) {
+    setCursorTile(tile, target) {
       const next = tile && isWalkable(room, tile.x, tile.y) ? tile : null;
-      if (next?.x === cursorTile?.x && next?.y === cursorTile?.y) {
+      if (next?.x === cursorTile?.x && next?.y === cursorTile?.y && target === cursorTarget) {
         return false;
       }
 
       cursorTile = next;
+      cursorTarget = target;
+      cursorOutline.stroke({ width: CURSOR_OUTLINE_WIDTH, color: CURSOR_OUTLINES[target] });
       cursorOutline.opacity(next ? 255 : 0);
       if (next) {
         const center = tileCenter(next.x, next.y);

@@ -118,8 +118,13 @@ function tileUnder({ x, y }: Point) {
   );
 }
 
+function enemyAt({ x, y }: Point) {
+  return enemies.find(({ position }) => position.x === x && position.y === y);
+}
+
 function updateCursorTile() {
-  return roomView.setCursorTile(mousePosition && tileUnder(mousePosition));
+  const tile = mousePosition && tileUnder(mousePosition);
+  return roomView.setCursorTile(tile, tile && enemyAt(tile) ? 'enemy' : 'floor');
 }
 
 // Keeps the camera focus at the center of the window.
@@ -176,6 +181,7 @@ function placeEnemy(enemy: Enemy, tile: Point) {
   enemy.position = tile;
   roomView.place(enemy.paint, tile.x, tile.y);
   roomView.placeOverlay(enemy.healthBar.scene, tile.x, tile.y);
+  updateCursorTile();
 }
 
 // Sets up the current level's scene and state.
@@ -325,6 +331,7 @@ function playPlayerAttack(enemy: Enemy) {
         roomView.remove(enemy.paint);
         roomView.remove(enemy.healthBar.scene);
         enemies.splice(enemies.indexOf(enemy), 1);
+        updateCursorTile();
       }
       runEnemyTurn(() => {});
     },
@@ -393,9 +400,7 @@ canvasElement.addEventListener('click', (event) => {
     return;
   }
 
-  const clicked = enemies.find(
-    (enemy) => enemy.position.x === target.x && enemy.position.y === target.y,
-  );
+  const clicked = enemyAt(target);
 
   if (clicked) {
     path = pathToAttack(clicked);
