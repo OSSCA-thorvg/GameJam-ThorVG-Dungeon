@@ -1,4 +1,4 @@
-import { distancesFrom, findPath } from './path';
+import { doorCountsFrom, findPath } from './path';
 import { pick, shuffle, type Random } from './random';
 import { DIRECTIONS, doorDirection, type Point, type Room, type Tile } from './room';
 import type { RoomSource } from './roomgen';
@@ -24,6 +24,9 @@ const MAX_ATTACH_ATTEMPTS = 500;
 
 // A limited grid packs rooms together, and loops need rooms that share a wall.
 const GRID_SIZE = 32;
+
+// The stairs are at least this many doors from the start, so they are at least two rooms away.
+const STAIRS_MIN_DOORS = 2;
 
 // Placeholder value. Each monster tile in a template holds a monster this often.
 const MONSTER_CHANCE = 0.4;
@@ -204,7 +207,7 @@ export function generateMap({
 
   addLoops(grid, random);
 
-  return finishMap(grid, gridStart, gridMonsters);
+  return finishMap(grid, gridStart, gridMonsters, random);
 }
 
 // Joins two rooms with a door where they share a wall but are far apart on foot.
@@ -234,10 +237,11 @@ function addLoops(grid: Room, random: Random) {
   }
 }
 
-// Crops the map to its rooms and puts the stairs on the floor tile farthest from the start.
-function finishMap(grid: Room, start: Point, monsters: Point[]): GeneratedMap {
-  const distances = distancesFrom(grid, start);
-  let stairs = start;
+// Crops the map to its rooms and puts the stairs on a random floor tile away from the start.
+function finishMap(grid: Room, start: Point, monsters: Point[], random: Random): GeneratedMap {
+  const doorCounts = doorCountsFrom(grid, start);
+  const minDoors = Math.min(STAIRS_MIN_DOORS, Math.max(...doorCounts.flat()));
+  const stairsTiles: Point[] = [];
   let minX = GRID_SIZE;
   let minY = GRID_SIZE;
   let maxX = 0;
@@ -253,13 +257,14 @@ function finishMap(grid: Room, start: Point, monsters: Point[]): GeneratedMap {
       maxX = Math.max(maxX, x);
       maxY = Math.max(maxY, y);
 
-      const isFree = !monsters.some((monster) => monster.x === x && monster.y === y);
-      if (tile === 'floor' && isFree && distances[y][x] > distances[stairs.y][stairs.x]) {
-        stairs = { x, y };
+      const isFree = ![start, ...monsters].some((taken) => taken.x === x && taken.y === y);
+      if (tile === 'floor' && isFree && doorCounts[y][x] >= minDoors) {
+        stairsTiles.push({ x, y });
       }
     }),
   );
 
+  const stairs = pick(random, stairsTiles);
   grid.tiles[stairs.y][stairs.x] = 'stairs';
 
   const crop = ({ x, y }: Point): Point => ({ x: x - minX, y: y - minY });

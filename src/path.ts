@@ -50,6 +50,32 @@ export function findPath(room: Room, from: Point, to: Point, occupied: Point[]):
   return path;
 }
 
+// Returns the fewest doors on a walk to every tile, indexed as counts[y][x].
+// Unreachable tiles are at -1.
+export function doorCountsFrom(room: Room, from: Point): number[][] {
+  const counts = room.tiles.map((row) => row.map(() => -1));
+  counts[from.y][from.x] = 0;
+  let layer = [from];
+
+  while (layer.length > 0) {
+    const nextLayer: Point[] = [];
+    for (let head = 0; head < layer.length; head++) {
+      const current = layer[head];
+      for (const step of STEPS) {
+        const x = current.x + step.x;
+        const y = current.y + step.y;
+        if (isWalkable(room, x, y) && counts[y][x] === -1) {
+          const isDoor = room.tiles[y][x] === 'door';
+          counts[y][x] = counts[current.y][current.x] + (isDoor ? 1 : 0);
+          (isDoor ? nextLayer : layer).push({ x, y });
+        }
+      }
+    }
+    layer = nextLayer;
+  }
+  return counts;
+}
+
 // Returns the walking distance to every tile, indexed as distances[y][x].
 // Unreachable tiles are at -1.
 export function distancesFrom(room: Room, from: Point): number[][] {
