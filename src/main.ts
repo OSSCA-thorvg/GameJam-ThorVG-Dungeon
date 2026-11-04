@@ -17,7 +17,8 @@ import { createRandom, randomInt } from './random';
 import {
   createCharacter,
   createDummyEnemy,
-  createHealthBar,
+  createEnemyHealthBar,
+  createPlayerHealthBar,
   createRoomView,
   tileDistance,
 } from './render';
@@ -67,8 +68,15 @@ waitButton.hidden = false;
 
 const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
 const floorLabel = document.querySelector<HTMLElement>('#floor')!;
+const hpLabel = document.querySelector<HTMLElement>('#hp')!;
 
 const renderCanvas = () => canvas.update().render();
+
+// The HUD is added after the map's scene, so a new level is still drawn below it.
+const mapScene = new TVG.Scene();
+canvas.add(mapScene);
+const playerHealthBar = createPlayerHealthBar(TVG, renderCanvas);
+canvas.add(playerHealthBar.scene);
 
 // A "seed" URL parameter repeats the same maps, for testing.
 const fixedSeed = new URLSearchParams(location.search).get('seed');
@@ -91,19 +99,18 @@ function createLevel() {
     room,
     roomView: createRoomView(TVG, room),
     player: createCharacter(TVG, playerIcon),
-    playerHealthBar: createHealthBar(TVG, renderCanvas),
     enemies: room.monsters.map((position) =>
       createEnemy(
         position,
         createDummyEnemy(TVG),
-        createHealthBar(TVG, renderCanvas),
+        createEnemyHealthBar(TVG, renderCanvas),
         chasePlayer,
       ),
     ),
   };
 }
 
-let { room, roomView, player, playerHealthBar, enemies } = createLevel();
+let { room, roomView, player, enemies } = createLevel();
 let playerPosition = room.start;
 let playerHp = PLAYER_MAX_HP;
 let path: Point[] = [];
@@ -190,10 +197,14 @@ function followPlayer() {
   cameraFrame = requestAnimationFrame(step);
 }
 
+function showPlayerHp(options?: { jump: boolean }) {
+  playerHealthBar.show(playerHp / PLAYER_MAX_HP, options);
+  hpLabel.textContent = `${playerHp}/${PLAYER_MAX_HP}`;
+}
+
 function placePlayer(tile: Point) {
   playerPosition = tile;
   roomView.place(player, tile.x, tile.y);
-  roomView.placeOverlay(playerHealthBar.scene, tile.x, tile.y);
   roomView.cutAwayWalls(tile);
   followPlayer();
 }
@@ -214,10 +225,10 @@ function startLevel() {
   finishAttackEffect = null;
 
   roomView.scene.scale(zoom);
-  canvas.add(roomView.scene);
+  mapScene.add(roomView.scene);
 
   placePlayer(room.start);
-  playerHealthBar.show(playerHp / PLAYER_MAX_HP, { jump: true });
+  showPlayerHp({ jump: true });
   for (const enemy of enemies) {
     placeEnemy(enemy, enemy.position);
   }
@@ -235,8 +246,8 @@ function startLevel() {
 }
 
 function replaceLevel() {
-  canvas.remove(roomView.scene);
-  ({ room, roomView, player, playerHealthBar, enemies } = createLevel());
+  mapScene.remove(roomView.scene);
+  ({ room, roomView, player, enemies } = createLevel());
   startLevel();
 }
 
@@ -257,7 +268,6 @@ function occupiedTiles(except?: Enemy): Point[] {
 function endGame() {
   isGameOver = true;
   roomView.remove(player);
-  roomView.remove(playerHealthBar.scene);
   gameOverScreen.hidden = false;
 }
 
@@ -281,7 +291,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     render: () => canvas.update().render(),
     onHit: () => {
       playerHp = Math.max(0, playerHp - ENEMY_ATTACK_DAMAGE);
-      playerHealthBar.show(playerHp / PLAYER_MAX_HP);
+      showPlayerHp();
       // Being hit stops the walk, so the player can decide again.
       path = [];
       attackTarget = null;

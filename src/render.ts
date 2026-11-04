@@ -49,9 +49,14 @@ const CUTAWAY_OPEN_FRACTION = 0.7;
 
 const CURSOR_OUTLINE_WIDTH = 2;
 
-const HEALTH_BAR_WIDTH = CHARACTER_SIZE * 0.8;
-const HEALTH_BAR_HEIGHT = 5;
-const HEALTH_BAR_GAP = 4;
+const ENEMY_HEALTH_BAR_WIDTH = CHARACTER_SIZE * 0.8;
+const ENEMY_HEALTH_BAR_HEIGHT = 5;
+const ENEMY_HEALTH_BAR_GAP = 4;
+
+// Placeholder values for the health bar at the top left of the screen.
+const PLAYER_HEALTH_BAR_MARGIN = 12;
+const PLAYER_HEALTH_BAR_WIDTH = 200;
+const PLAYER_HEALTH_BAR_HEIGHT = 16;
 
 // No standard exists for these. Lost health stays visible briefly, then catches up.
 const HEALTH_TRAIL_HOLD_MS = 300;
@@ -74,8 +79,10 @@ const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
 };
 const DUMMY_ENEMY: Color = [196, 64, 64];
 const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
-const HEALTH_BAR_FILL: Color = [90, 200, 90];
-const HEALTH_BAR_TRAIL: Color = [220, 80, 60];
+const ENEMY_HEALTH_BAR_FILL: Color = [90, 200, 90];
+const ENEMY_HEALTH_BAR_TRAIL: Color = [220, 80, 60];
+const PLAYER_HEALTH_BAR_FILL: Color = [210, 60, 55];
+const PLAYER_HEALTH_BAR_TRAIL: Color = [245, 200, 120];
 
 function mapToScreen(x: number, y: number): Point {
   return {
@@ -397,10 +404,21 @@ export function createDummyEnemy(TVG: ThorVGNamespace): Scene {
   return scene;
 }
 
-// A hidden, full bar centered below the scene's local origin.
-export function createHealthBar(TVG: ThorVGNamespace, render: () => void): HealthBar {
-  const left = -HEALTH_BAR_WIDTH / 2;
+interface HealthBarStyle {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  fillColor: Color;
+  trailColor: Color;
+}
 
+// A hidden, full bar.
+function createHealthBar(
+  TVG: ThorVGNamespace,
+  render: () => void,
+  { left, top, width, height, fillColor, trailColor }: HealthBarStyle,
+): HealthBar {
   const background = new TVG.Shape();
   const trail = new TVG.Shape();
   const fill = new TVG.Shape();
@@ -412,12 +430,9 @@ export function createHealthBar(TVG: ThorVGNamespace, render: () => void): Healt
   scene.visible(false);
 
   const drawBar = (shape: Shape, ratio: number, color: Color) => {
-    const radius = HEALTH_BAR_HEIGHT / 2;
+    const radius = height / 2;
     shape.reset();
-    shape.appendRect(left, HEALTH_BAR_GAP, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT, {
-      rx: radius,
-      ry: radius,
-    });
+    shape.appendRect(left, top, width * ratio, height, { rx: radius, ry: radius });
     shape.fill(...color);
   };
 
@@ -429,16 +444,16 @@ export function createHealthBar(TVG: ThorVGNamespace, render: () => void): Healt
   return {
     scene,
     show(ratio, options) {
-      drawBar(fill, ratio, HEALTH_BAR_FILL);
+      drawBar(fill, ratio, fillColor);
       scene.visible(true);
 
       cancelAnimationFrame(trailFrame);
       if (options?.jump || ratio >= trailRatio) {
         trailRatio = ratio;
-        drawBar(trail, trailRatio, HEALTH_BAR_TRAIL);
+        drawBar(trail, trailRatio, trailColor);
         return;
       }
-      drawBar(trail, trailRatio, HEALTH_BAR_TRAIL);
+      drawBar(trail, trailRatio, trailColor);
 
       // Each hit restarts the wait, from wherever the trail is now.
       const startRatio = trailRatio;
@@ -450,7 +465,7 @@ export function createHealthBar(TVG: ThorVGNamespace, render: () => void): Healt
 
         if (progress > 0) {
           trailRatio = startRatio + (ratio - startRatio) * Math.min(1, progress);
-          drawBar(trail, trailRatio, HEALTH_BAR_TRAIL);
+          drawBar(trail, trailRatio, trailColor);
           render();
         }
         if (progress < 1) {
@@ -461,4 +476,28 @@ export function createHealthBar(TVG: ThorVGNamespace, render: () => void): Healt
       trailFrame = requestAnimationFrame(step);
     },
   };
+}
+
+// Centered below the scene's local origin, which stands on the enemy's tile.
+export function createEnemyHealthBar(TVG: ThorVGNamespace, render: () => void): HealthBar {
+  return createHealthBar(TVG, render, {
+    left: -ENEMY_HEALTH_BAR_WIDTH / 2,
+    top: ENEMY_HEALTH_BAR_GAP,
+    width: ENEMY_HEALTH_BAR_WIDTH,
+    height: ENEMY_HEALTH_BAR_HEIGHT,
+    fillColor: ENEMY_HEALTH_BAR_FILL,
+    trailColor: ENEMY_HEALTH_BAR_TRAIL,
+  });
+}
+
+// At the top left of the screen, because it is not part of the map.
+export function createPlayerHealthBar(TVG: ThorVGNamespace, render: () => void): HealthBar {
+  return createHealthBar(TVG, render, {
+    left: PLAYER_HEALTH_BAR_MARGIN,
+    top: PLAYER_HEALTH_BAR_MARGIN,
+    width: PLAYER_HEALTH_BAR_WIDTH,
+    height: PLAYER_HEALTH_BAR_HEIGHT,
+    fillColor: PLAYER_HEALTH_BAR_FILL,
+    trailColor: PLAYER_HEALTH_BAR_TRAIL,
+  });
 }

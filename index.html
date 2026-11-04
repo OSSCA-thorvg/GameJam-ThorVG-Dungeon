@@ -26,10 +26,22 @@
       footer a {
         color: inherit;
       }
+      /* Sits on the player health bar drawn in render.ts. */
+      #hp {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        width: 200px;
+        font: bold 12px/16px sans-serif;
+        text-align: center;
+        color: #fff;
+        text-shadow: 0 1px 2px #000;
+        pointer-events: none;
+      }
       #floor {
         position: fixed;
         top: 10px;
-        left: 12px;
+        right: 12px;
         font: 16px sans-serif;
         color: #c8cad2;
       }
@@ -84,6 +96,7 @@
   </head>
   <body>
     <canvas id="canvas"></canvas>
+    <div id="hp"></div>
     <div id="floor"></div>
     <button id="wait" hidden>
       <span id="wait-label">Wait</span>
