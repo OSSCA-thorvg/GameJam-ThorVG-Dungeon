@@ -154,6 +154,7 @@ function placePlayer(tile: Point) {
   playerPosition = tile;
   roomView.place(player, tile.x, tile.y);
   roomView.placeOverlay(playerHealthBar.scene, tile.x, tile.y);
+  roomView.cutAwayWalls(tile);
   followPlayer();
 }
 
