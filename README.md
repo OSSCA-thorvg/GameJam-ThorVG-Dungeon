@@ -25,8 +25,10 @@ npm run dev
 These games were used as references for algorithms and numeric values. Their code was not copied.
 
 - [Brogue CE](https://github.com/tmewett/BrogueCE) (AGPL-3.0): room attachment, loops, and room shape generation
-- [Shattered Pixel Dungeon](https://github.com/00-Evan/shattered-pixel-dungeon) (GPL-3.0): walking speed, camera follow, screen shake, pathfinding, and enemy behavior structure
+- [Shattered Pixel Dungeon](https://github.com/00-Evan/shattered-pixel-dungeon) (GPL-3.0): walking speed, camera follow, screen shake, pathfinding, floating damage numbers, view distance, doors blocking the view, and enemy behavior structure
 - [Dungeon Crawl Stone Soup](https://github.com/crawl/crawl): room template format and random tiles
+
+The field of view and the shape of the light use the method from [Sight & Light](https://ncase.me/sight-and-light/) by Nicky Case.
 
 ## License
 

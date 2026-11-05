@@ -38,6 +38,7 @@ import {
 import { isAdjacent, type Point } from './room';
 import { normalRooms, startRooms } from './roomSources';
 import { playSplash } from './splash';
+import { computeVision, DEFAULT_VIEW_DISTANCE } from './vision';
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -111,6 +112,9 @@ function createLevel() {
 
   return {
     room,
+    explored: room.tiles.map((row) => row.map(() => false)),
+    inView: room.tiles.map((row) => row.map(() => false)),
+    seenEnemies: new Set<Enemy>(),
     roomView: createRoomView(TVG, room),
     player: createCharacter(TVG, playerIcon),
     enemies: room.monsters.map((position) =>
@@ -124,9 +128,13 @@ function createLevel() {
   };
 }
 
-let { room, roomView, player, enemies } = createLevel();
+let { room, explored, inView, seenEnemies, roomView, player, enemies } = createLevel();
 let playerPosition = room.start;
 let playerHp = PLAYER_MAX_HP;
+// How far the player can see, in tiles. An effect that changes it should call updateVision().
+let playerViewDistance = DEFAULT_VIEW_DISTANCE;
+// What the current vision was computed from, to skip computing it when nothing changed.
+let visionState = '';
 let path: Point[] = [];
 let attackTarget: Enemy | null = null;
 let isWalking = false;
@@ -169,9 +177,19 @@ function screenToScene({ x, y }: Point): Point {
   };
 }
 
+function isExplored({ x, y }: Point) {
+  return explored[y]?.[x] === true;
+}
+
+function isInView({ x, y }: Point) {
+  return inView[y]?.[x] === true;
+}
+
+// Returns the explored tile under a screen position. Unexplored tiles cannot be pointed at.
 function tileUnder(position: Point) {
   const { x, y } = screenToScene(position);
-  return roomView.tileAt(x, y);
+  const tile = roomView.tileAt(x, y);
+  return tile && isExplored(tile) ? tile : null;
 }
 
 function setZoom(value: number) {
@@ -179,8 +197,9 @@ function setZoom(value: number) {
   roomView.scene.scale(zoom);
 }
 
+// Only finds enemies in view, so pointing at a tile cannot reveal the others.
 function enemyAt({ x, y }: Point) {
-  return enemies.find(({ position }) => position.x === x && position.y === y);
+  return [...seenEnemies].find(({ position }) => position.x === x && position.y === y);
 }
 
 function itemsAt({ x, y }: Point) {
@@ -259,22 +278,83 @@ function showPlayerHp(options?: { jump: boolean }) {
   hpLabel.textContent = `${playerHp}/${PLAYER_MAX_HP}`;
 }
 
+// Computes what the player sees, and shows it on the map.
+function lookAround(occupied: Point[]) {
+  const vision = computeVision(room, playerPosition, playerViewDistance, occupied);
+
+  inView = room.tiles.map((row) => row.map(() => false));
+  for (const { x, y } of vision.tiles) {
+    inView[y][x] = true;
+    explored[y][x] = true;
+  }
+
+  roomView.setLight({
+    center: playerPosition,
+    radius: vision.radius,
+    outline: vision.outline,
+    tiles: vision.tiles,
+  });
+}
+
+// Looks from the player's tile again. Call this when the player, an enemy, or the view distance
+// changes, because an enemy standing on a door also opens the view through it.
+function updateVision() {
+  const occupied = occupiedTiles();
+  const heldDoors = occupied.filter(({ x, y }) => room.tiles[y][x] === 'door');
+  const state = JSON.stringify([playerPosition, playerViewDistance, heldDoors]);
+  if (state !== visionState) {
+    visionState = state;
+    lookAround(occupied);
+  }
+
+  for (const enemy of enemies) {
+    const isSeen = isInView(enemy.position);
+    if (isSeen === seenEnemies.has(enemy)) {
+      continue;
+    }
+    if (isSeen) {
+      seenEnemies.add(enemy);
+      // A new enemy stops the walk, so the player can decide again.
+      path = [];
+      attackTarget = null;
+    } else {
+      seenEnemies.delete(enemy);
+    }
+    showEnemy(enemy);
+  }
+
+  updateCursorTile();
+}
+
 function placePlayer(tile: Point) {
   playerPosition = tile;
   roomView.place(player, tile.x, tile.y);
+  updateVision();
   roomView.cutAwayWalls(tile);
   followPlayer();
 }
 
+// Draws an enemy only while it is in view.
+function showEnemy(enemy: Enemy) {
+  const { x, y } = enemy.position;
+  if (seenEnemies.has(enemy)) {
+    roomView.place(enemy.paint, x, y);
+    roomView.placeOverlay(enemy.healthBar.scene, x, y);
+  } else {
+    roomView.remove(enemy.paint);
+    roomView.remove(enemy.healthBar.scene);
+  }
+}
+
 function placeEnemy(enemy: Enemy, tile: Point) {
   enemy.position = tile;
-  roomView.place(enemy.paint, tile.x, tile.y);
-  roomView.placeOverlay(enemy.healthBar.scene, tile.x, tile.y);
-  updateCursorTile();
+  updateVision();
+  showEnemy(enemy);
 }
 
 // Sets up the current level's scene and state.
 function startLevel() {
+  visionState = '';
   groundItems = [];
   path = [];
   attackTarget = null;
@@ -287,9 +367,6 @@ function startLevel() {
 
   placePlayer(room.start);
   showPlayerHp({ jump: true });
-  for (const enemy of enemies) {
-    placeEnemy(enemy, enemy.position);
-  }
 
   // A new level starts with the camera already on the player.
   cancelAnimationFrame(cameraFrame);
@@ -306,7 +383,7 @@ function startLevel() {
 function replaceLevel() {
   damageNumbers.clear();
   mapScene.remove(roomView.scene);
-  ({ room, roomView, player, enemies } = createLevel());
+  ({ room, explored, inView, seenEnemies, roomView, player, enemies } = createLevel());
   startLevel();
 }
 
@@ -322,6 +399,11 @@ const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas')!;
 
 function occupiedTiles(except?: Enemy): Point[] {
   return enemies.filter((enemy) => enemy !== except).map((enemy) => enemy.position);
+}
+
+// The tiles the player knows are taken, so the player's paths cannot reveal unseen enemies.
+function seenEnemyTiles(except?: Enemy): Point[] {
+  return [...seenEnemies].filter((enemy) => enemy !== except).map((enemy) => enemy.position);
 }
 
 function showDamage(amount: number, tile: Point, target: DamageTarget) {
@@ -426,8 +508,9 @@ function playPlayerAttack(enemy: Enemy) {
         roomView.remove(enemy.paint);
         roomView.remove(enemy.healthBar.scene);
         enemies.splice(enemies.indexOf(enemy), 1);
+        seenEnemies.delete(enemy);
         dropItem('healing-potion', enemy.position);
-        updateCursorTile();
+        updateVision();
       }
       runEnemyTurn(() => {});
     },
@@ -438,12 +521,18 @@ function playPlayerAttack(enemy: Enemy) {
 function pathToAttack(enemy: Enemy): Point[] {
   return isAdjacent(enemy.position, playerPosition)
     ? []
-    : findPath(room, playerPosition, enemy.position, occupiedTiles(enemy)).slice(0, -1);
+    : findPath(room, playerPosition, enemy.position, seenEnemyTiles(enemy), isExplored).slice(0, -1);
 }
 
 function walk() {
   if (isGameOver) {
     return;
+  }
+
+  // The target may have moved out of view on its turn.
+  if (attackTarget && !seenEnemies.has(attackTarget)) {
+    path = [];
+    attackTarget = null;
   }
 
   // The target may have moved on its turn.
@@ -470,11 +559,13 @@ function walk() {
   }
 
   isWalking = true;
+  // Seeing a new enemy on this step empties the path, which must not count as arriving.
+  const isDestination = path.length === 0;
   placePlayer(next);
   pickUpItems(next);
 
   // The stairs only work as a destination, so paths can cross them.
-  if (path.length === 0 && next.x === room.stairs.x && next.y === room.stairs.y) {
+  if (isDestination && next.x === room.stairs.x && next.y === room.stairs.y) {
     floor++;
     replaceLevel();
     return;
@@ -507,7 +598,7 @@ function pressTileAt(position: Point) {
     path = pathToAttack(clicked);
     attackTarget = clicked;
   } else {
-    path = findPath(room, playerPosition, target, occupiedTiles());
+    path = findPath(room, playerPosition, target, seenEnemyTiles(), isExplored);
     attackTarget = null;
   }
 

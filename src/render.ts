@@ -9,8 +9,21 @@ export type CursorTarget = 'floor' | 'enemy' | 'item';
 // Who took the damage, which decides the color of the number.
 export type DamageTarget = 'enemy' | 'player';
 
+export interface Light {
+  // The tile the light comes from.
+  center: Point;
+  // How far the light reaches, in tiles.
+  radius: number;
+  // The lit floor area, where a tile's center is at its (x, y).
+  outline: Point[];
+  // The tiles in view. Walls and doors among them are lit as a whole.
+  tiles: Point[];
+}
+
 export interface RoomView {
   scene: Scene;
+  // Hides everything that was never lit, and darkens everything outside the light.
+  setLight(light: Light): void;
   // Moves a paint onto a tile and into that tile's draw layer.
   place(paint: Paint, x: number, y: number): void;
   // Cuts a hole in the walls in front of a tile, but only when they cover that tile.
@@ -53,6 +66,21 @@ const CUTAWAY_OPEN_FRACTION = 0.7;
 
 const CURSOR_OUTLINE_WIDTH = 2;
 
+// Placeholder values. How opaque the darkness is over places that were lit before,
+// and the fraction of the light's radius that stays fully lit before it fades out.
+const REMEMBERED_DARKNESS_OPACITY = 170;
+const LIGHT_FULL_FRACTION = 0.5;
+// Placeholder value. How far the edges of the light are blurred.
+const LIGHT_BLUR_SIGMA = 8;
+// One tile on the floor is TILE_WIDTH / sqrt(2) long in the light map.
+const LIGHT_MAP_TILE_LENGTH = TILE_WIDTH / Math.SQRT2;
+// The lit top of a wall grows by one sigma on each side, so the blur fades it past its edges
+// instead of inside them.
+const LIT_WALL_TOP_SCALE = 1 + (2 * LIGHT_BLUR_SIGMA) / LIGHT_MAP_TILE_LENGTH;
+// The floor light reaches this many tiles under the walls, so that the blur does not darken the
+// floor beside them. Two sigmas hold nearly all of the blur, and stay within a wall's thickness.
+const LIGHT_UNDER_WALLS = (2 * LIGHT_BLUR_SIGMA) / LIGHT_MAP_TILE_LENGTH;
+
 const ENEMY_HEALTH_BAR_WIDTH = CHARACTER_SIZE * 0.8;
 const ENEMY_HEALTH_BAR_HEIGHT = 5;
 const ENEMY_HEALTH_BAR_GAP = 4;
@@ -78,6 +106,8 @@ export const DAMAGE_NUMBER_HEIGHT = DIGIT_HEIGHT + DIGIT_STROKE_WIDTH + DIGIT_GA
 // One character height, like the one tile that numbers rise in Shattered Pixel Dungeon.
 export const DAMAGE_NUMBER_RISE = CHARACTER_SIZE;
 
+// Same as the page background, so that places that were never lit look like empty space.
+const DARKNESS: Color = [20, 21, 26];
 const FLOOR_LIGHT: Color = [96, 100, 110];
 const FLOOR_DARK: Color = [86, 90, 100];
 const DOOR: Color = [150, 104, 60];
@@ -149,6 +179,25 @@ function lift(point: Point): Point {
   return { x: point.x, y: point.y - WALL_HEIGHT };
 }
 
+// A gradient is round, but a circle on the floor is a 2:1 ellipse on the screen.
+// So the light map is drawn at twice the height, then squeezed back to the height of the map.
+const LIGHT_MAP_SQUEEZE = { e11: 1, e12: 0, e13: 0, e21: 0, e22: 0.5, e23: 0, e31: 0, e32: 0, e33: 1 };
+
+// Outlines keep one winding direction, so that overlapping ones in a shape do not cancel out.
+function appendLightOutline(shape: Shape, points: Point[]) {
+  const area = points.reduce((sum, { x, y }, index) => {
+    const next = points[(index + 1) % points.length];
+    return sum + x * next.y - next.x * y;
+  }, 0);
+  const ordered = area < 0 ? [...points].reverse() : points;
+
+  shape.moveTo(ordered[0].x, ordered[0].y * 2);
+  for (const { x, y } of ordered.slice(1)) {
+    shape.lineTo(x, y * 2);
+  }
+  shape.close();
+}
+
 // Builds a view with the room centered on the scene's local origin.
 export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   const scene = new TVG.Scene();
@@ -160,6 +209,10 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     return layer;
   });
 
+  // Drawn after the whole map, so it darkens everything under it.
+  const darkness = new TVG.Shape();
+  scene.add(darkness);
+
   const overlay = new TVG.Scene();
   scene.add(overlay);
 
@@ -169,6 +222,8 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   overlay.add(cursorOutline);
 
   const walls: Wall[] = [];
+  // Every wall's outline on the screen, whether it was seen or not.
+  const wallArea = new TVG.Shape();
   const cutLayers = new Map<number, { scene: Scene; playerHole: Shape; cursorHole: Shape }>();
   let cutWalls = new Set<Wall>();
   let coveredPlayerTile: Point | null = null;
@@ -188,13 +243,13 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     for (let x = 0; x < room.width; x++) {
       const layer = layers[x + y];
 
-      const addPolygon = (points: Point[], [r, g, b]: Color) => {
+      const addPolygon = (points: Point[], color: Color) => {
         const shape = new TVG.Shape();
         shape.moveTo(points[0].x, points[0].y);
         for (const point of points.slice(1)) {
           shape.lineTo(point.x, point.y);
         }
-        shape.close().fill(r, g, b);
+        shape.close().fill(...color);
         layer.add(shape);
         return shape;
       };
@@ -225,6 +280,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
           addPolygon([top, right, bottom, left], DOOR);
           break;
         case 'wall':
+          appendLightOutline(wallArea, [lift(top), lift(right), right, bottom, left, lift(left)]);
           walls.push({
             tile: { x, y },
             center,
@@ -238,6 +294,57 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       }
     }
   }
+
+  // The light map is a grayscale image, where brighter means less darkness. Black is what was never
+  // lit, gray is what was lit before, and the light itself is drawn over those.
+  const rememberedLevel = 255 - REMEMBERED_DARKNESS_OPACITY;
+  const createBlurredLight = () => {
+    const remembered = new TVG.Shape();
+    remembered.fill(rememberedLevel, rememberedLevel, rememberedLevel);
+    const lit = new TVG.Shape();
+    const blurred = new TVG.Scene();
+    blurred.add(remembered);
+    blurred.add(lit);
+    blurred.gaussianBlur(LIGHT_BLUR_SIGMA);
+    return { remembered, lit, blurred };
+  };
+  const floorLight = createBlurredLight();
+  const wallLight = createBlurredLight();
+
+  // Light on a wall stays on the walls, so that it does not spill onto the floor behind them.
+  wallArea.fill(255, 255, 255);
+  const wallLightOnWalls = new TVG.Scene();
+  wallLightOnWalls.add(wallLight.blurred);
+  wallLightOnWalls.mask(wallArea, TVG.MaskMethod.Alpha);
+
+  const lightMap = new TVG.Scene();
+  lightMap.add(floorLight.blurred);
+  lightMap.add(wallLightOnWalls);
+  lightMap.transform(LIGHT_MAP_SQUEEZE);
+
+  const rememberedOutlines = new Set<string>();
+
+  const createLightGradient = (light: Light) => {
+    const center = tileCenter(light.center.x, light.center.y);
+    const gradient = new TVG.RadialGradient(
+      center.x,
+      center.y * 2,
+      light.radius * LIGHT_MAP_TILE_LENGTH,
+    );
+    gradient.addStop(0, [255, 255, 255, 255]);
+    gradient.addStop(LIGHT_FULL_FRACTION, [255, 255, 255, 255]);
+    gradient.addStop(1, [rememberedLevel, rememberedLevel, rememberedLevel, 255]);
+    gradient.build();
+    return gradient;
+  };
+
+  const mapLeft = tileCenter(0, room.height - 1).x - TILE_WIDTH;
+  const mapRight = tileCenter(room.width - 1, 0).x + TILE_WIDTH;
+  const mapTop = tileCenter(0, 0).y - TILE_HEIGHT - WALL_HEIGHT;
+  const mapBottom = tileCenter(room.width - 1, room.height - 1).y + TILE_HEIGHT;
+  darkness.appendRect(mapLeft, mapTop, mapRight - mapLeft, mapBottom - mapTop);
+  darkness.fill(...DARKNESS);
+  darkness.mask(lightMap, TVG.MaskMethod.InvLuma);
 
   const paintLayers = new Map<Paint, Scene>();
 
@@ -350,6 +457,67 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
 
   return {
     scene,
+    setLight(light) {
+      const remember = (key: string, shape: Shape, outline: Point[]) => {
+        if (!rememberedOutlines.has(key)) {
+          rememberedOutlines.add(key);
+          appendLightOutline(shape, outline);
+        }
+      };
+
+      // Moving a point along its own ray keeps the edges of the shadows where they are.
+      const floorOutline = light.outline.map(({ x, y }) => {
+        const rayX = x - light.center.x;
+        const rayY = y - light.center.y;
+        const scale = 1 + LIGHT_UNDER_WALLS / Math.hypot(rayX, rayY);
+        return tileCenter(light.center.x + rayX * scale, light.center.y + rayY * scale);
+      });
+      floorLight.lit.reset();
+      wallLight.lit.reset();
+      appendLightOutline(floorLight.lit, floorOutline);
+      remember(JSON.stringify(light.outline), floorLight.remembered, floorOutline);
+
+      // The outline stops at walls and doors, so the ones in view are added whole.
+      for (const { x, y } of light.tiles) {
+        const tile = room.tiles[y][x];
+        if (tile === 'wall' || tile === 'door') {
+          const center = tileCenter(x, y);
+          const top = { x: center.x, y: center.y - TILE_HEIGHT / 2 };
+          const right = { x: center.x + TILE_WIDTH / 2, y: center.y };
+          const bottom = { x: center.x, y: center.y + TILE_HEIGHT / 2 };
+          const left = { x: center.x - TILE_WIDTH / 2, y: center.y };
+          if (tile === 'door') {
+            appendLightOutline(floorLight.lit, [top, right, bottom, left]);
+            remember(`${x},${y}`, floorLight.remembered, [top, right, bottom, left]);
+          } else {
+            const litTop = [top, right, bottom, left].map((point) =>
+              lift({
+                x: center.x + (point.x - center.x) * LIT_WALL_TOP_SCALE,
+                y: center.y + (point.y - center.y) * LIT_WALL_TOP_SCALE,
+              }),
+            );
+            appendLightOutline(wallLight.lit, litTop);
+            // A side of a wall is only lit when it faces the light, so a shadow starts at the wall.
+            if (light.center.y > y + 0.5) {
+              appendLightOutline(wallLight.lit, [left, bottom, lift(bottom), lift(left)]);
+            }
+            if (light.center.x > x + 0.5) {
+              appendLightOutline(wallLight.lit, [right, bottom, lift(bottom), lift(right)]);
+            }
+            remember(`${x},${y}`, wallLight.remembered, [
+              lift(top),
+              lift(right),
+              right,
+              bottom,
+              left,
+              lift(left),
+            ]);
+          }
+        }
+      }
+      floorLight.lit.fill(createLightGradient(light));
+      wallLight.lit.fill(createLightGradient(light));
+    },
     place(paint, x, y) {
       placeInLayer(paint, layers[x + y], x, y);
     },
