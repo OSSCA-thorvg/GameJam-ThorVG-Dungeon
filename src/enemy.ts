@@ -57,8 +57,10 @@ export function createEnemy(
   return { position, hp: ENEMY_MAX_HP, hasNoticedPlayer: false, paint, healthBar, behavior };
 }
 
-export function attackEnemy(enemy: Enemy): void {
+// Returns the damage dealt.
+export function attackEnemy(enemy: Enemy): number {
   enemy.hasNoticedPlayer = true;
   enemy.hp = Math.max(0, enemy.hp - PLAYER_ATTACK_DAMAGE);
   enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
+  return PLAYER_ATTACK_DAMAGE;
 }

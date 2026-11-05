@@ -3,6 +3,7 @@ import ThorVG, { type Paint } from '@thorvg/webcanvas';
 import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import playerIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
+import { createDamageNumbers } from './damageNumbers';
 import {
   attackEnemy,
   chasePlayer,
@@ -25,12 +26,14 @@ import { findPath } from './path';
 import { createRandom, randomInt } from './random';
 import {
   createCharacter,
+  createDamageNumber,
   createDummyEnemy,
   createEnemyHealthBar,
   createItemPaint,
   createPlayerHealthBar,
   createRoomView,
   tileDistance,
+  type DamageTarget,
 } from './render';
 import { isAdjacent, type Point } from './room';
 import { normalRooms, startRooms } from './roomSources';
@@ -81,6 +84,7 @@ const floorLabel = document.querySelector<HTMLElement>('#floor')!;
 const hpLabel = document.querySelector<HTMLElement>('#hp')!;
 
 const renderCanvas = () => canvas.update().render();
+const damageNumbers = createDamageNumbers(renderCanvas);
 
 // The HUD is added after the map's scene, so a new level is still drawn below it.
 const mapScene = new TVG.Scene();
@@ -300,6 +304,7 @@ function startLevel() {
 }
 
 function replaceLevel() {
+  damageNumbers.clear();
   mapScene.remove(roomView.scene);
   ({ room, roomView, player, enemies } = createLevel());
   startLevel();
@@ -317,6 +322,10 @@ const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas')!;
 
 function occupiedTiles(except?: Enemy): Point[] {
   return enemies.filter((enemy) => enemy !== except).map((enemy) => enemy.position);
+}
+
+function showDamage(amount: number, tile: Point, target: DamageTarget) {
+  damageNumbers.show(roomView, createDamageNumber(TVG, amount, target), tile);
 }
 
 function endGame() {
@@ -346,6 +355,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     onHit: () => {
       playerHp = Math.max(0, playerHp - ENEMY_ATTACK_DAMAGE);
       showPlayerHp();
+      showDamage(ENEMY_ATTACK_DAMAGE, playerPosition, 'player');
       // Being hit stops the walk, so the player can decide again.
       path = [];
       attackTarget = null;
@@ -409,7 +419,7 @@ function playPlayerAttack(enemy: Enemy) {
       }
     },
     render: () => canvas.update().render(),
-    onHit: () => attackEnemy(enemy),
+    onHit: () => showDamage(attackEnemy(enemy), enemy.position, 'enemy'),
     onEnd: () => {
       finishAttackEffect = null;
       if (enemy.hp === 0) {

@@ -6,6 +6,9 @@ type Color = [r: number, g: number, b: number];
 // What the cursor is pointing at, which decides the color of the tile outline.
 export type CursorTarget = 'floor' | 'enemy' | 'item';
 
+// Who took the damage, which decides the color of the number.
+export type DamageTarget = 'enemy' | 'player';
+
 export interface RoomView {
   scene: Scene;
   // Moves a paint onto a tile and into that tile's draw layer.
@@ -63,6 +66,18 @@ const PLAYER_HEALTH_BAR_HEIGHT = 16;
 const HEALTH_TRAIL_HOLD_MS = 300;
 const HEALTH_TRAIL_SHRINK_MS = 250;
 
+// Placeholder values for the size of a damage number's digits.
+const DIGIT_SCALE = 0.7;
+const DIGIT_WIDTH = 10 * DIGIT_SCALE;
+const DIGIT_HEIGHT = 16 * DIGIT_SCALE;
+const DIGIT_GAP = 3;
+const DIGIT_STROKE_WIDTH = 1.75;
+
+// The height one number takes up, with a gap to the next number.
+export const DAMAGE_NUMBER_HEIGHT = DIGIT_HEIGHT + DIGIT_STROKE_WIDTH + DIGIT_GAP;
+// One character height, like the one tile that numbers rise in Shattered Pixel Dungeon.
+export const DAMAGE_NUMBER_RISE = CHARACTER_SIZE;
+
 const FLOOR_LIGHT: Color = [96, 100, 110];
 const FLOOR_DARK: Color = [86, 90, 100];
 const DOOR: Color = [150, 104, 60];
@@ -78,6 +93,10 @@ const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
   floor: [255, 255, 255],
   enemy: [235, 60, 50],
   item: [245, 205, 70],
+};
+const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
+  enemy: [255, 255, 255],
+  player: [255, 80, 70],
 };
 const DUMMY_ENEMY: Color = [196, 64, 64];
 const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
@@ -413,6 +432,98 @@ export function createDummyEnemy(TVG: ThorVGNamespace): Scene {
   const scene = new TVG.Scene();
   scene.add(shape);
   return scene;
+}
+
+// Each digit is one path in a 10 by 16 box, before DIGIT_SCALE. The first point of a path is a
+// move, a point with 2 values is a line, and a point with 6 values is a cubic curve.
+const DIGIT_PATHS: number[][][] = [
+  [[5, 0], [8, 0, 10, 3, 10, 8], [10, 13, 8, 16, 5, 16], [2, 16, 0, 13, 0, 8], [0, 3, 2, 0, 5, 0]],
+  [[2, 3], [5.5, 0], [5.5, 16]],
+  [[0.5, 4], [0.5, 1.5, 2.5, 0, 5, 0], [7.5, 0, 9.5, 1.5, 9.5, 4], [9.5, 7, 6, 9, 0, 16], [10, 16]],
+  [
+    [0.5, 2.5],
+    [1.5, 0.8, 3, 0, 5, 0],
+    [7.5, 0, 9.5, 1.5, 9.5, 4],
+    [9.5, 6.2, 7.5, 7.5, 4.5, 7.5],
+    [7.5, 7.5, 10, 9, 10, 11.8],
+    [10, 14.5, 7.5, 16, 5, 16],
+    [3, 16, 1, 15.2, 0, 13.2],
+  ],
+  [[7.5, 16], [7.5, 0], [0, 10.5], [10, 10.5]],
+  [
+    [9, 0],
+    [1.5, 0],
+    [0.8, 7],
+    [2, 6, 3.5, 5.5, 5, 5.5],
+    [8, 5.5, 10, 7.5, 10, 10.7],
+    [10, 14, 7.8, 16, 5, 16],
+    [3, 16, 1.2, 15, 0, 13],
+  ],
+  [
+    [8.5, 0.5],
+    [4, 1.5, 0, 5, 0, 10.5],
+    [0, 14, 2, 16, 5, 16],
+    [8, 16, 10, 14, 10, 11],
+    [10, 8, 8, 6, 5, 6],
+    [2.5, 6, 0.5, 7.8, 0, 10.5],
+  ],
+  [[0, 0], [10, 0], [3.5, 16]],
+  [
+    [5, 7.5],
+    [2.5, 7.5, 0.8, 6, 0.8, 3.8],
+    [0.8, 1.5, 2.7, 0, 5, 0],
+    [7.3, 0, 9.2, 1.5, 9.2, 3.8],
+    [9.2, 6, 7.5, 7.5, 5, 7.5],
+    [2.2, 7.5, 0, 9.2, 0, 11.7],
+    [0, 14.3, 2.2, 16, 5, 16],
+    [7.8, 16, 10, 14.3, 10, 11.7],
+    [10, 9.2, 7.8, 7.5, 5, 7.5],
+  ],
+  [
+    [1.5, 15.5],
+    [6, 14.5, 10, 11, 10, 5.5],
+    [10, 2, 8, 0, 5, 0],
+    [2, 0, 0, 2, 0, 5],
+    [0, 8, 2, 10, 5, 10],
+    [7.5, 10, 9.5, 8.2, 10, 5.5],
+  ],
+];
+
+function appendDigit(shape: Shape, digit: number, left: number, top: number) {
+  for (const [index, point] of DIGIT_PATHS[digit].entries()) {
+    const [a, b, c, d, e, f] = point.map((value) => value * DIGIT_SCALE);
+    if (index === 0) {
+      shape.moveTo(left + a, top + b);
+    } else if (point.length === 2) {
+      shape.lineTo(left + a, top + b);
+    } else {
+      shape.cubicTo(left + a, top + b, left + c, top + d, left + e, top + f);
+    }
+  }
+}
+
+// A number just above the head of a character standing on the scene's local origin.
+// It is drawn from paths because ThorVG needs a font file to draw text.
+export function createDamageNumber(
+  TVG: ThorVGNamespace,
+  amount: number,
+  target: DamageTarget,
+): Shape {
+  const digits = [...String(amount)].map(Number);
+  const totalWidth = digits.length * (DIGIT_WIDTH + DIGIT_GAP) - DIGIT_GAP;
+  const top = -CHARACTER_SIZE - DIGIT_HEIGHT;
+
+  const shape = new TVG.Shape();
+  digits.forEach((digit, index) => {
+    appendDigit(shape, digit, -totalWidth / 2 + index * (DIGIT_WIDTH + DIGIT_GAP), top);
+  });
+  shape.stroke({
+    width: DIGIT_STROKE_WIDTH,
+    color: DAMAGE_NUMBER_COLORS[target],
+    cap: TVG.StrokeCap.Round,
+    join: TVG.StrokeJoin.Round,
+  });
+  return shape;
 }
 
 interface HealthBarStyle {
