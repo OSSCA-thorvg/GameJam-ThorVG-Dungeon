@@ -4,6 +4,8 @@ import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import playerIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
 import { createDamageNumbers } from './damageNumbers';
+import { playShatter, playThrow } from './throwEffect';
+import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   attackEnemy,
   chasePlayer,
@@ -165,9 +167,25 @@ function createItemContext(): ItemContext {
 const inventoryPanel = createInventoryPanel({
   getStacks: () => inventory,
   getItemContext: createItemContext,
-  onOpen: stopWalking,
+  onOpen() {
+    stopWalking();
+    cancelTargeting();
+  },
   onUse: useItem,
+  onThrow: throwItem,
+  onDrop: dropFromBag,
 });
+
+// Choosing a tile for an action, like the CellSelector of Shattered Pixel Dungeon. While this is
+// set, a press on a tile picks the target instead of walking there.
+interface TargetRequest {
+  prompt: string;
+  rule: PathRule;
+  onSelect(trajectory: Trajectory): void;
+}
+
+let targeting: { request: TargetRequest; preview: Point | null } | null = null;
+const targetPrompt = document.querySelector<HTMLElement>('#target-prompt')!;
 let pinch: { center: Point; distance: number } | null = null;
 
 function screenToScene({ x, y }: Point): Point {
@@ -208,6 +226,9 @@ function itemsAt({ x, y }: Point) {
 
 function updateCursorTile() {
   const tile = mousePosition && tileUnder(mousePosition);
+  if (targeting) {
+    return previewTarget(tile);
+  }
   if (tile && enemyAt(tile)) {
     return roomView.setCursorTile(tile, 'enemy');
   }
@@ -333,7 +354,9 @@ function updateVision() {
 // nothing is left on it. So a door stays open when a monster dies on it.
 let openDoors = new Set<number>();
 
-const isSameTile = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
+function isSameTile(a: Point | null, b: Point | null) {
+  return a !== null && b !== null && a.x === b.x && a.y === b.y;
+}
 
 function enterDoor(tile: Point) {
   if (room.tiles[tile.y][tile.x] === 'door') {
@@ -620,7 +643,70 @@ function finishRunningEffects() {
   }
 }
 
-function pressTileAt(position: Point) {
+function traceTo(target: Point, rule: PathRule): Trajectory {
+  return traceLine(playerPosition, target, rule, {
+    isBlocked({ x, y }) {
+      const tile = room.tiles[y]?.[x] ?? 'void';
+      return (
+        tile === 'wall' ||
+        tile === 'void' ||
+        (tile === 'door' && !openDoors.has(y * room.width + x))
+      );
+    },
+    hasCharacter: (tile) => enemies.some(({ position }) => isSameTile(position, tile)),
+  });
+}
+
+function canTarget(tile: Point | null): tile is Point {
+  return tile !== null && isInView(tile);
+}
+
+function requestTarget(request: TargetRequest) {
+  stopWalking();
+  targeting = { request, preview: null };
+  document.querySelector('#target-prompt-text')!.textContent = request.prompt;
+  targetPrompt.hidden = false;
+  updateCursorTile();
+  renderCanvas();
+}
+
+function cancelTargeting() {
+  if (!targeting) {
+    return;
+  }
+  targeting = null;
+  targetPrompt.hidden = true;
+  updateCursorTile();
+  renderCanvas();
+}
+
+// Outlines the tile that would be picked. Returns whether anything changed.
+function previewTarget(tile: Point | null): boolean {
+  if (!targeting) {
+    return false;
+  }
+  targeting.preview = canTarget(tile) ? tile : null;
+  return roomView.setCursorTile(targeting.preview, 'target');
+}
+
+// A mouse picks the tile on the first click, because hovering already outlined it.
+// A touch has no hover, so its first tap outlines the tile and a second tap on it picks it.
+function pressTarget(tile: Point, isMouse: boolean) {
+  if (!targeting || !canTarget(tile)) {
+    return;
+  }
+  if (!isMouse && !isSameTile(tile, targeting.preview)) {
+    previewTarget(tile);
+    renderCanvas();
+    return;
+  }
+  const { request } = targeting;
+  const trajectory = traceTo(tile, request.rule);
+  cancelTargeting();
+  request.onSelect(trajectory);
+}
+
+function pressTileAt(position: Point, isMouse: boolean) {
   finishRunningEffects();
   if (isGameOver) {
     return;
@@ -628,6 +714,19 @@ function pressTileAt(position: Point) {
 
   const target = tileUnder(position);
   if (!target) {
+    return;
+  }
+
+  if (targeting) {
+    pressTarget(target, isMouse);
+    return;
+  }
+
+  // Items are picked up on arrival, so a click on the player's own tile picks up what lies there.
+  if (isSameTile(target, playerPosition) && itemsAt(target).length > 0) {
+    pickUpItems(target);
+    updateCursorTile();
+    renderCanvas();
     return;
   }
 
@@ -749,7 +848,7 @@ canvasElement.addEventListener('pointerup', (event) => {
   const wasDragging = cameraDrag.isDragging;
   cameraDrag = null;
   if (!wasDragging) {
-    pressTileAt({ x: event.offsetX, y: event.offsetY });
+    pressTileAt({ x: event.offsetX, y: event.offsetY }, event.pointerType === 'mouse');
   }
 });
 
@@ -786,6 +885,58 @@ canvasElement.addEventListener('pointerleave', () => {
 function stopWalking() {
   path = [];
   attackTarget = null;
+}
+
+// Takes an item out of the bag before an action with it, and ends the panel and any walk.
+function takeFromBag(kind: ItemKind): boolean {
+  finishRunningEffects();
+  if (isGameOver) {
+    return false;
+  }
+  stopWalking();
+  removeItem(inventory, kind);
+  inventoryPanel.refresh();
+  inventoryPanel.close();
+  return true;
+}
+
+function dropFromBag(kind: ItemKind) {
+  if (takeFromBag(kind)) {
+    dropItem(kind, playerPosition);
+    updateVision();
+    runEnemyTurn(() => {});
+  }
+}
+
+function throwItem(kind: ItemKind) {
+  const item = ITEMS[kind];
+  inventoryPanel.close();
+  requestTarget({
+    prompt: `Throw the ${item.name.toLowerCase()} where?`,
+    rule: THROWN,
+    onSelect({ end }) {
+      if (!takeFromBag(kind)) {
+        return;
+      }
+      finishAttackEffect = playThrow({
+        view: roomView,
+        paint: createItemPaint(TVG, item.icon),
+        from: playerPosition,
+        to: end,
+        render: renderCanvas,
+        onLand() {
+          finishAttackEffect = null;
+          if (item.shatterColor) {
+            playShatter(TVG, roomView, end, item.shatterColor, renderCanvas);
+          } else {
+            dropItem(kind, end);
+          }
+          updateVision();
+          runEnemyTurn(() => {});
+        },
+      });
+    },
+  });
 }
 
 function useItem(kind: ItemKind) {
@@ -825,6 +976,12 @@ waitButton.addEventListener('click', () => {
     return;
   }
 
+  // While choosing a target, the button only stops choosing.
+  if (targeting) {
+    cancelTargeting();
+    return;
+  }
+
   // While walking, the button stops the walk instead of spending another turn.
   if (isWalking) {
     stopWalking();
@@ -835,7 +992,15 @@ waitButton.addEventListener('click', () => {
   runEnemyTurn(() => {});
 });
 
+document.querySelector('#target-cancel')!.addEventListener('click', cancelTargeting);
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    cancelTargeting();
+  }
+});
+
 document.querySelector('#restart')!.addEventListener('click', () => {
+  cancelTargeting();
   runSeed = newRunSeed();
   floor = 1;
   playerHp = PLAYER_MAX_HP;

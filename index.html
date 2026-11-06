@@ -172,6 +172,38 @@
         color: #7a7d86;
         cursor: default;
       }
+      #inventory-details .inventory-actions {
+        display: flex;
+        gap: 8px;
+      }
+      #target-prompt {
+        position: fixed;
+        top: 48px;
+        left: 50%;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 6px 6px 14px;
+        font: 15px sans-serif;
+        color: #e8e8ec;
+        background: #1f2027;
+        border: 1px solid #5a8fd0;
+        border-radius: 6px;
+        transform: translateX(-50%);
+      }
+      #target-prompt[hidden] {
+        display: none;
+      }
+      #target-prompt button {
+        min-height: 36px;
+        padding: 0 12px;
+        font: 14px sans-serif;
+        color: #e8e8ec;
+        background: #3a3d48;
+        border: 1px solid #5a5d68;
+        border-radius: 6px;
+        cursor: pointer;
+      }
       #game-over {
         position: fixed;
         inset: 0;
@@ -216,6 +248,10 @@
         <div id="inventory-slots"></div>
         <div id="inventory-details"></div>
       </div>
+    </div>
+    <div id="target-prompt" hidden>
+      <span id="target-prompt-text"></span>
+      <button id="target-cancel">Cancel</button>
     </div>
     <div id="game-over" hidden>
       You died

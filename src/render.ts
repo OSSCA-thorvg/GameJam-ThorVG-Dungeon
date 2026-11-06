@@ -4,7 +4,7 @@ import { isWalkable, type Point, type Room } from './room';
 type Color = [r: number, g: number, b: number];
 
 // What the cursor is pointing at, which decides the color of the tile outline.
-export type CursorTarget = 'floor' | 'enemy' | 'item';
+export type CursorTarget = 'floor' | 'enemy' | 'item' | 'target';
 
 // Who took the damage, which decides the color of the number.
 export type DamageTarget = 'enemy' | 'player';
@@ -131,6 +131,7 @@ const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
   floor: [255, 255, 255],
   enemy: [235, 60, 50],
   item: [245, 205, 70],
+  target: [90, 170, 255],
 };
 const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   enemy: [255, 255, 255],

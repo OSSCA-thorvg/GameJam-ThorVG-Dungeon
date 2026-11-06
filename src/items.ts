@@ -15,6 +15,10 @@ export interface ItemContext {
 export interface ItemDefinition {
   name: string;
   description: string;
+  // The label of the button that uses the item.
+  useLabel: string;
+  // Set when the item breaks where it lands when thrown, like a flask. It is the color it splashes.
+  shatterColor?: [r: number, g: number, b: number];
   // SVG markup, shared by the map and the inventory window.
   icon: string;
   // Why the item cannot be used right now, if there is a reason.
@@ -31,6 +35,8 @@ const HEALING_POTION_HP = 10;
 export const ITEMS: Record<ItemKind, ItemDefinition> = {
   'healing-potion': {
     name: 'Healing potion',
+    useLabel: 'Drink',
+    shatterColor: [210, 60, 55],
     description: `Restores ${HEALING_POTION_HP} HP.`,
     icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
       <path fill="#dfe3ea" d="M9 2H15V4H14V9L19.500 18.500Q20.500 21 18 21H6Q3.500 21 4.500 18.500L10 9V4H9Z"/>

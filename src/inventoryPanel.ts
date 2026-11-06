@@ -5,6 +5,8 @@ export interface InventoryPanelOptions {
   getItemContext(): ItemContext;
   onOpen(): void;
   onUse(kind: ItemKind): void;
+  onThrow(kind: ItemKind): void;
+  onDrop(kind: ItemKind): void;
 }
 
 export interface InventoryPanel {
@@ -18,6 +20,8 @@ export function createInventoryPanel({
   getItemContext,
   onOpen,
   onUse,
+  onThrow,
+  onDrop,
 }: InventoryPanelOptions): InventoryPanel {
   const button = document.querySelector<HTMLButtonElement>('#inventory-button')!;
   const overlay = document.querySelector<HTMLElement>('#inventory')!;
@@ -40,12 +44,19 @@ export function createInventoryPanel({
     const description = document.createElement('p');
     description.textContent = reason ?? item.description;
 
-    const use = document.createElement('button');
-    use.textContent = 'Use';
+    const actionButton = (label: string, onClick: () => void) => {
+      const element = document.createElement('button');
+      element.textContent = label;
+      element.addEventListener('click', onClick);
+      return element;
+    };
+    const use = actionButton(item.useLabel, () => onUse(kind));
     use.disabled = reason !== null;
-    use.addEventListener('click', () => onUse(kind));
 
-    details.append(name, description, use);
+    const actions = document.createElement('div');
+    actions.className = 'inventory-actions';
+    actions.append(use, actionButton('Throw', () => onThrow(kind)), actionButton('Drop', () => onDrop(kind)));
+    details.append(name, description, actions);
   };
 
   const renderSlots = () => {
