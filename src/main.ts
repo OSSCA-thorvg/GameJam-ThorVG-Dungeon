@@ -102,6 +102,9 @@ const newRunSeed = () =>
 
 let runSeed = newRunSeed();
 let floor = 1;
+// For the summary shown when the player dies.
+let killCount = 0;
+let turnCount = 0;
 
 function createLevel() {
   const random = createRandom(runSeed + floor);
@@ -472,6 +475,20 @@ function showDamage(amount: number, tile: Point, target: DamageTarget) {
 function endGame() {
   isGameOver = true;
   roomView.remove(player);
+
+  const plural = (count: number, one: string, many: string) =>
+    `${count} ${count === 1 ? one : many}`;
+  document.querySelector('#run-stats')!.replaceChildren(
+    ...[
+      `Reached floor ${floor}`,
+      `Defeated ${plural(killCount, 'enemy', 'enemies')}`,
+      `Lasted ${plural(turnCount, 'turn', 'turns')}`,
+    ].map((text) => {
+      const line = document.createElement('li');
+      line.textContent = text;
+      return line;
+    }),
+  );
   gameOverScreen.hidden = false;
 }
 
@@ -512,7 +529,9 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
 }
 
 // Lets each enemy act once, one after another.
+// Every action of the player ends with this, so it also counts the player's turns.
 function runEnemyTurn(onDone: () => void) {
+  turnCount++;
   const waiting = [...enemies];
 
   const actNext = () => {
@@ -567,6 +586,7 @@ function playPlayerAttack(enemy: Enemy) {
         roomView.remove(enemy.paint);
         roomView.remove(enemy.healthBar.scene);
         enemies.splice(enemies.indexOf(enemy), 1);
+        killCount++;
         seenEnemies.delete(enemy);
         dropItem('healing-potion', enemy.position);
         updateVision();
@@ -1004,6 +1024,8 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   runSeed = newRunSeed();
   floor = 1;
   playerHp = PLAYER_MAX_HP;
+  killCount = 0;
+  turnCount = 0;
   inventory = [];
   inventoryPanel.refresh();
   replaceLevel();
