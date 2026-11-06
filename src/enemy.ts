@@ -41,6 +41,10 @@ export interface Enemy {
   position: Point;
   hp: number;
   hasNoticedPlayer: boolean;
+  // Whether the enemy saw the player at the start of its last turn. As in Shattered Pixel Dungeon,
+  // an enemy that did not is surprised by the player's attack, such as one that just came through
+  // a door.
+  hasSeenPlayer: boolean;
   paint: Scene;
   healthBar: HealthBar;
   behavior: EnemyBehavior;
@@ -67,7 +71,15 @@ export function createEnemy(
   healthBar: HealthBar,
   behavior: EnemyBehavior,
 ): Enemy {
-  return { position, hp: ENEMY_MAX_HP, hasNoticedPlayer: false, paint, healthBar, behavior };
+  return {
+    position,
+    hp: ENEMY_MAX_HP,
+    hasNoticedPlayer: false,
+    hasSeenPlayer: false,
+    paint,
+    healthBar,
+    behavior,
+  };
 }
 
 // Returns the damage dealt.

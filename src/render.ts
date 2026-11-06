@@ -135,8 +135,8 @@ const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
   item: [245, 205, 70],
   target: [90, 170, 255],
 };
-// Placeholder color for the word shown when an attack is evaded.
-const EVADE_TEXT_COLOR: Color = [245, 205, 70];
+// Placeholder color for the word and mark shown about an attack, such as EVADE.
+const ATTACK_TEXT_COLOR: Color = [245, 205, 70];
 const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   enemy: [255, 255, 255],
   player: [255, 80, 70],
@@ -721,6 +721,10 @@ const LETTER_PATHS: Record<string, number[][][]> = {
     [[0, 8], [8, 8]],
   ],
   V: [[[0, 0], [5, 16], [10, 0]]],
+  '!': [
+    [[5, 0], [5, 11]],
+    [[5, 15.5], [5, 16]],
+  ],
 };
 
 function appendGlyph(shape: Shape, character: string, left: number, top: number) {
@@ -769,7 +773,12 @@ export function createDamageNumber(
 
 // The word shown over a character that evaded an attack.
 export function createEvadeText(TVG: ThorVGNamespace): Shape {
-  return createFloatingText(TVG, 'EVADE', EVADE_TEXT_COLOR);
+  return createFloatingText(TVG, 'EVADE', ATTACK_TEXT_COLOR);
+}
+
+// The mark shown over an enemy that was surprised, like the one in Shattered Pixel Dungeon.
+export function createSurpriseMark(TVG: ThorVGNamespace): Shape {
+  return createFloatingText(TVG, '!', ATTACK_TEXT_COLOR);
 }
 
 interface HealthBarStyle {

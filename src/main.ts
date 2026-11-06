@@ -35,6 +35,7 @@ import {
   createCharacter,
   createDamageNumber,
   createEvadeText,
+  createSurpriseMark,
   createDummyEnemy,
   createEnemyHealthBar,
   createItemPaint,
@@ -573,6 +574,7 @@ function runEnemyTurn(onDone: () => void) {
       return;
     }
 
+    enemy.hasSeenPlayer = isInView(enemy.position);
     const action = enemy.behavior(enemy, {
       room,
       player: playerPosition,
@@ -598,7 +600,9 @@ function runEnemyTurn(onDone: () => void) {
 
 function playPlayerAttack(enemy: Enemy) {
   const attackerTile = playerPosition;
-  const isHit = rollHit(PLAYER_ACCURACY, ENEMY_EVASION);
+  // A surprised enemy cannot evade.
+  const isSurprise = !enemy.hasSeenPlayer;
+  const isHit = isSurprise || rollHit(PLAYER_ACCURACY, ENEMY_EVASION);
 
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE),
@@ -614,6 +618,9 @@ function playPlayerAttack(enemy: Enemy) {
     render: () => canvas.update().render(),
     onHit: () => {
       if (isHit) {
+        if (isSurprise) {
+          damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
+        }
         showDamage(attackEnemy(enemy), enemy.position, 'enemy');
       } else {
         enemy.hasNoticedPlayer = true;
