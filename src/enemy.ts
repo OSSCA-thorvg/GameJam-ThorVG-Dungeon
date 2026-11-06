@@ -1,7 +1,7 @@
 import type { Scene } from '@thorvg/webcanvas';
-import { findPath } from './path';
+import { distancesFrom, findPath } from './path';
 import type { HealthBar } from './render';
-import { isAdjacent, type Point, type Room } from './room';
+import { isAdjacent, isWalkable, type Point, type Room } from './room';
 
 // Placeholder values for testing combat.
 const ENEMY_MAX_HP = 10;
@@ -22,14 +22,25 @@ export function rollHit(accuracy: number, evasion: number): boolean {
   return Math.random() * accuracy >= Math.random() * evasion;
 }
 
-// Placeholder value. An enemy starts chasing once the player is this many steps away.
-const ENEMY_NOTICE_DISTANCE = 8;
+// The player has no stealth yet. It starts at 0 in Shattered Pixel Dungeon as well.
+const PLAYER_STEALTH = 0;
+// Placeholder value. Shattered Pixel Dungeon divides the distance by 2, so a wandering enemy
+// notices for sure only within 2 tiles. Dividing by 4 makes that 4 tiles, and 50% at 8 tiles.
+const DETECTION_DISTANCE_DIVISOR = 4;
+// Placeholder values. How likely an enemy that lost the player is to look ahead along the way the
+// player was going, instead of going back to wandering, and how many steps ahead it looks.
+const SEARCH_CHANCE = 0.5;
+const SEARCH_STEPS = 6;
+// Placeholder value. How many random tiles a wandering enemy tries before it waits a turn.
+const WANDER_TRIES = 10;
 
 export type EnemyAction = { type: 'wait' } | { type: 'move'; to: Point } | { type: 'attack' };
 
 export interface EnemyContext {
   room: Room;
   player: Point;
+  // Whether the enemy can see the player now.
+  canSeePlayer: boolean;
   // Tiles held by the other enemies.
   occupied: Point[];
 }
@@ -40,7 +51,16 @@ export type EnemyBehavior = (enemy: Enemy, context: EnemyContext) => EnemyAction
 export interface Enemy {
   position: Point;
   hp: number;
-  hasNoticedPlayer: boolean;
+  // A wandering enemy walks to random places. A hunting one goes after the player, or after where
+  // it last saw the player, as the Wandering and Hunting states of Shattered Pixel Dungeon.
+  state: 'wandering' | 'hunting';
+  // Where the enemy is going.
+  target: Point | null;
+  // Where the enemy last saw the player, and the way the player was moving then.
+  lastSeen: Point | null;
+  heading: Point | null;
+  // Whether the enemy already looked ahead for the player since it lost sight of them.
+  hasSearched: boolean;
   // Whether the enemy saw the player at the start of its last turn. As in Shattered Pixel Dungeon,
   // an enemy that did not is surprised by the player's attack, such as one that just came through
   // a door.
@@ -50,19 +70,106 @@ export interface Enemy {
   behavior: EnemyBehavior;
 }
 
-export const chasePlayer: EnemyBehavior = (enemy, { room, player, occupied }) => {
-  if (isAdjacent(enemy.position, player)) {
-    enemy.hasNoticedPlayer = true;
-    return { type: 'attack' };
+const isSameTile = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
+
+// Wandering.detectionChance of Shattered Pixel Dungeon, 1 in (distance / 2 + stealth), with a
+// larger divisor. A diagonal step counts as one.
+function detectionChance(enemy: Point, player: Point): number {
+  const distance = Math.max(Math.abs(enemy.x - player.x), Math.abs(enemy.y - player.y));
+  return 1 / (distance / DETECTION_DISTANCE_DIVISOR + PLAYER_STEALTH);
+}
+
+function stepToward(room: Room, from: Point, to: Point, blocked: Point[]): EnemyAction {
+  const path = findPath(room, from, to, blocked);
+  return path.length > 0 ? { type: 'move', to: path[0] } : { type: 'wait' };
+}
+
+function randomDestination(room: Room, from: Point, blocked: Point[]): Point | null {
+  const tiles = room.tiles.flatMap((row, y) =>
+    row.flatMap((_, x) => (isWalkable(room, x, y) ? [{ x, y }] : [])),
+  );
+  for (let attempt = 0; attempt < WANDER_TRIES; attempt++) {
+    const tile = tiles[Math.floor(Math.random() * tiles.length)];
+    if (!isSameTile(tile, from) && findPath(room, from, tile, blocked).length > 0) {
+      return tile;
+    }
+  }
+  return null;
+}
+
+// Guesses where a player who went out of sight went: the tile farthest along the way they were
+// moving, within a few steps of where they were last seen.
+function guessPlayerTile(room: Room, lastSeen: Point, heading: Point): Point | null {
+  const distances = distancesFrom(room, lastSeen);
+  let best: Point | null = null;
+  let bestProgress = 0;
+  distances.forEach((row, y) =>
+    row.forEach((distance, x) => {
+      const progress = (x - lastSeen.x) * heading.x + (y - lastSeen.y) * heading.y;
+      if (distance > 0 && distance <= SEARCH_STEPS && progress > bestProgress) {
+        best = { x, y };
+        bestProgress = progress;
+      }
+    }),
+  );
+  return best;
+}
+
+export function alertEnemy(enemy: Enemy, player: Point): void {
+  if (enemy.lastSeen && !isSameTile(enemy.lastSeen, player)) {
+    enemy.heading = { x: player.x - enemy.lastSeen.x, y: player.y - enemy.lastSeen.y };
+  }
+  enemy.state = 'hunting';
+  enemy.target = player;
+  enemy.lastSeen = player;
+  enemy.hasSearched = false;
+}
+
+// Wanders until it notices the player in view, then chases. When it loses sight of the player,
+// it goes to where it last saw them, which takes it through a door the player was seen using.
+// From there it either looks ahead along the player's way or goes back to wandering.
+export const chaser: EnemyBehavior = (enemy, { room, player, canSeePlayer, occupied }) => {
+  const blocked = [...occupied, player];
+
+  const noticesPlayer =
+    canSeePlayer &&
+    (enemy.state === 'hunting' || Math.random() < detectionChance(enemy.position, player));
+  if (noticesPlayer) {
+    alertEnemy(enemy, player);
+    return isAdjacent(enemy.position, player)
+      ? { type: 'attack' }
+      : stepToward(room, enemy.position, player, occupied);
   }
 
-  const path = findPath(room, enemy.position, player, occupied);
-  if (path.length > 0 && path.length <= ENEMY_NOTICE_DISTANCE) {
-    enemy.hasNoticedPlayer = true;
+  if (enemy.state === 'hunting') {
+    if (enemy.target && !isSameTile(enemy.position, enemy.target)) {
+      const action = stepToward(room, enemy.position, enemy.target, blocked);
+      if (action.type === 'move') {
+        return action;
+      }
+    }
+    const guess =
+      !enemy.hasSearched && enemy.lastSeen && enemy.heading && Math.random() < SEARCH_CHANCE
+        ? guessPlayerTile(room, enemy.lastSeen, enemy.heading)
+        : null;
+    if (guess) {
+      enemy.hasSearched = true;
+      enemy.target = guess;
+      return stepToward(room, enemy.position, guess, blocked);
+    }
+    enemy.state = 'wandering';
+    enemy.target = null;
   }
-  return enemy.hasNoticedPlayer && path.length > 0
-    ? { type: 'move', to: path[0] }
-    : { type: 'wait' };
+
+  if (!enemy.target || isSameTile(enemy.position, enemy.target)) {
+    enemy.target = randomDestination(room, enemy.position, blocked);
+  }
+  const action = enemy.target ? stepToward(room, enemy.position, enemy.target, blocked) : null;
+  if (!action || action.type === 'wait') {
+    enemy.target = null;
+    return { type: 'wait' };
+  }
+  return action;
 };
 
 export function createEnemy(
@@ -74,7 +181,11 @@ export function createEnemy(
   return {
     position,
     hp: ENEMY_MAX_HP,
-    hasNoticedPlayer: false,
+    state: 'wandering',
+    target: null,
+    lastSeen: null,
+    heading: null,
+    hasSearched: false,
     hasSeenPlayer: false,
     paint,
     healthBar,
@@ -82,9 +193,9 @@ export function createEnemy(
   };
 }
 
-// Returns the damage dealt.
-export function attackEnemy(enemy: Enemy): number {
-  enemy.hasNoticedPlayer = true;
+// Returns the damage dealt. Being attacked makes the enemy hunt the player.
+export function attackEnemy(enemy: Enemy, player: Point): number {
+  alertEnemy(enemy, player);
   enemy.hp = Math.max(0, enemy.hp - PLAYER_ATTACK_DAMAGE);
   enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
   return PLAYER_ATTACK_DAMAGE;

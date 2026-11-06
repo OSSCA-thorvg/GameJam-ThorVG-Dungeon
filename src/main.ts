@@ -7,8 +7,9 @@ import { createDamageNumbers } from './damageNumbers';
 import { playBounce, playShatter, playThrow } from './throwEffect';
 import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
+  alertEnemy,
   attackEnemy,
-  chasePlayer,
+  chaser,
   createEnemy,
   ENEMY_ACCURACY,
   ENEMY_ATTACK_DAMAGE,
@@ -35,6 +36,7 @@ import {
   createCharacter,
   createDamageNumber,
   createEvadeText,
+  createNoticeMark,
   createSurpriseMark,
   createDummyEnemy,
   createEnemyHealthBar,
@@ -134,7 +136,7 @@ function createLevel() {
         position,
         createDummyEnemy(TVG),
         createEnemyHealthBar(TVG, renderCanvas),
-        chasePlayer,
+        chaser,
       ),
     ),
   };
@@ -574,22 +576,34 @@ function runEnemyTurn(onDone: () => void) {
       return;
     }
 
+    const wasHunting = enemy.state === 'hunting';
     enemy.hasSeenPlayer = isInView(enemy.position);
     const action = enemy.behavior(enemy, {
       room,
       player: playerPosition,
+      canSeePlayer: enemy.hasSeenPlayer,
       occupied: occupiedTiles(enemy),
     });
+
+    // Shown where the enemy ends its turn, so the mark does not stay behind when it moves.
+    const showNoticeMark = () => {
+      if (!wasHunting && enemy.state === 'hunting') {
+        damageNumbers.show(roomView, createNoticeMark(TVG), enemy.position);
+      }
+    };
 
     switch (action.type) {
       case 'move':
         placeEnemy(enemy, action.to);
+        showNoticeMark();
         actNext();
         break;
       case 'attack':
+        showNoticeMark();
         playEnemyAttack(enemy, actNext);
         break;
       case 'wait':
+        showNoticeMark();
         actNext();
         break;
     }
@@ -621,9 +635,9 @@ function playPlayerAttack(enemy: Enemy) {
         if (isSurprise) {
           damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
         }
-        showDamage(attackEnemy(enemy), enemy.position, 'enemy');
+        showDamage(attackEnemy(enemy, playerPosition), enemy.position, 'enemy');
       } else {
-        enemy.hasNoticedPlayer = true;
+        alertEnemy(enemy, playerPosition);
         damageNumbers.show(roomView, createEvadeText(TVG), enemy.position);
       }
     },

@@ -137,6 +137,14 @@ const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
 };
 // Placeholder color for the word and mark shown about an attack, such as EVADE.
 const ATTACK_TEXT_COLOR: Color = [245, 205, 70];
+// Placeholder color for the mark of an enemy that noticed the player. Same red as the cursor
+// outline on an enemy, so it does not look like the yellow mark of a surprise attack.
+const NOTICE_MARK_COLOR: Color = [235, 60, 50];
+// Placeholder values for the speech bubble behind that mark, so it stands out on a dark map.
+const NOTICE_BUBBLE_COLOR: Color = [245, 245, 245];
+const NOTICE_BUBBLE_PADDING = 3;
+const NOTICE_BUBBLE_RADIUS = 3;
+const NOTICE_BUBBLE_TAIL = 4;
 const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   enemy: [255, 255, 255],
   player: [255, 80, 70],
@@ -779,6 +787,31 @@ export function createEvadeText(TVG: ThorVGNamespace): Shape {
 // The mark shown over an enemy that was surprised, like the one in Shattered Pixel Dungeon.
 export function createSurpriseMark(TVG: ThorVGNamespace): Shape {
   return createFloatingText(TVG, '!', ATTACK_TEXT_COLOR);
+}
+
+// The mark shown over an enemy that just noticed the player, in a speech bubble.
+export function createNoticeMark(TVG: ThorVGNamespace): Scene {
+  const width = DIGIT_WIDTH + NOTICE_BUBBLE_PADDING * 2;
+  const height = DIGIT_HEIGHT + NOTICE_BUBBLE_PADDING * 2;
+  const top = -CHARACTER_SIZE - DIGIT_HEIGHT - NOTICE_BUBBLE_PADDING;
+  const bottom = top + height;
+
+  const bubble = new TVG.Shape();
+  bubble.appendRect(-width / 2, top, width, height, {
+    rx: NOTICE_BUBBLE_RADIUS,
+    ry: NOTICE_BUBBLE_RADIUS,
+  });
+  bubble
+    .moveTo(-NOTICE_BUBBLE_TAIL / 2, bottom)
+    .lineTo(NOTICE_BUBBLE_TAIL / 2, bottom)
+    .lineTo(0, bottom + NOTICE_BUBBLE_TAIL)
+    .close();
+  bubble.fill(...NOTICE_BUBBLE_COLOR);
+
+  const scene = new TVG.Scene();
+  scene.add(bubble);
+  scene.add(createFloatingText(TVG, '!', NOTICE_MARK_COLOR));
+  return scene;
 }
 
 interface HealthBarStyle {
