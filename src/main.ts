@@ -20,7 +20,7 @@ import {
   ITEMS,
   removeItem,
   type ItemContext,
-  type ItemKind,
+  type ItemName,
   type ItemStack,
 } from './items';
 import { generateMap } from './mapgen';
@@ -156,7 +156,7 @@ let mousePosition: Point | null = null;
 let cameraDrag: { pointerId: number; start: Point; last: Point; isDragging: boolean } | null = null;
 const activePointers = new Map<number, Point>();
 let inventory: ItemStack[] = [];
-let groundItems: { kind: ItemKind; position: Point; paint: Paint }[] = [];
+let groundItems: { name: ItemName; position: Point; paint: Paint }[] = [];
 
 function createItemContext(): ItemContext {
   return {
@@ -240,10 +240,10 @@ function updateCursorTile() {
   return roomView.setCursorTile(tile, tile && itemsAt(tile).length > 0 ? 'item' : 'floor');
 }
 
-function dropItem(kind: ItemKind, position: Point) {
-  const paint = createItemPaint(TVG, ITEMS[kind].icon);
+function dropItem(name: ItemName, position: Point) {
+  const paint = createItemPaint(TVG, ITEMS[name].icon);
   roomView.place(paint, position.x, position.y);
-  groundItems.push({ kind, position, paint });
+  groundItems.push({ name, position, paint });
   enterDoor(position);
 }
 
@@ -251,7 +251,7 @@ function dropItem(kind: ItemKind, position: Point) {
 function pickUpItems(tile: Point): boolean {
   let hasPickedUp = false;
   for (const item of itemsAt(tile)) {
-    if (addItem(inventory, item.kind)) {
+    if (addItem(inventory, item.name)) {
       roomView.remove(item.paint);
       groundItems.splice(groundItems.indexOf(item), 1);
       hasPickedUp = true;
@@ -931,34 +931,34 @@ function stopWalking() {
 }
 
 // Takes an item out of the bag before an action with it, and ends the panel and any walk.
-function takeFromBag(kind: ItemKind): boolean {
+function takeFromBag(name: ItemName): boolean {
   finishRunningEffects();
   if (isGameOver) {
     return false;
   }
   stopWalking();
-  removeItem(inventory, kind);
+  removeItem(inventory, name);
   inventoryPanel.refresh();
   inventoryPanel.close();
   return true;
 }
 
-function dropFromBag(kind: ItemKind) {
-  if (takeFromBag(kind)) {
-    dropItem(kind, playerPosition);
+function dropFromBag(name: ItemName) {
+  if (takeFromBag(name)) {
+    dropItem(name, playerPosition);
     updateVision();
     runEnemyTurn(() => {});
   }
 }
 
-function throwItem(kind: ItemKind) {
-  const item = ITEMS[kind];
+function throwItem(name: ItemName) {
+  const item = ITEMS[name];
   inventoryPanel.close();
   requestTarget({
-    prompt: `Throw the ${item.name.toLowerCase()} where?`,
+    prompt: `Throw the ${item.displayName.toLowerCase()} where?`,
     rule: THROWN,
     onSelect({ end }) {
-      if (!takeFromBag(kind)) {
+      if (!takeFromBag(name)) {
         return;
       }
       finishAttackEffect = playThrow({
@@ -972,7 +972,7 @@ function throwItem(kind: ItemKind) {
           if (item.shatterColor) {
             playShatter(TVG, roomView, end, item.shatterColor, renderCanvas);
           } else {
-            dropItem(kind, end);
+            dropItem(name, end);
           }
           updateVision();
           runEnemyTurn(() => {});
@@ -982,15 +982,15 @@ function throwItem(kind: ItemKind) {
   });
 }
 
-function useItem(kind: ItemKind) {
+function useItem(name: ItemName) {
   finishRunningEffects();
   if (isGameOver) {
     return;
   }
 
   stopWalking();
-  ITEMS[kind].use(createItemContext());
-  removeItem(inventory, kind);
+  ITEMS[name].use(createItemContext());
+  removeItem(inventory, name);
   inventoryPanel.refresh();
   inventoryPanel.close();
   runEnemyTurn(() => {});

@@ -1,12 +1,12 @@
-import { INVENTORY_SLOTS, ITEMS, type ItemContext, type ItemKind, type ItemStack } from './items';
+import { INVENTORY_SLOTS, ITEMS, type ItemContext, type ItemName, type ItemStack } from './items';
 
 export interface InventoryPanelOptions {
   getStacks(): ItemStack[];
   getItemContext(): ItemContext;
   onOpen(): void;
-  onUse(kind: ItemKind): void;
-  onThrow(kind: ItemKind): void;
-  onDrop(kind: ItemKind): void;
+  onUse(name: ItemName): void;
+  onThrow(name: ItemName): void;
+  onDrop(name: ItemName): void;
 }
 
 export interface InventoryPanel {
@@ -27,7 +27,7 @@ export function createInventoryPanel({
   const overlay = document.querySelector<HTMLElement>('#inventory')!;
   const slots = document.querySelector<HTMLElement>('#inventory-slots')!;
   const details = document.querySelector<HTMLElement>('#inventory-details')!;
-  let selected: ItemKind | null = null;
+  let selected: ItemName | null = null;
 
   const renderDetails = () => {
     details.replaceChildren();
@@ -36,11 +36,11 @@ export function createInventoryPanel({
     }
 
     const item = ITEMS[selected];
-    const kind = selected;
+    const name = selected;
     const reason = item.blockedReason(getItemContext());
 
-    const name = document.createElement('strong');
-    name.textContent = item.name;
+    const title = document.createElement('strong');
+    title.textContent = item.displayName;
     const description = document.createElement('p');
     description.textContent = reason ?? item.description;
 
@@ -50,13 +50,13 @@ export function createInventoryPanel({
       element.addEventListener('click', onClick);
       return element;
     };
-    const use = actionButton(item.useLabel, () => onUse(kind));
+    const use = actionButton(item.useLabel, () => onUse(name));
     use.disabled = reason !== null;
 
     const actions = document.createElement('div');
     actions.className = 'inventory-actions';
-    actions.append(use, actionButton('Throw', () => onThrow(kind)), actionButton('Drop', () => onDrop(kind)));
-    details.append(name, description, actions);
+    actions.append(use, actionButton('Throw', () => onThrow(name)), actionButton('Drop', () => onDrop(name)));
+    details.append(title, description, actions);
   };
 
   const renderSlots = () => {
@@ -70,16 +70,16 @@ export function createInventoryPanel({
       slot.disabled = !stack;
 
       if (stack) {
-        slot.innerHTML = ITEMS[stack.kind].icon;
-        slot.setAttribute('aria-label', `${ITEMS[stack.kind].name}, ${stack.count}`);
-        slot.classList.toggle('selected', stack.kind === selected);
+        slot.innerHTML = ITEMS[stack.name].icon;
+        slot.setAttribute('aria-label', `${ITEMS[stack.name].displayName}, ${stack.count}`);
+        slot.classList.toggle('selected', stack.name === selected);
         if (stack.count > 1) {
           const count = document.createElement('span');
           count.textContent = String(stack.count);
           slot.append(count);
         }
         slot.addEventListener('click', () => {
-          selected = stack.kind;
+          selected = stack.name;
           renderSlots();
           renderDetails();
         });
@@ -90,8 +90,8 @@ export function createInventoryPanel({
 
   const refresh = () => {
     const stacks = getStacks();
-    if (selected && !stacks.some((stack) => stack.kind === selected)) {
-      selected = stacks[0]?.kind ?? null;
+    if (selected && !stacks.some((stack) => stack.name === selected)) {
+      selected = stacks[0]?.name ?? null;
     }
     renderSlots();
     renderDetails();
@@ -103,7 +103,7 @@ export function createInventoryPanel({
 
   button.addEventListener('click', () => {
     onOpen();
-    selected = getStacks()[0]?.kind ?? null;
+    selected = getStacks()[0]?.name ?? null;
     refresh();
     overlay.hidden = false;
   });

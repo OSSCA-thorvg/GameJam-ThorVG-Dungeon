@@ -1,7 +1,7 @@
-export type ItemKind = 'healing-potion';
+export type ItemName = 'healing-potion';
 
 export interface ItemStack {
-  kind: ItemKind;
+  name: ItemName;
   count: number;
 }
 
@@ -13,7 +13,8 @@ export interface ItemContext {
 }
 
 export interface ItemDefinition {
-  name: string;
+  // The name shown to the player. The item's name in the code is its ItemName.
+  displayName: string;
   description: string;
   // The label of the button that uses the item.
   useLabel: string;
@@ -32,9 +33,9 @@ export const INVENTORY_SLOTS = 20;
 // Placeholder value.
 const HEALING_POTION_HP = 10;
 
-export const ITEMS: Record<ItemKind, ItemDefinition> = {
+export const ITEMS: Record<ItemName, ItemDefinition> = {
   'healing-potion': {
-    name: 'Healing potion',
+    displayName: 'Healing potion',
     useLabel: 'Drink',
     shatterColor: [210, 60, 55],
     description: `Restores ${HEALING_POTION_HP} HP.`,
@@ -48,8 +49,8 @@ export const ITEMS: Record<ItemKind, ItemDefinition> = {
 };
 
 // Returns false when there is no free slot for the item.
-export function addItem(stacks: ItemStack[], kind: ItemKind): boolean {
-  const stack = stacks.find((candidate) => candidate.kind === kind);
+export function addItem(stacks: ItemStack[], name: ItemName): boolean {
+  const stack = stacks.find((candidate) => candidate.name === name);
   if (stack) {
     stack.count++;
     return true;
@@ -57,12 +58,12 @@ export function addItem(stacks: ItemStack[], kind: ItemKind): boolean {
   if (stacks.length >= INVENTORY_SLOTS) {
     return false;
   }
-  stacks.push({ kind, count: 1 });
+  stacks.push({ name, count: 1 });
   return true;
 }
 
-export function removeItem(stacks: ItemStack[], kind: ItemKind): void {
-  const index = stacks.findIndex((candidate) => candidate.kind === kind);
+export function removeItem(stacks: ItemStack[], name: ItemName): void {
+  const index = stacks.findIndex((candidate) => candidate.name === name);
   if (index === -1) {
     return;
   }
