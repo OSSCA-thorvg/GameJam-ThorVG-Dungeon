@@ -59,6 +59,8 @@ const TILE_HEIGHT = 32;
 const WALL_HEIGHT = 0.6 * Math.sqrt((TILE_WIDTH ** 2 - TILE_HEIGHT ** 2) / 2);
 
 const CHARACTER_SIZE = TILE_WIDTH * 0.75;
+// Half of a character's height, above the floor.
+export const CHARACTER_WAIST_HEIGHT = CHARACTER_SIZE / 2;
 const ITEM_SIZE = TILE_WIDTH * 0.5;
 
 // Placeholder values. A hole is fully open up to this fraction of its radius, then fades out.

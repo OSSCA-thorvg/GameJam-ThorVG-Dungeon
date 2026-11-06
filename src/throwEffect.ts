@@ -1,5 +1,5 @@
 import type { Paint, ThorVGNamespace } from '@thorvg/webcanvas';
-import { tileDistance, type RoomView } from './render';
+import { CHARACTER_WAIST_HEIGHT, tileDistance, type RoomView } from './render';
 import type { Point } from './room';
 
 // Same as MissileSprite in Shattered Pixel Dungeon: 240 pixels per second on 16 pixel tiles,
@@ -8,6 +8,8 @@ const TILES_PER_SECOND = 240 / 16;
 const SPIN_DEGREES_PER_SECOND = 720;
 // Placeholder values for how a shattered flask splashes.
 const SPLASH_MS = 300;
+// Placeholder value for how long an item that could not be picked up takes to rise and fall back.
+const BOUNCE_MS = 400;
 const SPLASH_RADIUS = 18;
 
 export interface Throw {
@@ -59,6 +61,23 @@ export function playThrow({ view, paint, from, to, render, onLand }: Throw): () 
 
   frame = requestAnimationFrame(step);
   return land;
+}
+
+// Lifts an item to a character's waist and drops it back, as when the bag has no room for it.
+export function playBounce(view: RoomView, paint: Paint, tile: Point, render: () => void): void {
+  let startTime: number | null = null;
+  const step = (time: number) => {
+    startTime ??= time;
+    const progress = Math.min(1, (time - startTime) / BOUNCE_MS);
+    // A parabola, so the item slows down at the top and speeds up as it falls.
+    const height = CHARACTER_WAIST_HEIGHT * 4 * progress * (1 - progress);
+    view.nudge(paint, tile, { x: 0, y: -height });
+    render();
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    }
+  };
+  requestAnimationFrame(step);
 }
 
 // A ring that spreads from a tile and fades out, where a flask broke.

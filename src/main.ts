@@ -4,7 +4,7 @@ import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import playerIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
 import { createDamageNumbers } from './damageNumbers';
-import { playShatter, playThrow } from './throwEffect';
+import { playBounce, playShatter, playThrow } from './throwEffect';
 import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   attackEnemy,
@@ -255,6 +255,8 @@ function pickUpItems(tile: Point): boolean {
       roomView.remove(item.paint);
       groundItems.splice(groundItems.indexOf(item), 1);
       hasPickedUp = true;
+    } else {
+      playBounce(roomView, item.paint, tile, renderCanvas);
     }
   }
   inventoryPanel.refresh();
