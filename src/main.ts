@@ -218,6 +218,7 @@ function dropItem(kind: ItemKind, position: Point) {
   const paint = createItemPaint(TVG, ITEMS[kind].icon);
   roomView.place(paint, position.x, position.y);
   groundItems.push({ kind, position, paint });
+  enterDoor(position);
 }
 
 function pickUpItems(tile: Point) {
@@ -279,8 +280,8 @@ function showPlayerHp(options?: { jump: boolean }) {
 }
 
 // Computes what the player sees, and shows it on the map.
-function lookAround(occupied: Point[]) {
-  const vision = computeVision(room, playerPosition, playerViewDistance, occupied);
+function lookAround(openDoors: Point[]) {
+  const vision = computeVision(room, playerPosition, playerViewDistance, openDoors);
 
   inView = room.tiles.map((row) => row.map(() => false));
   for (const { x, y } of vision.tiles) {
@@ -288,6 +289,7 @@ function lookAround(occupied: Point[]) {
     explored[y][x] = true;
   }
 
+  roomView.setOpenDoors(openDoors);
   roomView.setLight({
     center: playerPosition,
     radius: vision.radius,
@@ -299,12 +301,13 @@ function lookAround(occupied: Point[]) {
 // Looks from the player's tile again. Call this when the player, an enemy, or the view distance
 // changes, because an enemy standing on a door also opens the view through it.
 function updateVision() {
-  const occupied = occupiedTiles();
-  const heldDoors = occupied.filter(({ x, y }) => room.tiles[y][x] === 'door');
-  const state = JSON.stringify([playerPosition, playerViewDistance, heldDoors]);
+  const doors = [...openDoors]
+    .sort((a, b) => a - b)
+    .map((key) => ({ x: key % room.width, y: Math.floor(key / room.width) }));
+  const state = JSON.stringify([playerPosition, playerViewDistance, doors]);
   if (state !== visionState) {
     visionState = state;
-    lookAround(occupied);
+    lookAround(doors);
   }
 
   for (const enemy of enemies) {
@@ -326,8 +329,33 @@ function updateVision() {
   updateCursorTile();
 }
 
+// A door opens when something enters it, and closes only when a character walks out of it and
+// nothing is left on it. So a door stays open when a monster dies on it.
+let openDoors = new Set<number>();
+
+const isSameTile = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
+
+function enterDoor(tile: Point) {
+  if (room.tiles[tile.y][tile.x] === 'door') {
+    openDoors.add(tile.y * room.width + tile.x);
+  }
+}
+
+function leaveDoor(tile: Point) {
+  const isHeld =
+    isSameTile(playerPosition, tile) ||
+    enemies.some(({ position }) => isSameTile(position, tile)) ||
+    itemsAt(tile).length > 0;
+  if (!isHeld) {
+    openDoors.delete(tile.y * room.width + tile.x);
+  }
+}
+
 function placePlayer(tile: Point) {
+  const previous = playerPosition;
   playerPosition = tile;
+  leaveDoor(previous);
+  enterDoor(tile);
   roomView.place(player, tile.x, tile.y);
   updateVision();
   roomView.cutAwayWalls(tile);
@@ -347,7 +375,10 @@ function showEnemy(enemy: Enemy) {
 }
 
 function placeEnemy(enemy: Enemy, tile: Point) {
+  const previous = enemy.position;
   enemy.position = tile;
+  leaveDoor(previous);
+  enterDoor(tile);
   updateVision();
   showEnemy(enemy);
 }
@@ -365,6 +396,11 @@ function startLevel() {
   roomView.scene.scale(zoom);
   mapScene.add(roomView.scene);
 
+  openDoors = new Set();
+  for (const enemy of enemies) {
+    enterDoor(enemy.position);
+  }
+  playerPosition = room.start;
   placePlayer(room.start);
   showPlayerHp({ jump: true });
 
@@ -562,7 +598,10 @@ function walk() {
   // Seeing a new enemy on this step empties the path, which must not count as arriving.
   const isDestination = path.length === 0;
   placePlayer(next);
-  pickUpItems(next);
+  // As in Shattered Pixel Dungeon, items are only picked up on the tile the player chose.
+  if (isDestination && !attackTarget) {
+    pickUpItems(next);
+  }
 
   // The stairs only work as a destination, so paths can cross them.
   if (isDestination && next.x === room.stairs.x && next.y === room.stairs.y) {

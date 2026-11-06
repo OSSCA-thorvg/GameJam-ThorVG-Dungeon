@@ -22,6 +22,8 @@ export interface Light {
 
 export interface RoomView {
   scene: Scene;
+  // Draws the doors on these tiles as open, and all other doors as closed.
+  setOpenDoors(tiles: Point[]): void;
   // Hides everything that was never lit, and darkens everything outside the light.
   setLight(light: Light): void;
   // Moves a paint onto a tile and into that tile's draw layer.
@@ -63,6 +65,8 @@ const ITEM_SIZE = TILE_WIDTH * 0.5;
 const CUTAWAY_RADIUS = TILE_WIDTH * 1.75;
 const CURSOR_CUTAWAY_RADIUS = TILE_WIDTH * 0.9;
 const CUTAWAY_OPEN_FRACTION = 0.7;
+// Placeholder value. A closed door inside a hole stays visible at this opacity, while walls are cut.
+const DOOR_IN_HOLE_OPACITY = 110;
 
 const CURSOR_OUTLINE_WIDTH = 2;
 
@@ -111,6 +115,10 @@ const DARKNESS: Color = [20, 21, 26];
 const FLOOR_LIGHT: Color = [96, 100, 110];
 const FLOOR_DARK: Color = [86, 90, 100];
 const DOOR: Color = [150, 104, 60];
+// Placeholder colors for a closed door, shaded like a wall.
+const CLOSED_DOOR_TOP: Color = [168, 118, 70];
+const CLOSED_DOOR_LEFT: Color = [120, 82, 46];
+const CLOSED_DOOR_RIGHT: Color = [96, 64, 36];
 const STAIRS_STEPS: Color[] = [
   [62, 65, 74],
   [44, 46, 54],
@@ -224,6 +232,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   const walls: Wall[] = [];
   // Every wall's outline on the screen, whether it was seen or not.
   const wallArea = new TVG.Shape();
+  const doors: (Wall & { area: Shape })[] = [];
+  let openDoors = new Set<number>();
+  const tileKey = ({ x, y }: Point) => y * room.width + x;
   const cutLayers = new Map<number, { scene: Scene; playerHole: Shape; cursorHole: Shape }>();
   let cutWalls = new Set<Wall>();
   let coveredPlayerTile: Point | null = null;
@@ -276,9 +287,19 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
         case 'floor':
           addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
           break;
-        case 'door':
+        case 'door': {
           addPolygon([top, right, bottom, left], DOOR);
+          const faces = [
+            addPolygon([left, bottom, lift(bottom), lift(left)], CLOSED_DOOR_LEFT),
+            addPolygon([right, bottom, lift(bottom), lift(right)], CLOSED_DOOR_RIGHT),
+            addPolygon([lift(top), lift(right), lift(bottom), lift(left)], CLOSED_DOOR_TOP),
+          ];
+          const area = new TVG.Shape();
+          appendLightOutline(area, [lift(top), lift(right), right, bottom, left, lift(left)]);
+          area.fill(255, 255, 255);
+          doors.push({ tile: { x, y }, center, faces, area });
           break;
+        }
         case 'wall':
           appendLightOutline(wallArea, [lift(top), lift(right), right, bottom, left, lift(left)]);
           walls.push({
@@ -315,7 +336,12 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   wallArea.fill(255, 255, 255);
   const wallLightOnWalls = new TVG.Scene();
   wallLightOnWalls.add(wallLight.blurred);
-  wallLightOnWalls.mask(wallArea, TVG.MaskMethod.Alpha);
+  const solidArea = new TVG.Scene();
+  solidArea.add(wallArea);
+  for (const { area } of doors) {
+    solidArea.add(area);
+  }
+  wallLightOnWalls.mask(solidArea, TVG.MaskMethod.Alpha);
 
   const lightMap = new TVG.Scene();
   lightMap.add(floorLight.blurred);
@@ -391,9 +417,12 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     return cut;
   };
 
-  const isWall = (x: number, y: number) => room.tiles[y]?.[x] === 'wall';
+  const isSolid = (x: number, y: number) => {
+    const tile = room.tiles[y]?.[x];
+    return tile === 'wall' || (tile === 'door' && !openDoors.has(tileKey({ x, y })));
+  };
   const isCovered = ({ x, y }: Point) =>
-    isWall(x + 1, y) || isWall(x, y + 1) || isWall(x + 1, y + 1);
+    isSolid(x + 1, y) || isSolid(x, y + 1) || isSolid(x + 1, y + 1);
 
   // Moves walls in and out of the masked scenes, then places the holes.
   const updateCuts = () => {
@@ -406,19 +435,24 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     const cursorPoint =
       coveredCursorTile && tileCenter(coveredCursorTile.x, coveredCursorTile.y);
 
-    const wanted = new Set(
-      walls.filter(
-        (wall) =>
-          (coveredPlayerTile &&
-            playerHolePoint &&
-            layerOf(wall.tile) > layerOf(coveredPlayerTile) &&
-            wallReaches(wall, playerHolePoint, CUTAWAY_RADIUS)) ||
-          (coveredCursorTile &&
-            cursorPoint &&
-            layerOf(wall.tile) > layerOf(coveredCursorTile) &&
-            wallReaches(wall, cursorPoint, CURSOR_CUTAWAY_RADIUS)),
-      ),
-    );
+    const isInHole = (wall: Wall) =>
+      (coveredPlayerTile &&
+        playerHolePoint &&
+        layerOf(wall.tile) > layerOf(coveredPlayerTile) &&
+        wallReaches(wall, playerHolePoint, CUTAWAY_RADIUS)) ||
+      (coveredCursorTile &&
+        cursorPoint &&
+        layerOf(wall.tile) > layerOf(coveredCursorTile) &&
+        wallReaches(wall, cursorPoint, CURSOR_CUTAWAY_RADIUS));
+
+    for (const door of doors) {
+      const opacity = isInHole(door) ? DOOR_IN_HOLE_OPACITY : 255;
+      for (const face of door.faces) {
+        face.opacity(opacity);
+      }
+    }
+
+    const wanted = new Set(walls.filter(isInHole));
 
     for (const wall of cutWalls) {
       if (!wanted.has(wall)) {
@@ -457,6 +491,17 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
 
   return {
     scene,
+    setOpenDoors(tiles) {
+      openDoors = new Set(tiles.map(tileKey));
+      for (const { tile, faces, area } of doors) {
+        const isClosed = !openDoors.has(tileKey(tile));
+        area.visible(isClosed);
+        for (const face of faces) {
+          face.visible(isClosed);
+        }
+      }
+      updateCuts();
+    },
     setLight(light) {
       const remember = (key: string, shape: Shape, outline: Point[]) => {
         if (!rememberedOutlines.has(key)) {
@@ -487,8 +532,10 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
           const bottom = { x: center.x, y: center.y + TILE_HEIGHT / 2 };
           const left = { x: center.x - TILE_WIDTH / 2, y: center.y };
           if (tile === 'door') {
+            remember(`floor ${x},${y}`, floorLight.remembered, [top, right, bottom, left]);
+          }
+          if (tile === 'door' && openDoors.has(tileKey({ x, y }))) {
             appendLightOutline(floorLight.lit, [top, right, bottom, left]);
-            remember(`${x},${y}`, floorLight.remembered, [top, right, bottom, left]);
           } else {
             const litTop = [top, right, bottom, left].map((point) =>
               lift({

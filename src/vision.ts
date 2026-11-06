@@ -31,12 +31,11 @@ interface Segment {
   to: Point;
 }
 
-// Walls and doors block the view. As in Shattered Pixel Dungeon, a door opens while someone
-// stands on it, so `occupied` lists the tiles held by others.
-function blocksView(room: Room, occupied: Point[], x: number, y: number): boolean {
+// Walls and closed doors block the view.
+function blocksView(room: Room, openDoors: Point[], x: number, y: number): boolean {
   const tile = room.tiles[y]?.[x] ?? 'void';
   return tile === 'door'
-    ? !occupied.some((other) => other.x === x && other.y === y)
+    ? !openDoors.some((other) => other.x === x && other.y === y)
     : tile === 'wall' || tile === 'void';
 }
 
@@ -146,10 +145,10 @@ export function computeVision(
   room: Room,
   origin: Point,
   distance: number,
-  occupied: Point[],
+  openDoors: Point[],
 ): Vision {
   const blocks = (x: number, y: number) =>
-    !(x === origin.x && y === origin.y) && blocksView(room, occupied, x, y);
+    !(x === origin.x && y === origin.y) && blocksView(room, openDoors, x, y);
   // r^2 + r rounds the circle, and keeps all 8 neighbors in range at a distance of 1.
   const isInRange = (x: number, y: number) =>
     (x - origin.x) ** 2 + (y - origin.y) ** 2 <= distance ** 2 + distance;
