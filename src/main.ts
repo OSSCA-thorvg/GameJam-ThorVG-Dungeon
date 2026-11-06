@@ -142,6 +142,8 @@ let playerViewDistance = DEFAULT_VIEW_DISTANCE;
 let visionState = '';
 let path: Point[] = [];
 let attackTarget: Enemy | null = null;
+// Whether the player clicked the stairs, as opposed to the walk merely ending on them.
+let isWalkingToStairs = false;
 let isWalking = false;
 let isGameOver = false;
 let finishAttackEffect: (() => void) | null = null;
@@ -245,14 +247,18 @@ function dropItem(kind: ItemKind, position: Point) {
   enterDoor(position);
 }
 
-function pickUpItems(tile: Point) {
+// Returns whether anything was picked up.
+function pickUpItems(tile: Point): boolean {
+  let hasPickedUp = false;
   for (const item of itemsAt(tile)) {
     if (addItem(inventory, item.kind)) {
       roomView.remove(item.paint);
       groundItems.splice(groundItems.indexOf(item), 1);
+      hasPickedUp = true;
     }
   }
   inventoryPanel.refresh();
+  return hasPickedUp;
 }
 
 // Keeps the camera focus at the center of the window.
@@ -415,6 +421,7 @@ function startLevel() {
   groundItems = [];
   path = [];
   attackTarget = null;
+  isWalkingToStairs = false;
   isWalking = false;
   isGameOver = false;
   finishAttackEffect = null;
@@ -440,6 +447,16 @@ function startLevel() {
   gameOverScreen.hidden = true;
   floorLabel.textContent = `Floor ${floor}`;
   canvas.update().render();
+}
+
+// Items left on the stairs block them, so the player has to clear them first.
+function canGoDownStairs() {
+  return isSameTile(playerPosition, room.stairs) && itemsAt(room.stairs).length === 0;
+}
+
+function goDownStairs() {
+  floor++;
+  replaceLevel();
 }
 
 function replaceLevel() {
@@ -639,17 +656,13 @@ function walk() {
 
   isWalking = true;
   // Seeing a new enemy on this step empties the path, which must not count as arriving.
-  const isDestination = path.length === 0;
+  const hasArrived = path.length === 0;
   placePlayer(next);
   // As in Shattered Pixel Dungeon, items are only picked up on the tile the player chose.
-  if (isDestination && !attackTarget) {
-    pickUpItems(next);
-  }
+  const hasPickedUp = hasArrived && !attackTarget && pickUpItems(next);
 
-  // The stairs only work as a destination, so paths can cross them.
-  if (isDestination && next.x === room.stairs.x && next.y === room.stairs.y) {
-    floor++;
-    replaceLevel();
+  if (hasArrived && isWalkingToStairs && !hasPickedUp && canGoDownStairs()) {
+    goDownStairs();
     return;
   }
 
@@ -742,15 +755,23 @@ function pressTileAt(position: Point, isMouse: boolean) {
     return;
   }
 
-  // Items are picked up on arrival, so a click on the player's own tile picks up what lies there.
-  if (isSameTile(target, playerPosition) && itemsAt(target).length > 0) {
-    pickUpItems(target);
+  const isStairs = isSameTile(target, room.stairs);
+
+  // A click on the player's own tile picks up what lies there. Only a click that picks up nothing
+  // goes down the stairs, so one click never does both.
+  if (isSameTile(target, playerPosition)) {
+    if (!pickUpItems(target) && canGoDownStairs()) {
+      goDownStairs();
+      return;
+    }
     updateCursorTile();
     renderCanvas();
     return;
   }
 
   const clicked = enemyAt(target);
+  // A click on the stairs goes down on arrival, but a click on an item lying there is for the item.
+  isWalkingToStairs = !clicked && isStairs && itemsAt(target).length === 0;
 
   if (clicked) {
     path = pathToAttack(clicked);
