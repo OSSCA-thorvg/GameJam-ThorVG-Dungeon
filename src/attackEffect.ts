@@ -14,6 +14,8 @@ const SHAKE_MS = HIT_STOP_MS + RECOVER_MS;
 export interface AttackEffect {
   // The attacker's offset from its tile when the hit lands.
   lunge: Point;
+  // A missed attack only lunges. The target does not flash or recoil, and the camera does not shake.
+  isMiss: boolean;
   moveAttacker(offset: Point): void;
   moveTarget(offset: Point): void;
   flashTarget(isFlashing: boolean): void;
@@ -74,14 +76,16 @@ export function playAttackEffect(effect: AttackEffect): () => void {
       }
 
       effect.moveAttacker(scaled(effect.lunge, (1 - recover) ** 2));
-      effect.moveTarget(scaled(direction, KNOCKBACK_PX * Math.sin(Math.PI * recover)));
-      effect.flashTarget(sinceHit < HIT_STOP_MS);
+      if (!effect.isMiss) {
+        effect.moveTarget(scaled(direction, KNOCKBACK_PX * Math.sin(Math.PI * recover)));
+        effect.flashTarget(sinceHit < HIT_STOP_MS);
 
-      const shake = SHAKE_PX * Math.max(0, 1 - sinceHit / SHAKE_MS);
-      effect.shake?.({
-        x: (Math.random() * 2 - 1) * shake,
-        y: (Math.random() * 2 - 1) * shake,
-      });
+        const shake = SHAKE_PX * Math.max(0, 1 - sinceHit / SHAKE_MS);
+        effect.shake?.({
+          x: (Math.random() * 2 - 1) * shake,
+          y: (Math.random() * 2 - 1) * shake,
+        });
+      }
     }
 
     effect.render();

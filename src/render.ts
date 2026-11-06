@@ -101,11 +101,11 @@ const HEALTH_TRAIL_HOLD_MS = 300;
 const HEALTH_TRAIL_SHRINK_MS = 250;
 
 // Placeholder values for the size of a damage number's digits.
-const DIGIT_SCALE = 0.7;
+const DIGIT_SCALE = 0.5;
 const DIGIT_WIDTH = 10 * DIGIT_SCALE;
 const DIGIT_HEIGHT = 16 * DIGIT_SCALE;
-const DIGIT_GAP = 3;
-const DIGIT_STROKE_WIDTH = 1.75;
+const DIGIT_GAP = 2;
+const DIGIT_STROKE_WIDTH = 1.25;
 
 // The height one number takes up, with a gap to the next number.
 export const DAMAGE_NUMBER_HEIGHT = DIGIT_HEIGHT + DIGIT_STROKE_WIDTH + DIGIT_GAP;
@@ -135,6 +135,8 @@ const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
   item: [245, 205, 70],
   target: [90, 170, 255],
 };
+// Placeholder color for the word shown when an attack is evaded.
+const EVADE_TEXT_COLOR: Color = [245, 205, 70];
 const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   enemy: [255, 255, 255],
   player: [255, 80, 70],
@@ -707,41 +709,67 @@ const DIGIT_PATHS: number[][][] = [
   ],
 ];
 
-function appendDigit(shape: Shape, digit: number, left: number, top: number) {
-  for (const [index, point] of DIGIT_PATHS[digit].entries()) {
-    const [a, b, c, d, e, f] = point.map((value) => value * DIGIT_SCALE);
-    if (index === 0) {
-      shape.moveTo(left + a, top + b);
-    } else if (point.length === 2) {
-      shape.lineTo(left + a, top + b);
-    } else {
-      shape.cubicTo(left + a, top + b, left + c, top + d, left + e, top + f);
+// Letters drawn in the same box and style as the digits, each made of one or more paths.
+const LETTER_PATHS: Record<string, number[][][]> = {
+  A: [
+    [[0, 16], [5, 0], [10, 16]],
+    [[1.7, 10.5], [8.3, 10.5]],
+  ],
+  D: [[[0, 0], [4, 0], [8, 0, 10, 3.5, 10, 8], [10, 12.5, 8, 16, 4, 16], [0, 16], [0, 0]]],
+  E: [
+    [[10, 0], [0, 0], [0, 16], [10, 16]],
+    [[0, 8], [8, 8]],
+  ],
+  V: [[[0, 0], [5, 16], [10, 0]]],
+};
+
+function appendGlyph(shape: Shape, character: string, left: number, top: number) {
+  const paths = /\d/.test(character) ? [DIGIT_PATHS[Number(character)]] : LETTER_PATHS[character];
+  for (const path of paths) {
+    for (const [index, point] of path.entries()) {
+      const [a, b, c, d, e, f] = point.map((value) => value * DIGIT_SCALE);
+      if (index === 0) {
+        shape.moveTo(left + a, top + b);
+      } else if (point.length === 2) {
+        shape.lineTo(left + a, top + b);
+      } else {
+        shape.cubicTo(left + a, top + b, left + c, top + d, left + e, top + f);
+      }
     }
   }
 }
 
-// A number just above the head of a character standing on the scene's local origin.
+// Text just above the head of a character standing on the scene's local origin.
 // It is drawn from paths because ThorVG needs a font file to draw text.
+function createFloatingText(TVG: ThorVGNamespace, text: string, color: Color): Shape {
+  const characters = [...text];
+  const totalWidth = characters.length * (DIGIT_WIDTH + DIGIT_GAP) - DIGIT_GAP;
+  const top = -CHARACTER_SIZE - DIGIT_HEIGHT;
+
+  const shape = new TVG.Shape();
+  characters.forEach((character, index) => {
+    appendGlyph(shape, character, -totalWidth / 2 + index * (DIGIT_WIDTH + DIGIT_GAP), top);
+  });
+  shape.stroke({
+    width: DIGIT_STROKE_WIDTH,
+    color,
+    cap: TVG.StrokeCap.Round,
+    join: TVG.StrokeJoin.Round,
+  });
+  return shape;
+}
+
 export function createDamageNumber(
   TVG: ThorVGNamespace,
   amount: number,
   target: DamageTarget,
 ): Shape {
-  const digits = [...String(amount)].map(Number);
-  const totalWidth = digits.length * (DIGIT_WIDTH + DIGIT_GAP) - DIGIT_GAP;
-  const top = -CHARACTER_SIZE - DIGIT_HEIGHT;
+  return createFloatingText(TVG, String(amount), DAMAGE_NUMBER_COLORS[target]);
+}
 
-  const shape = new TVG.Shape();
-  digits.forEach((digit, index) => {
-    appendDigit(shape, digit, -totalWidth / 2 + index * (DIGIT_WIDTH + DIGIT_GAP), top);
-  });
-  shape.stroke({
-    width: DIGIT_STROKE_WIDTH,
-    color: DAMAGE_NUMBER_COLORS[target],
-    cap: TVG.StrokeCap.Round,
-    join: TVG.StrokeJoin.Round,
-  });
-  return shape;
+// The word shown over a character that evaded an attack.
+export function createEvadeText(TVG: ThorVGNamespace): Shape {
+  return createFloatingText(TVG, 'EVADE', EVADE_TEXT_COLOR);
 }
 
 interface HealthBarStyle {

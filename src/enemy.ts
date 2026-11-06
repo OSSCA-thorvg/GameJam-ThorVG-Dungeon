@@ -9,6 +9,19 @@ const PLAYER_ATTACK_DAMAGE = 2;
 export const PLAYER_MAX_HP = 20;
 export const ENEMY_ATTACK_DAMAGE = 2;
 
+// Same as the starting hero in Shattered Pixel Dungeon.
+export const PLAYER_ACCURACY = 10;
+export const PLAYER_EVASION = 5;
+// Same as a rat, the first enemy in Shattered Pixel Dungeon.
+export const ENEMY_ACCURACY = 8;
+export const ENEMY_EVASION = 2;
+
+// Each side rolls from 0 up to its value, and the attack hits unless the evasion roll is higher,
+// as in Char.hit() of Shattered Pixel Dungeon. Every roll is independent of earlier ones.
+export function rollHit(accuracy: number, evasion: number): boolean {
+  return Math.random() * accuracy >= Math.random() * evasion;
+}
+
 // Placeholder value. An enemy starts chasing once the player is this many steps away.
 const ENEMY_NOTICE_DISTANCE = 8;
 

@@ -10,8 +10,13 @@ import {
   attackEnemy,
   chasePlayer,
   createEnemy,
+  ENEMY_ACCURACY,
   ENEMY_ATTACK_DAMAGE,
+  ENEMY_EVASION,
+  PLAYER_ACCURACY,
+  PLAYER_EVASION,
   PLAYER_MAX_HP,
+  rollHit,
   type Enemy,
 } from './enemy';
 import { createInventoryPanel } from './inventoryPanel';
@@ -29,6 +34,7 @@ import { createRandom, randomInt } from './random';
 import {
   createCharacter,
   createDamageNumber,
+  createEvadeText,
   createDummyEnemy,
   createEnemyHealthBar,
   createItemPaint,
@@ -513,9 +519,11 @@ function endGame() {
 
 function playEnemyAttack(enemy: Enemy, onDone: () => void) {
   const attackerTile = enemy.position;
+  const isHit = rollHit(ENEMY_ACCURACY, PLAYER_EVASION);
 
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, playerPosition), LUNGE_DISTANCE),
+    isMiss: !isHit,
     moveAttacker: (offset) => roomView.nudge(enemy.paint, attackerTile, offset),
     moveTarget: (offset) => roomView.nudge(player, playerPosition, offset),
     flashTarget: (isFlashing) => {
@@ -530,10 +538,14 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     },
     render: () => canvas.update().render(),
     onHit: () => {
-      playerHp = Math.max(0, playerHp - ENEMY_ATTACK_DAMAGE);
-      showPlayerHp();
-      showDamage(ENEMY_ATTACK_DAMAGE, playerPosition, 'player');
-      // Being hit stops the walk, so the player can decide again.
+      if (isHit) {
+        playerHp = Math.max(0, playerHp - ENEMY_ATTACK_DAMAGE);
+        showPlayerHp();
+        showDamage(ENEMY_ATTACK_DAMAGE, playerPosition, 'player');
+      } else {
+        damageNumbers.show(roomView, createEvadeText(TVG), playerPosition);
+      }
+      // Being attacked stops the walk, even by a miss, so the player can decide again.
       path = [];
       attackTarget = null;
     },
@@ -586,9 +598,11 @@ function runEnemyTurn(onDone: () => void) {
 
 function playPlayerAttack(enemy: Enemy) {
   const attackerTile = playerPosition;
+  const isHit = rollHit(PLAYER_ACCURACY, ENEMY_EVASION);
 
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE),
+    isMiss: !isHit,
     moveAttacker: (offset) => roomView.nudge(player, attackerTile, offset),
     moveTarget: (offset) => roomView.nudge(enemy.paint, enemy.position, offset),
     flashTarget: (isFlashing) => {
@@ -598,7 +612,14 @@ function playPlayerAttack(enemy: Enemy) {
       }
     },
     render: () => canvas.update().render(),
-    onHit: () => showDamage(attackEnemy(enemy), enemy.position, 'enemy'),
+    onHit: () => {
+      if (isHit) {
+        showDamage(attackEnemy(enemy), enemy.position, 'enemy');
+      } else {
+        enemy.hasNoticedPlayer = true;
+        damageNumbers.show(roomView, createEvadeText(TVG), enemy.position);
+      }
+    },
     onEnd: () => {
       finishAttackEffect = null;
       if (enemy.hp === 0) {
