@@ -1,20 +1,91 @@
 import type { Scene } from '@thorvg/webcanvas';
 import { distancesFrom, findPath } from './path';
+import type { Random } from './random';
 import type { HealthBar } from './render';
 import { isAdjacent, isWalkable, type Point, type Room } from './room';
 import type { Statuses } from './status';
 
-// Placeholder values for testing combat.
-const ENEMY_MAX_HP = 10;
+// Placeholder value.
 export const HERO_MAX_HP = 20;
-export const ENEMY_ATTACK_DAMAGE = 2;
 
 // Same as the starting hero in Shattered Pixel Dungeon.
 export const HERO_ACCURACY = 10;
 export const HERO_EVASION = 5;
-// Same as a rat, the first enemy in Shattered Pixel Dungeon.
-export const ENEMY_ACCURACY = 8;
-export const ENEMY_EVASION = 2;
+
+export type EnemyKind = 'weak' | 'medium' | 'strong';
+
+export interface EnemyStats {
+  // The name shown to the player.
+  name: string;
+  maxHp: number;
+  damage: [min: number, max: number];
+  accuracy: number;
+  evasion: number;
+  // How many times it acts in each turn.
+  actions: number;
+  // The experience the hero gets for defeating it.
+  experience: number;
+  // The first floor it appears on.
+  firstFloor: number;
+  // How often it appears, against the other kinds that can appear on a floor.
+  weight: number;
+}
+
+// Placeholder values, worked out from how many hits the hero needs to defeat each enemy with the
+// starting sword, about 2, 3 and 4.5, and how many hits each needs to defeat a hero with 20 HP in
+// cloth armor, about 13, 8 and 8. The strong enemy lands its 8 hits in 4 turns, as it acts twice.
+// The weak one has the accuracy and evasion of a rat in Shattered Pixel Dungeon.
+export const ENEMY_KINDS: Record<EnemyKind, EnemyStats> = {
+  weak: {
+    name: 'small dummy',
+    maxHp: 11,
+    damage: [1, 4],
+    accuracy: 8,
+    evasion: 2,
+    actions: 1,
+    experience: 1,
+    firstFloor: 1,
+    weight: 3,
+  },
+  medium: {
+    name: 'dummy',
+    maxHp: 16,
+    damage: [2, 5],
+    accuracy: 9,
+    evasion: 3,
+    actions: 1,
+    experience: 2,
+    firstFloor: 2,
+    weight: 2,
+  },
+  strong: {
+    name: 'big dummy',
+    maxHp: 25,
+    damage: [2, 5],
+    accuracy: 12,
+    evasion: 6,
+    actions: 2,
+    experience: 4,
+    firstFloor: 3,
+    weight: 1,
+  },
+};
+
+// Picks a kind of enemy that can appear on the floor, by weight.
+export function pickEnemyKind(random: Random, floor: number): EnemyKind {
+  const kinds = (Object.keys(ENEMY_KINDS) as EnemyKind[]).filter(
+    (kind) => ENEMY_KINDS[kind].firstFloor <= floor,
+  );
+  const total = kinds.reduce((sum, kind) => sum + ENEMY_KINDS[kind].weight, 0);
+  let roll = random() * total;
+  for (const kind of kinds) {
+    roll -= ENEMY_KINDS[kind].weight;
+    if (roll < 0) {
+      return kind;
+    }
+  }
+  return kinds[kinds.length - 1];
+}
 
 // Each side rolls from 0 up to its value, and the attack hits unless the evasion roll is higher,
 // as in Char.hit() of Shattered Pixel Dungeon. Every roll is independent of earlier ones.
@@ -49,8 +120,8 @@ export interface EnemyContext {
 export type EnemyBehavior = (enemy: Enemy, context: EnemyContext) => EnemyAction;
 
 export interface Enemy {
-  // The name shown to the player.
-  name: string;
+  kind: EnemyKind;
+  stats: EnemyStats;
   position: Point;
   hp: number;
   // A wandering enemy walks to random places. A hunting one goes after the hero, or after where
@@ -176,16 +247,17 @@ export const chaser: EnemyBehavior = (enemy, { room, hero, canSeeHero, occupied 
 };
 
 export function createEnemy(
-  name: string,
+  kind: EnemyKind,
   position: Point,
   paint: Scene,
   healthBar: HealthBar,
   behavior: EnemyBehavior,
 ): Enemy {
   return {
-    name,
+    kind,
+    stats: ENEMY_KINDS[kind],
     position,
-    hp: ENEMY_MAX_HP,
+    hp: ENEMY_KINDS[kind].maxHp,
     state: 'wandering',
     target: null,
     lastSeen: null,
@@ -202,13 +274,13 @@ export function createEnemy(
 // Damage breaks the ice of a frozen enemy.
 export function damageEnemy(enemy: Enemy, damage: number): void {
   enemy.hp = Math.max(0, enemy.hp - damage);
-  enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
+  enemy.healthBar.show(enemy.hp / enemy.stats.maxHp);
   delete enemy.statuses.frozen;
 }
 
 export function healEnemy(enemy: Enemy, amount: number): void {
-  enemy.hp = Math.min(ENEMY_MAX_HP, enemy.hp + amount);
-  enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
+  enemy.hp = Math.min(enemy.stats.maxHp, enemy.hp + amount);
+  enemy.healthBar.show(enemy.hp / enemy.stats.maxHp);
 }
 
 // Being attacked makes the enemy hunt the hero.

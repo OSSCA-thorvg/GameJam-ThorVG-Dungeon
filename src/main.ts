@@ -13,12 +13,10 @@ import {
   createEnemy,
   damageEnemy,
   healEnemy,
-  ENEMY_ACCURACY,
-  ENEMY_ATTACK_DAMAGE,
-  ENEMY_EVASION,
   HERO_ACCURACY,
   HERO_EVASION,
   HERO_MAX_HP,
+  pickEnemyKind,
   rollHit,
   type Enemy,
 } from './enemy';
@@ -98,9 +96,8 @@ const CAMERA_DRAG_THRESHOLD = 8;
 // The camera snaps to its target below this distance, which is too small to see.
 const CAMERA_SETTLE_DISTANCE = 0.1;
 
-// Placeholder values for the hero's growth. Each enemy gives this much experience, and each level
-// needs this much more than the one before. A new level adds these to the hero's stats.
-const EXPERIENCE_PER_KILL = 1;
+// Placeholder values for the hero's growth. Each level needs this much more experience than the
+// one before, and a new level adds these to the hero's stats.
 const EXPERIENCE_PER_LEVEL = 3;
 const LEVEL_UP_HP = 5;
 const LEVEL_UP_ACCURACY = 1;
@@ -190,16 +187,16 @@ function createLevel() {
       burnUp: burnUpTile,
     }),
     hero: createCharacter(TVG, heroIcon),
-    enemies: room.monsters.map((position) =>
-      createEnemy(
-        // A placeholder name, as the enemy is drawn as a placeholder.
-        'dummy',
+    enemies: room.monsters.map((position) => {
+      const kind = pickEnemyKind(random, floor);
+      return createEnemy(
+        kind,
         position,
-        createDummyEnemy(TVG),
+        createDummyEnemy(TVG, kind),
         createEnemyHealthBar(TVG, renderCanvas),
         chaser,
-      ),
-    ),
+      );
+    }),
   };
 }
 
@@ -783,7 +780,7 @@ function hurtEnemy(enemy: Enemy, amount: number) {
 // view is named too, so the player learns what it was.
 function killEnemy(enemy: Enemy) {
   if (isInView(enemy.position)) {
-    messageLog.add(`You defeated the ${enemy.name}.`);
+    messageLog.add(`You defeated the ${enemy.stats.name}.`);
   }
   roomView.remove(enemy.paint);
   roomView.remove(enemy.healthBar.scene);
@@ -791,14 +788,14 @@ function killEnemy(enemy: Enemy) {
   killCount++;
   seenEnemies.delete(enemy);
   dropItem(randomPotion(Math.random), enemy.position);
-  gainExperience(EXPERIENCE_PER_KILL);
+  gainExperience(enemy.stats.experience);
   updateVision();
 }
 
 // A paralyzed or frozen hero cannot evade.
 function playEnemyAttack(enemy: Enemy, onDone: () => void) {
   const attackerTile = enemy.position;
-  const isHit = isHelpless(heroStatuses) || rollHit(ENEMY_ACCURACY, heroEvasion());
+  const isHit = isHelpless(heroStatuses) || rollHit(enemy.stats.accuracy, heroEvasion());
   if (!seenEnemies.has(enemy)) {
     messageLog.add('Something unseen attacked you.');
   }
@@ -824,7 +821,8 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     onHit: () => {
       if (isHit) {
         // The armor takes away part of the hit, as in Char.attack() of Shattered Pixel Dungeon.
-        damageHero(Math.max(0, ENEMY_ATTACK_DAMAGE - rollArmor(equipment)));
+        const damage = normalIntRange(Math.random, ...enemy.stats.damage);
+        damageHero(Math.max(0, damage - rollArmor(equipment)));
         showHeroStats();
       } else {
         damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
@@ -928,10 +926,11 @@ function endTurn(onDone: () => void) {
 // Every action of the hero ends with this, so it also counts the hero's turns.
 function runEnemyTurn(onDone: () => void) {
   turnCount++;
-  // A hasted enemy acts twice in a row.
-  const waiting = enemies.flatMap((enemy) =>
-    hasStatus(enemy.statuses, 'haste') ? [enemy, enemy] : [enemy],
-  );
+  // An enemy that acts more than once does so in a row. Haste doubles that.
+  const waiting = enemies.flatMap((enemy) => {
+    const actions = enemy.stats.actions * (hasStatus(enemy.statuses, 'haste') ? 2 : 1);
+    return Array<Enemy>(actions).fill(enemy);
+  });
 
   const actNext = () => {
     const enemy = waiting.shift();
@@ -985,7 +984,7 @@ function playHeroAttack(enemy: Enemy) {
   // A surprised enemy cannot evade, and neither can a paralyzed or frozen one.
   const isSurprise = !enemy.hasSeenHero;
   const isHit =
-    isSurprise || isHelpless(enemy.statuses) || rollHit(heroAccuracy(), ENEMY_EVASION);
+    isSurprise || isHelpless(enemy.statuses) || rollHit(heroAccuracy(), enemy.stats.evasion);
   // Attacking ends invisibility.
   if (hasStatus(heroStatuses, 'invisible')) {
     delete heroStatuses.invisible;
@@ -1413,7 +1412,7 @@ function shatterPotion(name: ItemName, tile: Point) {
   updateVision();
   showEnemy(enemy);
   if (isSeen) {
-    messageLog.add(enemyEffect.message(enemy.name));
+    messageLog.add(enemyEffect.message(enemy.stats.name));
     potionLore.identify(name);
   } else {
     messageLog.add("The potion's flask broke, but nothing happened.");

@@ -1,4 +1,5 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
+import type { EnemyKind } from './enemy';
 import { isWalkable, type Point, type Room } from './room';
 import { STATUS_LABELS, type StatusName } from './status';
 
@@ -163,7 +164,12 @@ const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   enemy: [255, 255, 255],
   hero: [255, 80, 70],
 };
-const DUMMY_ENEMY: Color = [196, 64, 64];
+// Placeholder looks of each kind of enemy: its color, and its size against the hero.
+const ENEMY_LOOKS: Record<EnemyKind, { color: Color; scale: number }> = {
+  weak: { color: [176, 112, 96], scale: 0.8 },
+  medium: { color: [196, 64, 64], scale: 1 },
+  strong: { color: [130, 50, 150], scale: 1.2 },
+};
 // Placeholder colors of each effect, for its name over a character and its icon on the screen.
 export const STATUS_COLORS: Record<StatusName, Color> = {
   haste: [120, 230, 120],
@@ -711,12 +717,13 @@ export function createItemPaint(TVG: ThorVGNamespace, svg: string): Paint {
 
 // A placeholder enemy with its feet on the scene's local origin.
 // It is a Scene because scene effects, such as the hit flash, only apply to scenes.
-export function createDummyEnemy(TVG: ThorVGNamespace): Scene {
-  const size = CHARACTER_SIZE;
+export function createDummyEnemy(TVG: ThorVGNamespace, kind: EnemyKind): Scene {
+  const { color, scale } = ENEMY_LOOKS[kind];
+  const size = CHARACTER_SIZE * scale;
   const shape = new TVG.Shape();
   shape.appendRect(-size / 4, -size * 0.6, size / 2, size * 0.6);
   shape.appendCircle(0, -size * 0.8, size / 5);
-  shape.fill(...DUMMY_ENEMY);
+  shape.fill(...color);
 
   const scene = new TVG.Scene();
   scene.add(shape);
