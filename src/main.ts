@@ -8,10 +8,12 @@ import { playBounce, playFrost, playShatter, playThrow } from './throwEffect';
 import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   alertEnemy,
+  ASLEEP_CHANCE,
   attackEnemy,
   chaser,
   createEnemy,
   damageEnemy,
+  disturbEnemy,
   healEnemy,
   HERO_ACCURACY,
   HERO_EVASION,
@@ -49,6 +51,7 @@ import {
   createDamageNumber,
   createEvadeText,
   createNoticeMark,
+  createSleepMark,
   createStatusText,
   createSurpriseMark,
   createDummyEnemy,
@@ -192,8 +195,10 @@ function createLevel() {
       return createEnemy(
         kind,
         position,
+        random() < ASLEEP_CHANCE,
         createDummyEnemy(TVG, kind),
         createEnemyHealthBar(TVG, renderCanvas),
+        createSleepMark(TVG),
         chaser,
       );
     }),
@@ -338,6 +343,7 @@ function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
     showStatusText(enemy.position, name);
   }
   addStatus(enemy.statuses, name, turns);
+  disturbEnemy(enemy);
   showEnemy(enemy);
 }
 
@@ -651,6 +657,11 @@ function showEnemy(enemy: Enemy) {
     roomView.remove(enemy.paint);
     roomView.remove(enemy.healthBar.scene);
   }
+  if (seenEnemies.has(enemy) && enemy.state === 'sleeping') {
+    roomView.placeOverlay(enemy.sleepMark, x, y);
+  } else {
+    roomView.remove(enemy.sleepMark);
+  }
 }
 
 function placeEnemy(enemy: Enemy, tile: Point) {
@@ -784,6 +795,7 @@ function killEnemy(enemy: Enemy) {
   }
   roomView.remove(enemy.paint);
   roomView.remove(enemy.healthBar.scene);
+  roomView.remove(enemy.sleepMark);
   enemies.splice(enemies.indexOf(enemy), 1);
   killCount++;
   seenEnemies.delete(enemy);
@@ -940,7 +952,9 @@ function runEnemyTurn(onDone: () => void) {
     }
 
     const wasHunting = enemy.state === 'hunting';
-    enemy.hasSeenHero = canEnemySeeHero(enemy);
+    const canSeeHero = canEnemySeeHero(enemy);
+    // A sleeping enemy does not watch the hero, so the hero's attack surprises it.
+    enemy.hasSeenHero = canSeeHero && enemy.state !== 'sleeping';
     if (isHelpless(enemy.statuses)) {
       actNext();
       return;
@@ -948,7 +962,7 @@ function runEnemyTurn(onDone: () => void) {
     const action = enemy.behavior(enemy, {
       room,
       hero: heroPosition,
-      canSeeHero: enemy.hasSeenHero,
+      canSeeHero,
       occupied: occupiedTiles(enemy),
     });
 
@@ -966,10 +980,13 @@ function runEnemyTurn(onDone: () => void) {
         actNext();
         break;
       case 'attack':
+        showEnemy(enemy);
         showNoticeMark();
         playEnemyAttack(enemy, actNext);
         break;
       case 'wait':
+        // It may have woken up.
+        showEnemy(enemy);
         showNoticeMark();
         actNext();
         break;
@@ -1015,9 +1032,11 @@ function playHeroAttack(enemy: Enemy) {
         }
         const damage = rollDamage(equipment, heroStrength);
         attackEnemy(enemy, heroPosition, damage);
+        roomView.remove(enemy.sleepMark);
         showDamage(damage, enemy.position, 'enemy');
       } else {
         alertEnemy(enemy, heroPosition);
+        roomView.remove(enemy.sleepMark);
         damageNumbers.show(roomView, createEvadeText(TVG), enemy.position);
       }
     },

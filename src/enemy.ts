@@ -98,6 +98,13 @@ const HERO_STEALTH = 0;
 // Placeholder value. Shattered Pixel Dungeon divides the distance by 2, so a wandering enemy
 // notices for sure only within 2 tiles. Dividing by 4 makes that 4 tiles, and 50% at 8 tiles.
 const DETECTION_DISTANCE_DIVISOR = 4;
+// Placeholder values. How likely an enemy is to start the floor asleep, and how likely a sleeping
+// enemy is to wake up on each turn that it could see the hero within a few tiles. Walking up to a
+// sleeping enemy from that far and attacking it leaves it asleep about half the time.
+// In Shattered Pixel Dungeon every enemy starts asleep, and the chance to wake depends on distance.
+export const ASLEEP_CHANCE = 0.5;
+const WAKE_DISTANCE = 3;
+const WAKE_CHANCE = 0.2;
 // Placeholder values. How likely an enemy that lost the hero is to look ahead along the way the
 // hero was going, instead of going back to wandering, and how many steps ahead it looks.
 const SEARCH_CHANCE = 0.5;
@@ -124,9 +131,10 @@ export interface Enemy {
   stats: EnemyStats;
   position: Point;
   hp: number;
-  // A wandering enemy walks to random places. A hunting one goes after the hero, or after where
-  // it last saw the hero, as the Wandering and Hunting states of Shattered Pixel Dungeon.
-  state: 'wandering' | 'hunting';
+  // A sleeping enemy stays where it is. A wandering enemy walks to random places. A hunting one
+  // goes after the hero, or after where it last saw the hero, as the Sleeping, Wandering and
+  // Hunting states of Shattered Pixel Dungeon.
+  state: 'sleeping' | 'wandering' | 'hunting';
   // Where the enemy is going.
   target: Point | null;
   // Where the enemy last saw the hero, and the way the hero was moving then.
@@ -141,6 +149,8 @@ export interface Enemy {
   statuses: Statuses;
   paint: Scene;
   healthBar: HealthBar;
+  // Shown over the enemy while it sleeps.
+  sleepMark: Scene;
   behavior: EnemyBehavior;
 }
 
@@ -205,6 +215,19 @@ export function alertEnemy(enemy: Enemy, hero: Point): void {
 export const chaser: EnemyBehavior = (enemy, { room, hero, canSeeHero, occupied }) => {
   const blocked = [...occupied, hero];
 
+  // A sleeping enemy only wakes when it sees the hero close by. Waking up takes its turn.
+  if (enemy.state === 'sleeping') {
+    const distance = Math.max(
+      Math.abs(enemy.position.x - hero.x),
+      Math.abs(enemy.position.y - hero.y),
+    );
+    if (canSeeHero && distance <= WAKE_DISTANCE && Math.random() < WAKE_CHANCE) {
+      alertEnemy(enemy, hero);
+      enemy.hasSeenHero = true;
+    }
+    return { type: 'wait' };
+  }
+
   const noticesHero =
     canSeeHero &&
     (enemy.state === 'hunting' || Math.random() < detectionChance(enemy.position, hero));
@@ -249,8 +272,10 @@ export const chaser: EnemyBehavior = (enemy, { room, hero, canSeeHero, occupied 
 export function createEnemy(
   kind: EnemyKind,
   position: Point,
+  isAsleep: boolean,
   paint: Scene,
   healthBar: HealthBar,
+  sleepMark: Scene,
   behavior: EnemyBehavior,
 ): Enemy {
   return {
@@ -258,7 +283,7 @@ export function createEnemy(
     stats: ENEMY_KINDS[kind],
     position,
     hp: ENEMY_KINDS[kind].maxHp,
-    state: 'wandering',
+    state: isAsleep ? 'sleeping' : 'wandering',
     target: null,
     lastSeen: null,
     heading: null,
@@ -267,18 +292,28 @@ export function createEnemy(
     statuses: {},
     paint,
     healthBar,
+    sleepMark,
     behavior,
   };
 }
 
+// Anything that happens to a sleeping enemy wakes it, but it does not know where the hero is.
+export function disturbEnemy(enemy: Enemy): void {
+  if (enemy.state === 'sleeping') {
+    enemy.state = 'wandering';
+  }
+}
+
 // Damage breaks the ice of a frozen enemy.
 export function damageEnemy(enemy: Enemy, damage: number): void {
+  disturbEnemy(enemy);
   enemy.hp = Math.max(0, enemy.hp - damage);
   enemy.healthBar.show(enemy.hp / enemy.stats.maxHp);
   delete enemy.statuses.frozen;
 }
 
 export function healEnemy(enemy: Enemy, amount: number): void {
+  disturbEnemy(enemy);
   enemy.hp = Math.min(enemy.stats.maxHp, enemy.hp + amount);
   enemy.healthBar.show(enemy.hp / enemy.stats.maxHp);
 }

@@ -155,6 +155,8 @@ const ATTACK_TEXT_COLOR: Color = [245, 205, 70];
 // Placeholder color for the mark of an enemy that noticed the hero. Same red as the cursor
 // outline on an enemy, so it does not look like the yellow mark of a surprise attack.
 const NOTICE_MARK_COLOR: Color = [235, 60, 50];
+// Placeholder color for the mark of a sleeping enemy, calm against the red of the notice mark.
+const SLEEP_MARK_COLOR: Color = [70, 100, 170];
 // Placeholder values for the speech bubble behind that mark, so it stands out on a dark map.
 const NOTICE_BUBBLE_COLOR: Color = [245, 245, 245];
 const NOTICE_BUBBLE_PADDING = 3;
@@ -981,9 +983,10 @@ export function createSurpriseMark(TVG: ThorVGNamespace): Shape {
   return createFloatingText(TVG, '!', ATTACK_TEXT_COLOR);
 }
 
-// The mark shown over an enemy that just noticed the hero, in a speech bubble.
-export function createNoticeMark(TVG: ThorVGNamespace): Scene {
-  const width = DIGIT_WIDTH + NOTICE_BUBBLE_PADDING * 2;
+// Text in a speech bubble over a character standing on the scene's local origin.
+function createSpeechBubble(TVG: ThorVGNamespace, text: string, color: Color): Scene {
+  const textWidth = text.length * (DIGIT_WIDTH + DIGIT_GAP) - DIGIT_GAP;
+  const width = textWidth + NOTICE_BUBBLE_PADDING * 2;
   const height = DIGIT_HEIGHT + NOTICE_BUBBLE_PADDING * 2;
   const top = -CHARACTER_SIZE - DIGIT_HEIGHT - NOTICE_BUBBLE_PADDING;
   const bottom = top + height;
@@ -1002,8 +1005,18 @@ export function createNoticeMark(TVG: ThorVGNamespace): Scene {
 
   const scene = new TVG.Scene();
   scene.add(bubble);
-  scene.add(createFloatingText(TVG, '!', NOTICE_MARK_COLOR));
+  scene.add(createFloatingText(TVG, text, color));
   return scene;
+}
+
+// The mark shown over an enemy that just noticed the hero.
+export function createNoticeMark(TVG: ThorVGNamespace): Scene {
+  return createSpeechBubble(TVG, '!', NOTICE_MARK_COLOR);
+}
+
+// The mark shown over a sleeping enemy.
+export function createSleepMark(TVG: ThorVGNamespace): Scene {
+  return createSpeechBubble(TVG, 'ZZZ', SLEEP_MARK_COLOR);
 }
 
 interface HealthBarStyle {
