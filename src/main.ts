@@ -24,6 +24,7 @@ import {
 } from './enemy';
 import { createHazardField, spreadArea } from './hazards';
 import { createInventoryPanel } from './inventoryPanel';
+import { createStatusBar } from './statusBar';
 import {
   addItem,
   createStartingEquipment,
@@ -50,6 +51,7 @@ import {
   createDamageNumber,
   createEvadeText,
   createNoticeMark,
+  createStatusText,
   createSurpriseMark,
   createDummyEnemy,
   createEnemyHealthBar,
@@ -65,7 +67,6 @@ import {
   addStatus,
   hasStatus,
   isHelpless,
-  STATUS_LABELS,
   tickStatuses,
   tintOf,
   type StatusName,
@@ -142,7 +143,10 @@ const floorLabel = document.querySelector<HTMLElement>('#floor')!;
 const hpLabel = document.querySelector<HTMLElement>('#hp')!;
 const statsLabel = document.querySelector<HTMLElement>('#stats')!;
 const messageLog = createMessageLog(document.querySelector<HTMLElement>('#log')!);
-const statusLabel = document.querySelector<HTMLElement>('#status')!;
+const statusBar = createStatusBar(
+  document.querySelector<HTMLElement>('#status')!,
+  document.querySelector<HTMLElement>('#status-tooltip')!,
+);
 
 const renderCanvas = () => canvas.update().render();
 const damageNumbers = createDamageNumbers(renderCanvas);
@@ -276,8 +280,7 @@ function addStatusOn(tiles: Point[], name: StatusName, turns: number) {
   }
   for (const enemy of enemies) {
     if (tiles.some((tile) => isSameTile(tile, enemy.position))) {
-      addStatus(enemy.statuses, name, turns);
-      showEnemy(enemy);
+      addEnemyStatus(enemy, name, turns);
     }
   }
 }
@@ -312,17 +315,33 @@ function setAlight(tiles: Point[]) {
   const isBurnable = ({ position, statuses }: Enemy) =>
     isOn(position) && !hasStatus(statuses, 'levitating');
   for (const enemy of enemies.filter(isBurnable)) {
-    addStatus(enemy.statuses, 'burning', BURNING_TURNS);
-    showEnemy(enemy);
+    addEnemyStatus(enemy, 'burning', BURNING_TURNS);
   }
 }
 
+// A new effect shows its name over the character. One that only lasts longer does not.
+function showStatusText(tile: Point, name: StatusName) {
+  damageNumbers.show(roomView, createStatusText(TVG, name), tile);
+}
+
 function addPlayerStatus(name: StatusName, turns: number) {
+  if (!hasStatus(playerStatuses, name)) {
+    showStatusText(playerPosition, name);
+  }
   addStatus(playerStatuses, name, turns);
   if (isHelpless(playerStatuses)) {
     stopWalking();
   }
   updatePlayerLook();
+}
+
+// The name shows only over an enemy in view, so it does not give away the others.
+function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
+  if (!hasStatus(enemy.statuses, name) && seenEnemies.has(enemy)) {
+    showStatusText(enemy.position, name);
+  }
+  addStatus(enemy.statuses, name, turns);
+  showEnemy(enemy);
 }
 
 const playerAccuracy = () => PLAYER_ACCURACY + (playerLevel - 1) * LEVEL_UP_ACCURACY;
@@ -352,10 +371,7 @@ function showPlayerStats() {
   // Strength shows once it differs from where it started.
   const strength = playerStrength !== STARTING_STRENGTH ? ` · Str ${playerStrength}` : '';
   statsLabel.textContent = `Lv ${playerLevel} · ${experience}${strength}`;
-  statusLabel.textContent = (Object.keys(STATUS_LABELS) as StatusName[])
-    .filter((name) => hasStatus(playerStatuses, name))
-    .map((name) => `${STATUS_LABELS[name]} ${playerStatuses[name]}`)
-    .join(' · ');
+  statusBar.show(playerStatuses);
 }
 
 // A levitating character floats above its tile.
@@ -864,7 +880,7 @@ function applyHazards() {
   for (const enemy of enemies) {
     const enemyHazards = hazards.kindsAt(enemy.position);
     if (enemyHazards.includes('paralysis')) {
-      addStatus(enemy.statuses, 'paralyzed', PARALYZED_TURNS);
+      addEnemyStatus(enemy, 'paralyzed', PARALYZED_TURNS);
     }
     if (enemyHazards.includes('poison')) {
       hurtEnemy(enemy, normalIntRange(Math.random, ...POISON_DAMAGE));
@@ -1392,7 +1408,7 @@ function shatterPotion(name: ItemName, tile: Point) {
     healEnemy(enemy, enemyEffect.heal);
   }
   if (enemyEffect.status) {
-    addStatus(enemy.statuses, enemyEffect.status.name, enemyEffect.status.turns);
+    addEnemyStatus(enemy, enemyEffect.status.name, enemyEffect.status.turns);
   }
   updateVision();
   showEnemy(enemy);

@@ -53,7 +53,53 @@
       }
       #status {
         top: 52px;
-        color: #f0d070;
+        display: flex;
+        gap: 8px;
+        /* So that hovering an icon shows its name. */
+        pointer-events: auto;
+      }
+      .status-effect {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0;
+        font: bold 14px sans-serif;
+        color: inherit;
+        text-shadow: 0 1px 2px #000;
+        background: none;
+        border: none;
+        cursor: pointer;
+      }
+      .status-effect svg {
+        width: 28px;
+        height: 28px;
+        padding: 4px;
+        border-radius: 50%;
+        background: rgb(20 21 26 / 80%);
+      }
+      #status-tooltip {
+        position: fixed;
+        max-width: 220px;
+        padding: 8px 10px;
+        font: 13px/1.4 sans-serif;
+        color: #e8e8ec;
+        background: #1f2027;
+        border: 1px solid #4a4d58;
+        border-radius: 6px;
+        pointer-events: none;
+      }
+      #status-tooltip p {
+        margin: 4px 0 0;
+      }
+      .status-effect .line {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .status-effect .fill {
+        fill: currentColor;
       }
       /* Above the wait button. */
       #log {
@@ -281,6 +327,7 @@
     <div id="hp"></div>
     <div id="stats"></div>
     <div id="status"></div>
+    <div id="status-tooltip" hidden></div>
     <div id="log" aria-live="polite"></div>
     <div id="floor"></div>
     <button id="wait" hidden>

@@ -24,6 +24,17 @@ export const STATUS_LABELS: Record<StatusName, string> = {
   burning: 'Burning',
 };
 
+// What each effect does to the player, shown when the player points at its icon.
+export const STATUS_DESCRIPTIONS: Record<StatusName, string> = {
+  haste: 'You act twice for every turn of the enemies.',
+  invisible: 'Enemies cannot see you. Attacking ends it.',
+  levitating: 'You float above the floor, out of reach of fire on it.',
+  telepathy: 'You sense every enemy on the floor, even through walls.',
+  paralyzed: 'You cannot act or dodge.',
+  frozen: 'You cannot act or dodge. Any damage breaks the ice.',
+  burning: 'Fire hurts you at the end of every turn.',
+};
+
 export function hasStatus(statuses: Statuses, name: StatusName): boolean {
   return (statuses[name] ?? 0) > 0;
 }

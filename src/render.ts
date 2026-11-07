@@ -1,5 +1,6 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
 import { isWalkable, type Point, type Room } from './room';
+import { STATUS_LABELS, type StatusName } from './status';
 
 type Color = [r: number, g: number, b: number];
 
@@ -163,6 +164,16 @@ const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   player: [255, 80, 70],
 };
 const DUMMY_ENEMY: Color = [196, 64, 64];
+// Placeholder colors of each effect, for its name over a character and its icon on the screen.
+export const STATUS_COLORS: Record<StatusName, Color> = {
+  haste: [120, 230, 120],
+  invisible: [210, 215, 225],
+  levitating: [200, 235, 255],
+  telepathy: [200, 140, 255],
+  paralyzed: [245, 220, 70],
+  frozen: [150, 215, 255],
+  burning: [255, 140, 40],
+};
 // Placeholder colors, laid over a character with the alpha at the end.
 const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {
   frozen: [130, 200, 255, 150],
@@ -795,12 +806,109 @@ const LETTER_PATHS: Record<string, number[][][]> = {
     [[0, 16], [5, 0], [10, 16]],
     [[1.7, 10.5], [8.3, 10.5]],
   ],
+  B: [
+    [
+      [0, 8],
+      [6, 8],
+      [8.5, 8, 10, 9.5, 10, 12],
+      [10, 14.5, 8.5, 16, 6, 16],
+      [0, 16],
+      [0, 0],
+      [5.5, 0],
+      [7.8, 0, 9.2, 1.4, 9.2, 4],
+      [9.2, 6.6, 7.8, 8, 5.5, 8],
+    ],
+  ],
+  C: [
+    [
+      [10, 3],
+      [8.8, 1, 7, 0, 5, 0],
+      [2, 0, 0, 3, 0, 8],
+      [0, 13, 2, 16, 5, 16],
+      [7, 16, 8.8, 15, 10, 13],
+    ],
+  ],
   D: [[[0, 0], [4, 0], [8, 0, 10, 3.5, 10, 8], [10, 12.5, 8, 16, 4, 16], [0, 16], [0, 0]]],
   E: [
     [[10, 0], [0, 0], [0, 16], [10, 16]],
     [[0, 8], [8, 8]],
   ],
+  F: [
+    [[10, 0], [0, 0], [0, 16]],
+    [[0, 8], [8, 8]],
+  ],
+  G: [
+    [
+      [10, 3],
+      [8.8, 1, 7, 0, 5, 0],
+      [2, 0, 0, 3, 0, 8],
+      [0, 13, 2, 16, 5, 16],
+      [8, 16, 10, 14, 10, 10],
+      [10, 9],
+      [5.5, 9],
+    ],
+  ],
+  H: [
+    [[0, 0], [0, 16]],
+    [[10, 0], [10, 16]],
+    [[0, 8], [10, 8]],
+  ],
+  I: [
+    [[2, 0], [8, 0]],
+    [[5, 0], [5, 16]],
+    [[2, 16], [8, 16]],
+  ],
+  J: [
+    [[2, 0], [10, 0]],
+    [[8, 0], [8, 12], [8, 14.5, 6.5, 16, 4.5, 16], [2.5, 16, 0.8, 14.6, 0.3, 12.5]],
+  ],
+  K: [
+    [[0, 0], [0, 16]],
+    [[10, 0], [0, 9]],
+    [[3, 6.5], [10, 16]],
+  ],
+  L: [[[0, 0], [0, 16], [10, 16]]],
+  M: [[[0, 16], [0, 0], [5, 10], [10, 0], [10, 16]]],
+  N: [[[0, 16], [0, 0], [10, 16], [10, 0]]],
+  O: [
+    [[5, 0], [8, 0, 10, 3, 10, 8], [10, 13, 8, 16, 5, 16], [2, 16, 0, 13, 0, 8], [0, 3, 2, 0, 5, 0]],
+  ],
+  P: [[[0, 16], [0, 0], [6, 0], [8.5, 0, 10, 1.8, 10, 4.5], [10, 7.2, 8.5, 9, 6, 9], [0, 9]]],
+  Q: [
+    [[5, 0], [8, 0, 10, 3, 10, 8], [10, 13, 8, 16, 5, 16], [2, 16, 0, 13, 0, 8], [0, 3, 2, 0, 5, 0]],
+    [[6, 11], [10, 16]],
+  ],
+  R: [
+    [[0, 16], [0, 0], [6, 0], [8.5, 0, 10, 1.8, 10, 4.5], [10, 7.2, 8.5, 9, 6, 9], [0, 9]],
+    [[5, 9], [10, 16]],
+  ],
+  S: [
+    [
+      [9.5, 2.5],
+      [8.5, 0.8, 7, 0, 5, 0],
+      [2.5, 0, 0.5, 1.5, 0.5, 4],
+      [0.5, 6.5, 2.5, 7.3, 5, 8],
+      [7.5, 8.7, 10, 9.5, 10, 12],
+      [10, 14.5, 7.8, 16, 5, 16],
+      [3, 16, 1.2, 15.2, 0, 13.5],
+    ],
+  ],
+  T: [
+    [[0, 0], [10, 0]],
+    [[5, 0], [5, 16]],
+  ],
+  U: [[[0, 0], [0, 11], [0, 14, 2, 16, 5, 16], [8, 16, 10, 14, 10, 11], [10, 0]]],
   V: [[[0, 0], [5, 16], [10, 0]]],
+  W: [[[0, 0], [2.5, 16], [5, 6], [7.5, 16], [10, 0]]],
+  X: [
+    [[0, 0], [10, 16]],
+    [[10, 0], [0, 16]],
+  ],
+  Y: [
+    [[0, 0], [5, 8], [10, 0]],
+    [[5, 8], [5, 16]],
+  ],
+  Z: [[[0, 0], [10, 0], [0, 16], [10, 16]]],
   '!': [
     [[5, 0], [5, 11]],
     [[5, 15.5], [5, 16]],
@@ -849,6 +957,11 @@ export function createDamageNumber(
   target: DamageTarget,
 ): Shape {
   return createFloatingText(TVG, String(amount), DAMAGE_NUMBER_COLORS[target]);
+}
+
+// The name of an effect, shown over a character when the effect starts.
+export function createStatusText(TVG: ThorVGNamespace, name: StatusName): Shape {
+  return createFloatingText(TVG, STATUS_LABELS[name].toUpperCase(), STATUS_COLORS[name]);
 }
 
 // The word shown over a character that evaded an attack.
