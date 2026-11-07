@@ -1,6 +1,6 @@
 import type { CharacterTint } from './render';
 
-// Effects that last for some turns on the player or an enemy.
+// Effects that last for some turns on the hero or an enemy.
 export type StatusName =
   | 'haste'
   | 'invisible'
@@ -24,7 +24,7 @@ export const STATUS_LABELS: Record<StatusName, string> = {
   burning: 'Burning',
 };
 
-// What each effect does to the player, shown when the player points at its icon.
+// What each effect does to the hero, shown when the player points at its icon.
 export const STATUS_DESCRIPTIONS: Record<StatusName, string> = {
   haste: 'You act twice for every turn of the enemies.',
   invisible: 'Enemies cannot see you. Attacking ends it.',

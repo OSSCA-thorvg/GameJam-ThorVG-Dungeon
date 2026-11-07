@@ -1,7 +1,7 @@
 import ThorVG, { type Paint } from '@thorvg/webcanvas';
 // The package does not export this path, so it is imported by file path.
 import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
-import playerIcon from '../assets/icons/cathelineau/swordman.svg?raw';
+import heroIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
 import { createDamageNumbers } from './damageNumbers';
 import { playBounce, playFrost, playShatter, playThrow } from './throwEffect';
@@ -16,9 +16,9 @@ import {
   ENEMY_ACCURACY,
   ENEMY_ATTACK_DAMAGE,
   ENEMY_EVASION,
-  PLAYER_ACCURACY,
-  PLAYER_EVASION,
-  PLAYER_MAX_HP,
+  HERO_ACCURACY,
+  HERO_EVASION,
+  HERO_MAX_HP,
   rollHit,
   type Enemy,
 } from './enemy';
@@ -56,7 +56,7 @@ import {
   createDummyEnemy,
   createEnemyHealthBar,
   createItemPaint,
-  createPlayerHealthBar,
+  createHeroHealthBar,
   createRoomView,
   tileDistance,
   tintCharacter,
@@ -98,8 +98,8 @@ const CAMERA_DRAG_THRESHOLD = 8;
 // The camera snaps to its target below this distance, which is too small to see.
 const CAMERA_SETTLE_DISTANCE = 0.1;
 
-// Placeholder values for the player's growth. Each enemy gives this much experience, and each level
-// needs this much more than the one before. A new level adds these to the player's stats.
+// Placeholder values for the hero's growth. Each enemy gives this much experience, and each level
+// needs this much more than the one before. A new level adds these to the hero's stats.
 const EXPERIENCE_PER_KILL = 1;
 const EXPERIENCE_PER_LEVEL = 3;
 const LEVEL_UP_HP = 5;
@@ -112,10 +112,10 @@ const BURNING_TURNS = 4;
 const BURN_DAMAGE: [min: number, max: number] = [1, 3];
 const POISON_DAMAGE: [min: number, max: number] = [1, 3];
 const PARALYZED_TURNS = 2;
-// Placeholder value. How long each turn takes while the player cannot act.
+// Placeholder value. How long each turn takes while the hero cannot act.
 const HELPLESS_TURN_MS = 300;
-// Placeholder values. How high a levitating player floats, and how see-through an invisible
-// player and an enemy sensed by telepathy are drawn.
+// Placeholder values. How high a levitating hero floats, and how see-through an invisible
+// hero and an enemy sensed by telepathy are drawn.
 const LEVITATION_HEIGHT = 8;
 const INVISIBLE_OPACITY = 110;
 const SENSED_ENEMY_OPACITY = 150;
@@ -154,8 +154,8 @@ const damageNumbers = createDamageNumbers(renderCanvas);
 // The HUD is added after the map's scene, so a new level is still drawn below it.
 const mapScene = new TVG.Scene();
 canvas.add(mapScene);
-const playerHealthBar = createPlayerHealthBar(TVG, renderCanvas);
-canvas.add(playerHealthBar.scene);
+const heroHealthBar = createHeroHealthBar(TVG, renderCanvas);
+canvas.add(heroHealthBar.scene);
 
 // A "seed" URL parameter repeats the same maps, for testing.
 const fixedSeed = new URLSearchParams(location.search).get('seed');
@@ -164,7 +164,7 @@ const newRunSeed = () =>
 
 let runSeed = newRunSeed();
 let floor = 1;
-// For the summary shown when the player dies.
+// For the summary shown when the hero dies.
 let killCount = 0;
 let turnCount = 0;
 
@@ -189,7 +189,7 @@ function createLevel() {
       isFlammable: isFlammableTile,
       burnUp: burnUpTile,
     }),
-    player: createCharacter(TVG, playerIcon),
+    hero: createCharacter(TVG, heroIcon),
     enemies: room.monsters.map((position) =>
       createEnemy(
         // A placeholder name, as the enemy is drawn as a placeholder.
@@ -203,19 +203,19 @@ function createLevel() {
   };
 }
 
-let { room, explored, inView, seenEnemies, roomView, hazards, player, enemies } = createLevel();
-let playerPosition = room.start;
-let playerHp = PLAYER_MAX_HP;
-let playerMaxHp = PLAYER_MAX_HP;
-let playerLevel = 1;
-let playerExperience = 0;
-let playerStrength = STARTING_STRENGTH;
-let playerStatuses: Statuses = {};
-// Whether a hasted player already took the first of their two actions in this turn.
+let { room, explored, inView, seenEnemies, roomView, hazards, hero, enemies } = createLevel();
+let heroPosition = room.start;
+let heroHp = HERO_MAX_HP;
+let heroMaxHp = HERO_MAX_HP;
+let heroLevel = 1;
+let heroExperience = 0;
+let heroStrength = STARTING_STRENGTH;
+let heroStatuses: Statuses = {};
+// Whether a hasted hero already took the first of their two actions in this turn.
 let hasActedOnce = false;
 let potionLore = createPotionLore(createRandom(runSeed));
-// How far the player can see, in tiles. An effect that changes it should call updateVision().
-let playerViewDistance = DEFAULT_VIEW_DISTANCE;
+// How far the hero can see, in tiles. An effect that changes it should call updateVision().
+let heroViewDistance = DEFAULT_VIEW_DISTANCE;
 // What the current vision was computed from, to skip computing it when nothing changed.
 let visionState = '';
 let path: Point[] = [];
@@ -239,16 +239,16 @@ let groundItems: { name: ItemName; position: Point; paint: Paint }[] = [];
 
 function createItemContext(): ItemContext {
   return {
-    hp: playerHp,
-    maxHp: playerMaxHp,
+    hp: heroHp,
+    maxHp: heroMaxHp,
     heal(amount) {
-      playerHp = Math.min(playerMaxHp, playerHp + amount);
-      showPlayerHp();
+      heroHp = Math.min(heroMaxHp, heroHp + amount);
+      showHeroHp();
     },
-    addStatus: addPlayerStatus,
+    addStatus: addHeroStatus,
     gainStrength() {
-      playerStrength++;
-      showPlayerStats();
+      heroStrength++;
+      showHeroStats();
     },
     gainLevel: levelUp,
     // Fire and frost also reach a closed door, without going through it.
@@ -275,8 +275,8 @@ function createItemContext(): ItemContext {
 }
 
 function addStatusOn(tiles: Point[], name: StatusName, turns: number) {
-  if (tiles.some((tile) => isSameTile(tile, playerPosition))) {
-    addPlayerStatus(name, turns);
+  if (tiles.some((tile) => isSameTile(tile, heroPosition))) {
+    addHeroStatus(name, turns);
   }
   for (const enemy of enemies) {
     if (tiles.some((tile) => isSameTile(tile, enemy.position))) {
@@ -309,8 +309,8 @@ function burnUpTile(tile: Point) {
 // Sets burning the characters on the tiles, except levitating ones.
 function setAlight(tiles: Point[]) {
   const isOn = (position: Point) => tiles.some((tile) => isSameTile(tile, position));
-  if (isOn(playerPosition) && !hasStatus(playerStatuses, 'levitating')) {
-    addPlayerStatus('burning', BURNING_TURNS);
+  if (isOn(heroPosition) && !hasStatus(heroStatuses, 'levitating')) {
+    addHeroStatus('burning', BURNING_TURNS);
   }
   const isBurnable = ({ position, statuses }: Enemy) =>
     isOn(position) && !hasStatus(statuses, 'levitating');
@@ -324,15 +324,15 @@ function showStatusText(tile: Point, name: StatusName) {
   damageNumbers.show(roomView, createStatusText(TVG, name), tile);
 }
 
-function addPlayerStatus(name: StatusName, turns: number) {
-  if (!hasStatus(playerStatuses, name)) {
-    showStatusText(playerPosition, name);
+function addHeroStatus(name: StatusName, turns: number) {
+  if (!hasStatus(heroStatuses, name)) {
+    showStatusText(heroPosition, name);
   }
-  addStatus(playerStatuses, name, turns);
-  if (isHelpless(playerStatuses)) {
+  addStatus(heroStatuses, name, turns);
+  if (isHelpless(heroStatuses)) {
     stopWalking();
   }
-  updatePlayerLook();
+  updateHeroLook();
 }
 
 // The name shows only over an enemy in view, so it does not give away the others.
@@ -344,40 +344,40 @@ function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
   showEnemy(enemy);
 }
 
-const playerAccuracy = () => PLAYER_ACCURACY + (playerLevel - 1) * LEVEL_UP_ACCURACY;
-const playerEvasion = () => PLAYER_EVASION + (playerLevel - 1) * LEVEL_UP_EVASION;
-const experienceToLevelUp = () => playerLevel * EXPERIENCE_PER_LEVEL;
+const heroAccuracy = () => HERO_ACCURACY + (heroLevel - 1) * LEVEL_UP_ACCURACY;
+const heroEvasion = () => HERO_EVASION + (heroLevel - 1) * LEVEL_UP_EVASION;
+const experienceToLevelUp = () => heroLevel * EXPERIENCE_PER_LEVEL;
 
 function levelUp() {
-  playerLevel++;
-  playerMaxHp += LEVEL_UP_HP;
-  playerHp += LEVEL_UP_HP;
-  showPlayerHp();
-  showPlayerStats();
+  heroLevel++;
+  heroMaxHp += LEVEL_UP_HP;
+  heroHp += LEVEL_UP_HP;
+  showHeroHp();
+  showHeroStats();
   messageLog.add('Level up! Your max HP, accuracy, and evasion went up.');
 }
 
 function gainExperience(amount: number) {
-  playerExperience += amount;
-  while (playerExperience >= experienceToLevelUp()) {
-    playerExperience -= experienceToLevelUp();
+  heroExperience += amount;
+  while (heroExperience >= experienceToLevelUp()) {
+    heroExperience -= experienceToLevelUp();
     levelUp();
   }
-  showPlayerStats();
+  showHeroStats();
 }
 
-function showPlayerStats() {
-  const experience = `XP ${playerExperience}/${experienceToLevelUp()}`;
+function showHeroStats() {
+  const experience = `XP ${heroExperience}/${experienceToLevelUp()}`;
   // Strength shows once it differs from where it started.
-  const strength = playerStrength !== STARTING_STRENGTH ? ` · Str ${playerStrength}` : '';
-  statsLabel.textContent = `Lv ${playerLevel} · ${experience}${strength}`;
-  statusBar.show(playerStatuses);
+  const strength = heroStrength !== STARTING_STRENGTH ? ` · Str ${heroStrength}` : '';
+  statsLabel.textContent = `Lv ${heroLevel} · ${experience}${strength}`;
+  statusBar.show(heroStatuses);
 }
 
 // A levitating character floats above its tile.
-function nudgePlayer(tile: Point, offset: Point) {
-  const lift = hasStatus(playerStatuses, 'levitating') ? LEVITATION_HEIGHT : 0;
-  roomView.nudge(player, tile, { x: offset.x, y: offset.y - lift });
+function nudgeHero(tile: Point, offset: Point) {
+  const lift = hasStatus(heroStatuses, 'levitating') ? LEVITATION_HEIGHT : 0;
+  roomView.nudge(hero, tile, { x: offset.x, y: offset.y - lift });
 }
 
 function nudgeEnemy(enemy: Enemy, tile: Point, offset: Point) {
@@ -385,16 +385,16 @@ function nudgeEnemy(enemy: Enemy, tile: Point, offset: Point) {
   roomView.nudge(enemy.paint, tile, { x: offset.x, y: offset.y - lift });
 }
 
-// Shows the player's effects: their colors, and the enemies sensed by telepathy.
-function updatePlayerLook() {
-  tintCharacter(player, tintOf(playerStatuses));
-  player.opacity(hasStatus(playerStatuses, 'invisible') ? INVISIBLE_OPACITY : 255);
-  nudgePlayer(playerPosition, { x: 0, y: 0 });
+// Shows the hero's effects: their colors, and the enemies sensed by telepathy.
+function updateHeroLook() {
+  tintCharacter(hero, tintOf(heroStatuses));
+  hero.opacity(hasStatus(heroStatuses, 'invisible') ? INVISIBLE_OPACITY : 255);
+  nudgeHero(heroPosition, { x: 0, y: 0 });
   updateVision();
   for (const enemy of enemies) {
     showEnemy(enemy);
   }
-  showPlayerStats();
+  showHeroStats();
 }
 
 const inventoryPanel = createInventoryPanel({
@@ -509,9 +509,9 @@ function applyCamera() {
   updateCursorTile();
 }
 
-// Moves the camera toward the player by a part of the remaining distance each frame.
-// Only player movement calls this, so attacks leave the camera where the player dragged it.
-function followPlayer() {
+// Moves the camera toward the hero by a part of the remaining distance each frame.
+// Only hero movement calls this, so attacks leave the camera where the player dragged it.
+function followHero() {
   if (cameraFrame || cameraDrag?.isDragging || pinch) {
     return;
   }
@@ -519,7 +519,7 @@ function followPlayer() {
   let lastTime: number | null = null;
 
   const step = (time: number) => {
-    const target = roomView.tileCenter(playerPosition);
+    const target = roomView.tileCenter(heroPosition);
     const amount =
       lastTime === null ? 0 : Math.min(1, ((time - lastTime) / 1000) * CAMERA_FOLLOW_INTENSITY);
     lastTime = time;
@@ -543,14 +543,14 @@ function followPlayer() {
   cameraFrame = requestAnimationFrame(step);
 }
 
-function showPlayerHp(options?: { jump: boolean }) {
-  playerHealthBar.show(playerHp / playerMaxHp, options);
-  hpLabel.textContent = `${playerHp}/${playerMaxHp}`;
+function showHeroHp(options?: { jump: boolean }) {
+  heroHealthBar.show(heroHp / heroMaxHp, options);
+  hpLabel.textContent = `${heroHp}/${heroMaxHp}`;
 }
 
-// Computes what the player sees, and shows it on the map.
+// Computes what the hero sees, and shows it on the map.
 function lookAround(openDoors: Point[]) {
-  const vision = computeVision(room, playerPosition, playerViewDistance, openDoors);
+  const vision = computeVision(room, heroPosition, heroViewDistance, openDoors);
 
   inView = room.tiles.map((row) => row.map(() => false));
   for (const { x, y } of vision.tiles) {
@@ -560,20 +560,20 @@ function lookAround(openDoors: Point[]) {
 
   roomView.setOpenDoors(openDoors);
   roomView.setLight({
-    center: playerPosition,
+    center: heroPosition,
     radius: vision.radius,
     outline: vision.outline,
     tiles: vision.tiles,
   });
 }
 
-// Looks from the player's tile again. Call this when the player, an enemy, or the view distance
+// Looks from the hero's tile again. Call this when the hero, an enemy, or the view distance
 // changes, because an enemy standing on a door also opens the view through it.
 function updateVision() {
   const doors = [...openDoors]
     .sort((a, b) => a - b)
     .map((key) => ({ x: key % room.width, y: Math.floor(key / room.width) }));
-  const state = JSON.stringify([playerPosition, playerViewDistance, doors]);
+  const state = JSON.stringify([heroPosition, heroViewDistance, doors]);
   if (state !== visionState) {
     visionState = state;
     lookAround(doors);
@@ -615,7 +615,7 @@ function enterDoor(tile: Point) {
 
 function leaveDoor(tile: Point) {
   const isHeld =
-    isSameTile(playerPosition, tile) ||
+    isSameTile(heroPosition, tile) ||
     enemies.some(({ position }) => isSameTile(position, tile)) ||
     itemsAt(tile).length > 0;
   if (!isHeld) {
@@ -623,19 +623,19 @@ function leaveDoor(tile: Point) {
   }
 }
 
-function placePlayer(tile: Point) {
-  const previous = playerPosition;
-  playerPosition = tile;
+function placeHero(tile: Point) {
+  const previous = heroPosition;
+  heroPosition = tile;
   leaveDoor(previous);
   enterDoor(tile);
-  roomView.place(player, tile.x, tile.y);
-  nudgePlayer(tile, { x: 0, y: 0 });
+  roomView.place(hero, tile.x, tile.y);
+  nudgeHero(tile, { x: 0, y: 0 });
   updateVision();
   roomView.cutAwayWalls(tile);
-  followPlayer();
+  followHero();
 }
 
-// Draws an enemy while it is in view, or while the player senses it by telepathy.
+// Draws an enemy while it is in view, or while the hero senses it by telepathy.
 function showEnemy(enemy: Enemy) {
   const { x, y } = enemy.position;
   tintCharacter(enemy.paint, tintOf(enemy.statuses));
@@ -644,7 +644,7 @@ function showEnemy(enemy: Enemy) {
     roomView.place(enemy.paint, x, y);
     nudgeEnemy(enemy, enemy.position, { x: 0, y: 0 });
     roomView.placeOverlay(enemy.healthBar.scene, x, y);
-  } else if (hasStatus(playerStatuses, 'telepathy')) {
+  } else if (hasStatus(heroStatuses, 'telepathy')) {
     // Drawn above the darkness, so it shows through walls.
     enemy.paint.opacity(SENSED_ENEMY_OPACITY);
     roomView.placeOverlay(enemy.paint, x, y);
@@ -683,13 +683,13 @@ function startLevel() {
   for (const enemy of enemies) {
     enterDoor(enemy.position);
   }
-  playerPosition = room.start;
-  placePlayer(room.start);
-  // The player is drawn anew on each level, so the effects on them are shown again.
-  updatePlayerLook();
-  showPlayerHp({ jump: true });
+  heroPosition = room.start;
+  placeHero(room.start);
+  // The hero is drawn anew on each level, so the effects on them are shown again.
+  updateHeroLook();
+  showHeroHp({ jump: true });
 
-  // A new level starts with the camera already on the player.
+  // A new level starts with the camera already on the hero.
   cancelAnimationFrame(cameraFrame);
   cameraFrame = 0;
   cameraFocus = roomView.tileCenter(room.start);
@@ -701,9 +701,9 @@ function startLevel() {
   canvas.update().render();
 }
 
-// Items left on the stairs block them, so the player has to clear them first.
+// Items left on the stairs block them, so the hero has to clear them first.
 function canGoDownStairs() {
-  return isSameTile(playerPosition, room.stairs) && itemsAt(room.stairs).length === 0;
+  return isSameTile(heroPosition, room.stairs) && itemsAt(room.stairs).length === 0;
 }
 
 function goDownStairs() {
@@ -715,7 +715,7 @@ function goDownStairs() {
 function replaceLevel() {
   damageNumbers.clear();
   mapScene.remove(roomView.scene);
-  ({ room, explored, inView, seenEnemies, roomView, hazards, player, enemies } = createLevel());
+  ({ room, explored, inView, seenEnemies, roomView, hazards, hero, enemies } = createLevel());
   startLevel();
 }
 
@@ -734,7 +734,7 @@ function occupiedTiles(except?: Enemy): Point[] {
   return enemies.filter((enemy) => enemy !== except).map((enemy) => enemy.position);
 }
 
-// The tiles the player knows are taken, so the player's paths cannot reveal unseen enemies.
+// The tiles the hero knows are taken, so the hero's paths cannot reveal unseen enemies.
 function seenEnemyTiles(except?: Enemy): Point[] {
   return [...seenEnemies].filter((enemy) => enemy !== except).map((enemy) => enemy.position);
 }
@@ -745,7 +745,7 @@ function showDamage(amount: number, tile: Point, target: DamageTarget) {
 
 function endGame() {
   isGameOver = true;
-  roomView.remove(player);
+  roomView.remove(hero);
 
   const plural = (count: number, one: string, many: string) =>
     `${count} ${count === 1 ? one : many}`;
@@ -763,12 +763,12 @@ function endGame() {
   gameOverScreen.hidden = false;
 }
 
-// Damage breaks the ice of a frozen player.
-function damagePlayer(amount: number) {
-  playerHp = Math.max(0, playerHp - amount);
-  delete playerStatuses.frozen;
-  showPlayerHp();
-  showDamage(amount, playerPosition, 'player');
+// Damage breaks the ice of a frozen hero.
+function damageHero(amount: number) {
+  heroHp = Math.max(0, heroHp - amount);
+  delete heroStatuses.frozen;
+  showHeroHp();
+  showDamage(amount, heroPosition, 'hero');
 }
 
 // The number is only shown for an enemy in view, so it does not give away the others.
@@ -795,25 +795,25 @@ function killEnemy(enemy: Enemy) {
   updateVision();
 }
 
-// A paralyzed or frozen player cannot evade.
+// A paralyzed or frozen hero cannot evade.
 function playEnemyAttack(enemy: Enemy, onDone: () => void) {
   const attackerTile = enemy.position;
-  const isHit = isHelpless(playerStatuses) || rollHit(ENEMY_ACCURACY, playerEvasion());
+  const isHit = isHelpless(heroStatuses) || rollHit(ENEMY_ACCURACY, heroEvasion());
   if (!seenEnemies.has(enemy)) {
     messageLog.add('Something unseen attacked you.');
   }
 
   finishAttackEffect = playAttackEffect({
-    lunge: scalePoint(tileDistance(attackerTile, playerPosition), LUNGE_DISTANCE),
+    lunge: scalePoint(tileDistance(attackerTile, heroPosition), LUNGE_DISTANCE),
     isMiss: !isHit,
     moveAttacker: (offset) => nudgeEnemy(enemy, attackerTile, offset),
-    moveTarget: (offset) => nudgePlayer(playerPosition, offset),
+    moveTarget: (offset) => nudgeHero(heroPosition, offset),
     flashTarget: (isFlashing) => {
       if (isFlashing) {
-        player.resetEffects();
-        player.fillEffect(220, 60, 60, 255);
+        hero.resetEffects();
+        hero.fillEffect(220, 60, 60, 255);
       } else {
-        tintCharacter(player, tintOf(playerStatuses));
+        tintCharacter(hero, tintOf(heroStatuses));
       }
     },
     shake: (offset) => {
@@ -824,10 +824,10 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     onHit: () => {
       if (isHit) {
         // The armor takes away part of the hit, as in Char.attack() of Shattered Pixel Dungeon.
-        damagePlayer(Math.max(0, ENEMY_ATTACK_DAMAGE - rollArmor(equipment)));
-        showPlayerStats();
+        damageHero(Math.max(0, ENEMY_ATTACK_DAMAGE - rollArmor(equipment)));
+        showHeroStats();
       } else {
-        damageNumbers.show(roomView, createEvadeText(TVG), playerPosition);
+        damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
       }
       // Being attacked stops the walk, even by a miss, so the player can decide again.
       path = [];
@@ -835,7 +835,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     },
     onEnd: () => {
       finishAttackEffect = null;
-      if (playerHp === 0) {
+      if (heroHp === 0) {
         endGame();
       }
       onDone();
@@ -843,9 +843,9 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
   });
 }
 
-// Ends one action of the player. A hasted player takes two actions in each turn of the enemies.
+// Ends one action of the hero. A hasted hero takes two actions in each turn of the enemies.
 function passTurn(onDone: () => void) {
-  if (hasStatus(playerStatuses, 'haste') && !hasActedOnce) {
+  if (hasStatus(heroStatuses, 'haste') && !hasActedOnce) {
     hasActedOnce = true;
     canvas.update().render();
     onDone();
@@ -855,26 +855,26 @@ function passTurn(onDone: () => void) {
   runEnemyTurn(onDone);
 }
 
-// Sight goes both ways, unless the player is invisible.
-function canEnemySeePlayer(enemy: Enemy) {
-  return isInView(enemy.position) && !hasStatus(playerStatuses, 'invisible');
+// Sight goes both ways, unless the hero is invisible.
+function canEnemySeeHero(enemy: Enemy) {
+  return isInView(enemy.position) && !hasStatus(heroStatuses, 'invisible');
 }
 
 // Fire sets alight whoever stands in it, poison gas hurts, and paralyzing gas paralyzes. Then
 // burning hurts.
 function applyHazards() {
   const isOnFire = (tile: Point) => hazards.kindsAt(tile).includes('fire');
-  setAlight([playerPosition, ...enemies.map(({ position }) => position)].filter(isOnFire));
+  setAlight([heroPosition, ...enemies.map(({ position }) => position)].filter(isOnFire));
 
-  const playerHazards = hazards.kindsAt(playerPosition);
-  if (playerHazards.includes('paralysis')) {
-    addPlayerStatus('paralyzed', PARALYZED_TURNS);
+  const heroHazards = hazards.kindsAt(heroPosition);
+  if (heroHazards.includes('paralysis')) {
+    addHeroStatus('paralyzed', PARALYZED_TURNS);
   }
-  if (playerHazards.includes('poison')) {
-    damagePlayer(normalIntRange(Math.random, ...POISON_DAMAGE));
+  if (heroHazards.includes('poison')) {
+    damageHero(normalIntRange(Math.random, ...POISON_DAMAGE));
   }
-  if (hasStatus(playerStatuses, 'burning')) {
-    damagePlayer(normalIntRange(Math.random, ...BURN_DAMAGE));
+  if (hasStatus(heroStatuses, 'burning')) {
+    damageHero(normalIntRange(Math.random, ...BURN_DAMAGE));
   }
 
   for (const enemy of enemies) {
@@ -893,7 +893,7 @@ function applyHazards() {
 
 // The end of a turn, after every enemy acted. Effects wear off and gas spreads, then fire and gas
 // do their harm, and then fire burns down.
-// While the player cannot act, the next turn follows by itself.
+// While the hero cannot act, the next turn follows by itself.
 function endTurn(onDone: () => void) {
   if (isGameOver) {
     canvas.update().render();
@@ -901,7 +901,7 @@ function endTurn(onDone: () => void) {
     return;
   }
 
-  tickStatuses(playerStatuses);
+  tickStatuses(heroStatuses);
   for (const enemy of enemies) {
     tickStatuses(enemy.statuses);
   }
@@ -911,13 +911,13 @@ function endTurn(onDone: () => void) {
   for (const enemy of enemies.filter(({ hp }) => hp === 0)) {
     killEnemy(enemy);
   }
-  updatePlayerLook();
-  if (playerHp === 0) {
+  updateHeroLook();
+  if (heroHp === 0) {
     endGame();
   }
   canvas.update().render();
 
-  if (!isGameOver && isHelpless(playerStatuses)) {
+  if (!isGameOver && isHelpless(heroStatuses)) {
     setTimeout(() => runEnemyTurn(onDone), HELPLESS_TURN_MS);
     return;
   }
@@ -925,7 +925,7 @@ function endTurn(onDone: () => void) {
 }
 
 // Lets each enemy act once, one after another, then ends the turn.
-// Every action of the player ends with this, so it also counts the player's turns.
+// Every action of the hero ends with this, so it also counts the hero's turns.
 function runEnemyTurn(onDone: () => void) {
   turnCount++;
   // A hasted enemy acts twice in a row.
@@ -941,15 +941,15 @@ function runEnemyTurn(onDone: () => void) {
     }
 
     const wasHunting = enemy.state === 'hunting';
-    enemy.hasSeenPlayer = canEnemySeePlayer(enemy);
+    enemy.hasSeenHero = canEnemySeeHero(enemy);
     if (isHelpless(enemy.statuses)) {
       actNext();
       return;
     }
     const action = enemy.behavior(enemy, {
       room,
-      player: playerPosition,
-      canSeePlayer: enemy.hasSeenPlayer,
+      hero: heroPosition,
+      canSeeHero: enemy.hasSeenHero,
       occupied: occupiedTiles(enemy),
     });
 
@@ -980,16 +980,16 @@ function runEnemyTurn(onDone: () => void) {
   actNext();
 }
 
-function playPlayerAttack(enemy: Enemy) {
-  const attackerTile = playerPosition;
+function playHeroAttack(enemy: Enemy) {
+  const attackerTile = heroPosition;
   // A surprised enemy cannot evade, and neither can a paralyzed or frozen one.
-  const isSurprise = !enemy.hasSeenPlayer;
+  const isSurprise = !enemy.hasSeenHero;
   const isHit =
-    isSurprise || isHelpless(enemy.statuses) || rollHit(playerAccuracy(), ENEMY_EVASION);
+    isSurprise || isHelpless(enemy.statuses) || rollHit(heroAccuracy(), ENEMY_EVASION);
   // Attacking ends invisibility.
-  if (hasStatus(playerStatuses, 'invisible')) {
-    delete playerStatuses.invisible;
-    updatePlayerLook();
+  if (hasStatus(heroStatuses, 'invisible')) {
+    delete heroStatuses.invisible;
+    updateHeroLook();
   }
   if (!seenEnemies.has(enemy)) {
     messageLog.add('You attacked an unseen enemy.');
@@ -998,7 +998,7 @@ function playPlayerAttack(enemy: Enemy) {
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE),
     isMiss: !isHit,
-    moveAttacker: (offset) => nudgePlayer(attackerTile, offset),
+    moveAttacker: (offset) => nudgeHero(attackerTile, offset),
     moveTarget: (offset) => nudgeEnemy(enemy, enemy.position, offset),
     flashTarget: (isFlashing) => {
       if (isFlashing) {
@@ -1014,11 +1014,11 @@ function playPlayerAttack(enemy: Enemy) {
         if (isSurprise) {
           damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
         }
-        const damage = rollDamage(equipment, playerStrength);
-        attackEnemy(enemy, playerPosition, damage);
+        const damage = rollDamage(equipment, heroStrength);
+        attackEnemy(enemy, heroPosition, damage);
         showDamage(damage, enemy.position, 'enemy');
       } else {
-        alertEnemy(enemy, playerPosition);
+        alertEnemy(enemy, heroPosition);
         damageNumbers.show(roomView, createEvadeText(TVG), enemy.position);
       }
     },
@@ -1034,9 +1034,9 @@ function playPlayerAttack(enemy: Enemy) {
 
 // Returns the tiles to walk through to stand next to an enemy.
 function pathToAttack(enemy: Enemy): Point[] {
-  return isAdjacent(enemy.position, playerPosition)
+  return isAdjacent(enemy.position, heroPosition)
     ? []
-    : findPath(room, playerPosition, enemy.position, seenEnemyTiles(enemy), isExplored).slice(0, -1);
+    : findPath(room, heroPosition, enemy.position, seenEnemyTiles(enemy), isExplored).slice(0, -1);
 }
 
 function walk() {
@@ -1058,8 +1058,8 @@ function walk() {
   const next = path.shift();
   if (!next) {
     isWalking = false;
-    if (attackTarget && isAdjacent(attackTarget.position, playerPosition)) {
-      playPlayerAttack(attackTarget);
+    if (attackTarget && isAdjacent(attackTarget.position, heroPosition)) {
+      playHeroAttack(attackTarget);
     }
     attackTarget = null;
     return;
@@ -1074,7 +1074,7 @@ function walk() {
     attackTarget = null;
     isWalking = false;
     if (isChosenTile && !seenEnemies.has(blocker)) {
-      playPlayerAttack(blocker);
+      playHeroAttack(blocker);
     }
     return;
   }
@@ -1082,7 +1082,7 @@ function walk() {
   isWalking = true;
   // Seeing a new enemy on this step empties the path, which must not count as arriving.
   const hasArrived = path.length === 0;
-  placePlayer(next);
+  placeHero(next);
   // As in Shattered Pixel Dungeon, items are only picked up on the tile the player chose.
   const hasPickedUp = hasArrived && !attackTarget && pickUpItems(next);
 
@@ -1094,9 +1094,9 @@ function walk() {
   passTurn(() => setTimeout(walk, STEP_INTERVAL_MS));
 }
 
-// A paralyzed or frozen player cannot act until the turns pass by themselves.
+// A paralyzed or frozen hero cannot act until the turns pass by themselves.
 function cannotAct() {
-  return isGameOver || isHelpless(playerStatuses);
+  return isGameOver || isHelpless(heroStatuses);
 }
 
 // A new input ends the running effects, so they never delay play.
@@ -1107,7 +1107,7 @@ function finishRunningEffects() {
 }
 
 function traceTo(target: Point, rule: PathRule): Trajectory {
-  return traceLine(playerPosition, target, rule, {
+  return traceLine(heroPosition, target, rule, {
     isBlocked({ x, y }) {
       const tile = room.tiles[y]?.[x] ?? 'void';
       return (
@@ -1187,9 +1187,9 @@ function pressTileAt(position: Point, isMouse: boolean) {
 
   const isStairs = isSameTile(target, room.stairs);
 
-  // A click on the player's own tile picks up what lies there. Only a click that picks up nothing
+  // A click on the hero's own tile picks up what lies there. Only a click that picks up nothing
   // goes down the stairs, so one click never does both.
-  if (isSameTile(target, playerPosition)) {
+  if (isSameTile(target, heroPosition)) {
     if (!pickUpItems(target) && canGoDownStairs()) {
       goDownStairs();
       return;
@@ -1207,7 +1207,7 @@ function pressTileAt(position: Point, isMouse: boolean) {
     path = pathToAttack(clicked);
     attackTarget = clicked;
   } else {
-    path = findPath(room, playerPosition, target, seenEnemyTiles(), isExplored);
+    path = findPath(room, heroPosition, target, seenEnemyTiles(), isExplored);
     attackTarget = null;
   }
 
@@ -1228,7 +1228,7 @@ function clampToMap({ x, y }: Point): Point {
   };
 }
 
-function stopFollowingPlayer() {
+function stopFollowingHero() {
   cancelAnimationFrame(cameraFrame);
   cameraFrame = 0;
 }
@@ -1245,7 +1245,7 @@ function dragCamera(position: Point) {
     }
     cameraDrag.isDragging = true;
     cameraDrag.last = position;
-    stopFollowingPlayer();
+    stopFollowingHero();
   }
 
   cameraFocus = clampToMap({
@@ -1306,7 +1306,7 @@ canvasElement.addEventListener('pointerdown', (event) => {
     // A second finger makes this a pinch, so the touch no longer drags or presses a tile.
     cameraDrag = null;
     pinch = measurePinch();
-    stopFollowingPlayer();
+    stopFollowingHero();
   }
 });
 
@@ -1373,7 +1373,7 @@ function takeFromBag(name: ItemName): boolean {
 
 function dropFromBag(name: ItemName) {
   if (takeFromBag(name)) {
-    dropItem(name, playerPosition);
+    dropItem(name, heroPosition);
     updateVision();
     passTurn(() => {});
   }
@@ -1402,7 +1402,7 @@ function shatterPotion(name: ItemName, tile: Point) {
     messageLog.add("The potion's flask broke, but nothing happened.");
     return;
   }
-  // Checked before the effect, because the player still sees an enemy turn invisible.
+  // Checked before the effect, because the hero still sees an enemy turn invisible.
   const isSeen = seenEnemies.has(enemy);
   if (enemyEffect.heal) {
     healEnemy(enemy, enemyEffect.heal);
@@ -1432,7 +1432,7 @@ function throwItem(name: ItemName) {
       finishAttackEffect = playThrow({
         view: roomView,
         paint: createItemPaint(TVG, potionLore.lookOf(name).icon),
-        from: playerPosition,
+        from: heroPosition,
         to: end,
         render: renderCanvas,
         onLand() {
@@ -1472,7 +1472,7 @@ function unequipItem(slot: EquipmentSlot) {
   changeEquipment(() => unequip(equipment, inventory, slot));
 }
 
-// Drinking a potion tells the player what it is. A harmful one breaks at the player's feet.
+// Drinking a potion tells the player what it is. A harmful one breaks at the hero's feet.
 function useItem(name: ItemName) {
   finishRunningEffects();
   const { use, shatter, drinkMessage } = ITEMS[name];
@@ -1489,7 +1489,7 @@ function useItem(name: ItemName) {
   inventoryPanel.refresh();
   inventoryPanel.close();
   if (shatter) {
-    shatterPotion(name, playerPosition);
+    shatterPotion(name, heroPosition);
   } else {
     use?.(createItemContext());
   }
@@ -1547,12 +1547,12 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   cancelTargeting();
   runSeed = newRunSeed();
   floor = 1;
-  playerHp = PLAYER_MAX_HP;
-  playerMaxHp = PLAYER_MAX_HP;
-  playerLevel = 1;
-  playerExperience = 0;
-  playerStrength = STARTING_STRENGTH;
-  playerStatuses = {};
+  heroHp = HERO_MAX_HP;
+  heroMaxHp = HERO_MAX_HP;
+  heroLevel = 1;
+  heroExperience = 0;
+  heroStrength = STARTING_STRENGTH;
+  heroStatuses = {};
   hasActedOnce = false;
   potionLore = createPotionLore(createRandom(runSeed));
   killCount = 0;

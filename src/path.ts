@@ -14,7 +14,7 @@ const STEPS: Point[] = [
 
 // Breadth-first search from the target, so the links from `from` read in walking order.
 // Returns the tiles to walk through, ending at `to`, or nothing if `to` is unreachable.
-// Tiles that isKnown rejects count as blocked, so the player's paths cannot reveal the map.
+// Tiles that isKnown rejects count as blocked, so the hero's paths cannot reveal the map.
 export function findPath(
   room: Room,
   from: Point,

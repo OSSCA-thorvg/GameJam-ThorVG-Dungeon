@@ -29,7 +29,7 @@ const ICONS: Record<StatusName, string> = {
     'C1 4.5 2.5 3.5 3 2C3.8 3.2 4 4 4.5 4.5C4.8 3 4.8 1.5 5 0Z"/>',
 };
 
-// The player's effects as a row of icons with the turns left, below the health bar. Pointing at
+// The hero's effects as a row of icons with the turns left, below the health bar. Pointing at
 // an icon, or tapping it, explains the effect.
 export interface StatusBar {
   show(statuses: Statuses): void;

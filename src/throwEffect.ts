@@ -48,7 +48,7 @@ export function playThrow({ view, paint, from, to, render, onLand }: Throw): () 
 
   const step = (time: number) => {
     startTime ??= time;
-    // A throw onto the player's own tile has no distance to fly, so it lands at once.
+    // A throw onto the hero's own tile has no distance to fly, so it lands at once.
     const progress = durationMs > 0 ? (time - startTime) / durationMs : 1;
     if (progress >= 1) {
       land();

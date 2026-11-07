@@ -6,12 +6,12 @@ import type { Statuses } from './status';
 
 // Placeholder values for testing combat.
 const ENEMY_MAX_HP = 10;
-export const PLAYER_MAX_HP = 20;
+export const HERO_MAX_HP = 20;
 export const ENEMY_ATTACK_DAMAGE = 2;
 
 // Same as the starting hero in Shattered Pixel Dungeon.
-export const PLAYER_ACCURACY = 10;
-export const PLAYER_EVASION = 5;
+export const HERO_ACCURACY = 10;
+export const HERO_EVASION = 5;
 // Same as a rat, the first enemy in Shattered Pixel Dungeon.
 export const ENEMY_ACCURACY = 8;
 export const ENEMY_EVASION = 2;
@@ -22,13 +22,13 @@ export function rollHit(accuracy: number, evasion: number): boolean {
   return Math.random() * accuracy >= Math.random() * evasion;
 }
 
-// The player has no stealth yet. It starts at 0 in Shattered Pixel Dungeon as well.
-const PLAYER_STEALTH = 0;
+// The hero has no stealth yet. It starts at 0 in Shattered Pixel Dungeon as well.
+const HERO_STEALTH = 0;
 // Placeholder value. Shattered Pixel Dungeon divides the distance by 2, so a wandering enemy
 // notices for sure only within 2 tiles. Dividing by 4 makes that 4 tiles, and 50% at 8 tiles.
 const DETECTION_DISTANCE_DIVISOR = 4;
-// Placeholder values. How likely an enemy that lost the player is to look ahead along the way the
-// player was going, instead of going back to wandering, and how many steps ahead it looks.
+// Placeholder values. How likely an enemy that lost the hero is to look ahead along the way the
+// hero was going, instead of going back to wandering, and how many steps ahead it looks.
 const SEARCH_CHANCE = 0.5;
 const SEARCH_STEPS = 6;
 // Placeholder value. How many random tiles a wandering enemy tries before it waits a turn.
@@ -38,9 +38,9 @@ export type EnemyAction = { type: 'wait' } | { type: 'move'; to: Point } | { typ
 
 export interface EnemyContext {
   room: Room;
-  player: Point;
-  // Whether the enemy can see the player now.
-  canSeePlayer: boolean;
+  hero: Point;
+  // Whether the enemy can see the hero now.
+  canSeeHero: boolean;
   // Tiles held by the other enemies.
   occupied: Point[];
 }
@@ -53,20 +53,20 @@ export interface Enemy {
   name: string;
   position: Point;
   hp: number;
-  // A wandering enemy walks to random places. A hunting one goes after the player, or after where
-  // it last saw the player, as the Wandering and Hunting states of Shattered Pixel Dungeon.
+  // A wandering enemy walks to random places. A hunting one goes after the hero, or after where
+  // it last saw the hero, as the Wandering and Hunting states of Shattered Pixel Dungeon.
   state: 'wandering' | 'hunting';
   // Where the enemy is going.
   target: Point | null;
-  // Where the enemy last saw the player, and the way the player was moving then.
+  // Where the enemy last saw the hero, and the way the hero was moving then.
   lastSeen: Point | null;
   heading: Point | null;
-  // Whether the enemy already looked ahead for the player since it lost sight of them.
+  // Whether the enemy already looked ahead for the hero since it lost sight of them.
   hasSearched: boolean;
-  // Whether the enemy saw the player at the start of its last turn. As in Shattered Pixel Dungeon,
-  // an enemy that did not is surprised by the player's attack, such as one that just came through
+  // Whether the enemy saw the hero at the start of its last turn. As in Shattered Pixel Dungeon,
+  // an enemy that did not is surprised by the hero's attack, such as one that just came through
   // a door.
-  hasSeenPlayer: boolean;
+  hasSeenHero: boolean;
   statuses: Statuses;
   paint: Scene;
   healthBar: HealthBar;
@@ -77,9 +77,9 @@ const isSameTile = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
 
 // Wandering.detectionChance of Shattered Pixel Dungeon, 1 in (distance / 2 + stealth), with a
 // larger divisor. A diagonal step counts as one.
-function detectionChance(enemy: Point, player: Point): number {
-  const distance = Math.max(Math.abs(enemy.x - player.x), Math.abs(enemy.y - player.y));
-  return 1 / (distance / DETECTION_DISTANCE_DIVISOR + PLAYER_STEALTH);
+function detectionChance(enemy: Point, hero: Point): number {
+  const distance = Math.max(Math.abs(enemy.x - hero.x), Math.abs(enemy.y - hero.y));
+  return 1 / (distance / DETECTION_DISTANCE_DIVISOR + HERO_STEALTH);
 }
 
 function stepToward(room: Room, from: Point, to: Point, blocked: Point[]): EnemyAction {
@@ -100,9 +100,9 @@ function randomDestination(room: Room, from: Point, blocked: Point[]): Point | n
   return null;
 }
 
-// Guesses where a player who went out of sight went: the tile farthest along the way they were
+// Guesses where the hero went after going out of sight: the tile farthest along the way they were
 // moving, within a few steps of where they were last seen.
-function guessPlayerTile(room: Room, lastSeen: Point, heading: Point): Point | null {
+function guessHeroTile(room: Room, lastSeen: Point, heading: Point): Point | null {
   const distances = distancesFrom(room, lastSeen);
   let best: Point | null = null;
   let bestProgress = 0;
@@ -118,30 +118,30 @@ function guessPlayerTile(room: Room, lastSeen: Point, heading: Point): Point | n
   return best;
 }
 
-export function alertEnemy(enemy: Enemy, player: Point): void {
-  if (enemy.lastSeen && !isSameTile(enemy.lastSeen, player)) {
-    enemy.heading = { x: player.x - enemy.lastSeen.x, y: player.y - enemy.lastSeen.y };
+export function alertEnemy(enemy: Enemy, hero: Point): void {
+  if (enemy.lastSeen && !isSameTile(enemy.lastSeen, hero)) {
+    enemy.heading = { x: hero.x - enemy.lastSeen.x, y: hero.y - enemy.lastSeen.y };
   }
   enemy.state = 'hunting';
-  enemy.target = player;
-  enemy.lastSeen = player;
+  enemy.target = hero;
+  enemy.lastSeen = hero;
   enemy.hasSearched = false;
 }
 
-// Wanders until it notices the player in view, then chases. When it loses sight of the player,
-// it goes to where it last saw them, which takes it through a door the player was seen using.
-// From there it either looks ahead along the player's way or goes back to wandering.
-export const chaser: EnemyBehavior = (enemy, { room, player, canSeePlayer, occupied }) => {
-  const blocked = [...occupied, player];
+// Wanders until it notices the hero in view, then chases. When it loses sight of the hero,
+// it goes to where it last saw them, which takes it through a door the hero was seen using.
+// From there it either looks ahead along the hero's way or goes back to wandering.
+export const chaser: EnemyBehavior = (enemy, { room, hero, canSeeHero, occupied }) => {
+  const blocked = [...occupied, hero];
 
-  const noticesPlayer =
-    canSeePlayer &&
-    (enemy.state === 'hunting' || Math.random() < detectionChance(enemy.position, player));
-  if (noticesPlayer) {
-    alertEnemy(enemy, player);
-    return isAdjacent(enemy.position, player)
+  const noticesHero =
+    canSeeHero &&
+    (enemy.state === 'hunting' || Math.random() < detectionChance(enemy.position, hero));
+  if (noticesHero) {
+    alertEnemy(enemy, hero);
+    return isAdjacent(enemy.position, hero)
       ? { type: 'attack' }
-      : stepToward(room, enemy.position, player, occupied);
+      : stepToward(room, enemy.position, hero, occupied);
   }
 
   if (enemy.state === 'hunting') {
@@ -153,7 +153,7 @@ export const chaser: EnemyBehavior = (enemy, { room, player, canSeePlayer, occup
     }
     const guess =
       !enemy.hasSearched && enemy.lastSeen && enemy.heading && Math.random() < SEARCH_CHANCE
-        ? guessPlayerTile(room, enemy.lastSeen, enemy.heading)
+        ? guessHeroTile(room, enemy.lastSeen, enemy.heading)
         : null;
     if (guess) {
       enemy.hasSearched = true;
@@ -191,7 +191,7 @@ export function createEnemy(
     lastSeen: null,
     heading: null,
     hasSearched: false,
-    hasSeenPlayer: false,
+    hasSeenHero: false,
     statuses: {},
     paint,
     healthBar,
@@ -211,8 +211,8 @@ export function healEnemy(enemy: Enemy, amount: number): void {
   enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
 }
 
-// Being attacked makes the enemy hunt the player.
-export function attackEnemy(enemy: Enemy, player: Point, damage: number): void {
-  alertEnemy(enemy, player);
+// Being attacked makes the enemy hunt the hero.
+export function attackEnemy(enemy: Enemy, hero: Point, damage: number): void {
+  alertEnemy(enemy, hero);
   damageEnemy(enemy, damage);
 }

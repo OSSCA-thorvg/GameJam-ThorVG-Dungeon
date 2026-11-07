@@ -8,7 +8,7 @@ type Color = [r: number, g: number, b: number];
 export type CursorTarget = 'floor' | 'enemy' | 'item' | 'target';
 
 // Who took the damage, which decides the color of the number.
-export type DamageTarget = 'enemy' | 'player';
+export type DamageTarget = 'enemy' | 'hero';
 
 // An effect that shows as a color over a character.
 export type CharacterTint = 'frozen' | 'paralyzed' | 'burning';
@@ -104,9 +104,9 @@ const ENEMY_HEALTH_BAR_HEIGHT = 5;
 const ENEMY_HEALTH_BAR_GAP = 4;
 
 // Placeholder values for the health bar at the top left of the screen.
-const PLAYER_HEALTH_BAR_MARGIN = 12;
-const PLAYER_HEALTH_BAR_WIDTH = 200;
-const PLAYER_HEALTH_BAR_HEIGHT = 16;
+const HERO_HEALTH_BAR_MARGIN = 12;
+const HERO_HEALTH_BAR_WIDTH = 200;
+const HERO_HEALTH_BAR_HEIGHT = 16;
 
 // No standard exists for these. Lost health stays visible briefly, then catches up.
 const HEALTH_TRAIL_HOLD_MS = 300;
@@ -151,7 +151,7 @@ const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
 };
 // Placeholder color for the word and mark shown about an attack, such as EVADE.
 const ATTACK_TEXT_COLOR: Color = [245, 205, 70];
-// Placeholder color for the mark of an enemy that noticed the player. Same red as the cursor
+// Placeholder color for the mark of an enemy that noticed the hero. Same red as the cursor
 // outline on an enemy, so it does not look like the yellow mark of a surprise attack.
 const NOTICE_MARK_COLOR: Color = [235, 60, 50];
 // Placeholder values for the speech bubble behind that mark, so it stands out on a dark map.
@@ -161,7 +161,7 @@ const NOTICE_BUBBLE_RADIUS = 3;
 const NOTICE_BUBBLE_TAIL = 4;
 const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   enemy: [255, 255, 255],
-  player: [255, 80, 70],
+  hero: [255, 80, 70],
 };
 const DUMMY_ENEMY: Color = [196, 64, 64];
 // Placeholder colors of each effect, for its name over a character and its icon on the screen.
@@ -191,8 +191,8 @@ const HAZARD_COLORS: Record<HazardKind, [...Color, number]> = {
 const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
 const ENEMY_HEALTH_BAR_FILL: Color = [90, 200, 90];
 const ENEMY_HEALTH_BAR_TRAIL: Color = [220, 80, 60];
-const PLAYER_HEALTH_BAR_FILL: Color = [210, 60, 55];
-const PLAYER_HEALTH_BAR_TRAIL: Color = [245, 200, 120];
+const HERO_HEALTH_BAR_FILL: Color = [210, 60, 55];
+const HERO_HEALTH_BAR_TRAIL: Color = [245, 200, 120];
 
 function mapToScreen(x: number, y: number): Point {
   return {
@@ -286,9 +286,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   const doors: (Wall & { area: Shape; floor: Shape })[] = [];
   let openDoors = new Set<number>();
   const tileKey = ({ x, y }: Point) => y * room.width + x;
-  const cutLayers = new Map<number, { scene: Scene; playerHole: Shape; cursorHole: Shape }>();
+  const cutLayers = new Map<number, { scene: Scene; heroHole: Shape; cursorHole: Shape }>();
   let cutWalls = new Set<Wall>();
-  let coveredPlayerTile: Point | null = null;
+  let coveredHeroTile: Point | null = null;
   let cursorTile: Point | null = null;
   let cursorTarget: CursorTarget = 'floor';
 
@@ -458,18 +458,18 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   const cutLayer = (index: number) => {
     let cut = cutLayers.get(index);
     if (!cut) {
-      const playerHole = createHole(CUTAWAY_RADIUS);
+      const heroHole = createHole(CUTAWAY_RADIUS);
       const cursorHole = createHole(CURSOR_CUTAWAY_RADIUS);
 
       const holes = new TVG.Scene();
-      holes.add(playerHole);
+      holes.add(heroHole);
       holes.add(cursorHole);
 
       const cutScene = new TVG.Scene();
       cutScene.mask(holes, TVG.MaskMethod.InvAlpha);
       layers[index].add(cutScene);
 
-      cut = { scene: cutScene, playerHole, cursorHole };
+      cut = { scene: cutScene, heroHole, cursorHole };
       cutLayers.set(index, cut);
     }
     return cut;
@@ -484,20 +484,20 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
 
   // Moves walls in and out of the masked scenes, then places the holes.
   const updateCuts = () => {
-    const playerCenter = coveredPlayerTile && tileCenter(coveredPlayerTile.x, coveredPlayerTile.y);
-    const playerHolePoint = playerCenter && {
-      x: playerCenter.x,
-      y: playerCenter.y - CHARACTER_SIZE / 2,
+    const heroCenter = coveredHeroTile && tileCenter(coveredHeroTile.x, coveredHeroTile.y);
+    const heroHolePoint = heroCenter && {
+      x: heroCenter.x,
+      y: heroCenter.y - CHARACTER_SIZE / 2,
     };
     const coveredCursorTile = cursorTile && isCovered(cursorTile) ? cursorTile : null;
     const cursorPoint =
       coveredCursorTile && tileCenter(coveredCursorTile.x, coveredCursorTile.y);
 
     const isInHole = (wall: Wall) =>
-      (coveredPlayerTile &&
-        playerHolePoint &&
-        layerOf(wall.tile) > layerOf(coveredPlayerTile) &&
-        wallReaches(wall, playerHolePoint, CUTAWAY_RADIUS)) ||
+      (coveredHeroTile &&
+        heroHolePoint &&
+        layerOf(wall.tile) > layerOf(coveredHeroTile) &&
+        wallReaches(wall, heroHolePoint, CUTAWAY_RADIUS)) ||
       (coveredCursorTile &&
         cursorPoint &&
         layerOf(wall.tile) > layerOf(coveredCursorTile) &&
@@ -534,10 +534,10 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
 
     // A hole only applies to the layers in front of its tile.
     for (const [index, cut] of cutLayers) {
-      const showPlayerHole = coveredPlayerTile && index > layerOf(coveredPlayerTile);
-      cut.playerHole.opacity(showPlayerHole ? 255 : 0);
-      if (playerHolePoint) {
-        cut.playerHole.translate(playerHolePoint.x, playerHolePoint.y);
+      const showHeroHole = coveredHeroTile && index > layerOf(coveredHeroTile);
+      cut.heroHole.opacity(showHeroHole ? 255 : 0);
+      if (heroHolePoint) {
+        cut.heroHole.translate(heroHolePoint.x, heroHolePoint.y);
       }
       const showCursorHole = coveredCursorTile && index > layerOf(coveredCursorTile);
       cut.cursorHole.opacity(showCursorHole ? 255 : 0);
@@ -643,7 +643,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       placeInLayer(paint, floorLayers[x + y], x, y);
     },
     cutAwayWalls(tile) {
-      coveredPlayerTile = isCovered(tile) ? tile : null;
+      coveredHeroTile = isCovered(tile) ? tile : null;
       updateCuts();
     },
     setCursorTile(tile, target) {
@@ -974,7 +974,7 @@ export function createSurpriseMark(TVG: ThorVGNamespace): Shape {
   return createFloatingText(TVG, '!', ATTACK_TEXT_COLOR);
 }
 
-// The mark shown over an enemy that just noticed the player, in a speech bubble.
+// The mark shown over an enemy that just noticed the hero, in a speech bubble.
 export function createNoticeMark(TVG: ThorVGNamespace): Scene {
   const width = DIGIT_WIDTH + NOTICE_BUBBLE_PADDING * 2;
   const height = DIGIT_HEIGHT + NOTICE_BUBBLE_PADDING * 2;
@@ -1086,13 +1086,13 @@ export function createEnemyHealthBar(TVG: ThorVGNamespace, render: () => void): 
 }
 
 // At the top left of the screen, because it is not part of the map.
-export function createPlayerHealthBar(TVG: ThorVGNamespace, render: () => void): HealthBar {
+export function createHeroHealthBar(TVG: ThorVGNamespace, render: () => void): HealthBar {
   return createHealthBar(TVG, render, {
-    left: PLAYER_HEALTH_BAR_MARGIN,
-    top: PLAYER_HEALTH_BAR_MARGIN,
-    width: PLAYER_HEALTH_BAR_WIDTH,
-    height: PLAYER_HEALTH_BAR_HEIGHT,
-    fillColor: PLAYER_HEALTH_BAR_FILL,
-    trailColor: PLAYER_HEALTH_BAR_TRAIL,
+    left: HERO_HEALTH_BAR_MARGIN,
+    top: HERO_HEALTH_BAR_MARGIN,
+    width: HERO_HEALTH_BAR_WIDTH,
+    height: HERO_HEALTH_BAR_HEIGHT,
+    fillColor: HERO_HEALTH_BAR_FILL,
+    trailColor: HERO_HEALTH_BAR_TRAIL,
   });
 }

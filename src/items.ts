@@ -40,7 +40,7 @@ export interface ItemContext {
   hp: number;
   maxHp: number;
   heal(amount: number): void;
-  // Puts an effect on the player.
+  // Puts an effect on the hero.
   addStatus(name: StatusName, turns: number): void;
   gainStrength(): void;
   gainLevel(): void;
@@ -65,7 +65,7 @@ export interface ItemDefinition {
   damage?: [min: number, max: number];
   armor?: [min: number, max: number];
   // Set for potions, which break where they land when thrown. A helpful one only splashes there.
-  // A harmful one has its effect there, and drinking it breaks it at the player's feet.
+  // A harmful one has its effect there, and drinking it breaks it at the hero's feet.
   potion?: 'helpful' | 'harmful';
   // SVG markup, shared by the map and the inventory window. Potions have none, because their color
   // changes every run.
@@ -74,7 +74,7 @@ export interface ItemDefinition {
   blockedReason?(context: ItemContext): string | null;
   use?(context: ItemContext): void;
   shatter?(context: ItemContext, tile: Point): void;
-  // The log line when the player drinks it.
+  // The log line when the hero drinks it.
   drinkMessage?: string;
   // What a helpful potion does to an enemy it hits. Without it, nothing happens.
   enemyEffect?: EnemyEffect;
@@ -83,7 +83,7 @@ export interface ItemDefinition {
 export interface EnemyEffect {
   heal?: number;
   status?: { name: StatusName; turns: number };
-  // The log line when the player sees it happen to the enemy with this name.
+  // The log line when the hero sees it happen to the enemy with this name.
   message(enemyName: string): string;
 }
 
@@ -240,7 +240,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
 // Same as fighting unarmed in Shattered Pixel Dungeon with the starting 10 strength.
 const UNARMED_DAMAGE: [min: number, max: number] = [1, 2];
 
-// Damage is unchanged at the strength the player starts with.
+// Damage is unchanged at the strength the hero starts with.
 export const STARTING_STRENGTH = 10;
 // Each point of strength above the starting strength adds this fraction of the damage, as each point
 // above 10 does in stat_modify_damage() of Dungeon Crawl Stone Soup.
