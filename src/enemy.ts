@@ -5,7 +5,6 @@ import { isAdjacent, isWalkable, type Point, type Room } from './room';
 
 // Placeholder values for testing combat.
 const ENEMY_MAX_HP = 10;
-const PLAYER_ATTACK_DAMAGE = 2;
 export const PLAYER_MAX_HP = 20;
 export const ENEMY_ATTACK_DAMAGE = 2;
 
@@ -193,10 +192,9 @@ export function createEnemy(
   };
 }
 
-// Returns the damage dealt. Being attacked makes the enemy hunt the player.
-export function attackEnemy(enemy: Enemy, player: Point): number {
+// Being attacked makes the enemy hunt the player.
+export function attackEnemy(enemy: Enemy, player: Point, damage: number): void {
   alertEnemy(enemy, player);
-  enemy.hp = Math.max(0, enemy.hp - PLAYER_ATTACK_DAMAGE);
+  enemy.hp = Math.max(0, enemy.hp - damage);
   enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
-  return PLAYER_ATTACK_DAMAGE;
 }

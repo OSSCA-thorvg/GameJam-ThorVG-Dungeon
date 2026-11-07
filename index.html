@@ -115,6 +115,17 @@
         border: none;
         cursor: pointer;
       }
+      #equipment-slots {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 6px;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #3a3c46;
+      }
+      .inventory-slot.empty-equipment svg {
+        opacity: 0.25;
+      }
       #inventory-slots {
         display: grid;
         grid-template-columns: repeat(5, 1fr);
@@ -171,6 +182,9 @@
       #inventory-details button:disabled {
         color: #7a7d86;
         cursor: default;
+      }
+      #inventory-details p.item-stat {
+        color: #9a9ca6;
       }
       #inventory-details .inventory-actions {
         display: flex;
@@ -253,6 +267,7 @@
           Bag
           <button id="inventory-close" aria-label="Close">×</button>
         </div>
+        <div id="equipment-slots"></div>
         <div id="inventory-slots"></div>
         <div id="inventory-details"></div>
       </div>

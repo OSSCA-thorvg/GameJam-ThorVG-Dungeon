@@ -23,6 +23,13 @@ import {
 import { createInventoryPanel } from './inventoryPanel';
 import {
   addItem,
+  createStartingEquipment,
+  equip,
+  rollArmor,
+  rollDamage,
+  unequip,
+  type Equipment,
+  type EquipmentSlot,
   ITEMS,
   removeItem,
   type ItemContext,
@@ -165,6 +172,7 @@ let mousePosition: Point | null = null;
 let cameraDrag: { pointerId: number; start: Point; last: Point; isDragging: boolean } | null = null;
 const activePointers = new Map<number, Point>();
 let inventory: ItemStack[] = [];
+let equipment: Equipment = createStartingEquipment();
 let groundItems: { name: ItemName; position: Point; paint: Paint }[] = [];
 
 function createItemContext(): ItemContext {
@@ -180,12 +188,15 @@ function createItemContext(): ItemContext {
 
 const inventoryPanel = createInventoryPanel({
   getStacks: () => inventory,
+  getEquipment: () => equipment,
   getItemContext: createItemContext,
   onOpen() {
     stopWalking();
     cancelTargeting();
   },
   onUse: useItem,
+  onEquip: equipItem,
+  onUnequip: unequipItem,
   onThrow: throwItem,
   onDrop: dropFromBag,
 });
@@ -542,9 +553,11 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     render: () => canvas.update().render(),
     onHit: () => {
       if (isHit) {
-        playerHp = Math.max(0, playerHp - ENEMY_ATTACK_DAMAGE);
+        // The armor takes away part of the hit, as in Char.attack() of Shattered Pixel Dungeon.
+        const damage = Math.max(0, ENEMY_ATTACK_DAMAGE - rollArmor(equipment));
+        playerHp = Math.max(0, playerHp - damage);
         showPlayerHp();
-        showDamage(ENEMY_ATTACK_DAMAGE, playerPosition, 'player');
+        showDamage(damage, playerPosition, 'player');
       } else {
         damageNumbers.show(roomView, createEvadeText(TVG), playerPosition);
       }
@@ -635,7 +648,9 @@ function playPlayerAttack(enemy: Enemy) {
         if (isSurprise) {
           damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
         }
-        showDamage(attackEnemy(enemy, playerPosition), enemy.position, 'enemy');
+        const damage = rollDamage(equipment);
+        attackEnemy(enemy, playerPosition, damage);
+        showDamage(damage, enemy.position, 'enemy');
       } else {
         alertEnemy(enemy, playerPosition);
         damageNumbers.show(roomView, createEvadeText(TVG), enemy.position);
@@ -1024,14 +1039,37 @@ function throwItem(name: ItemName) {
   });
 }
 
-function useItem(name: ItemName) {
+// Equipping or taking off an item takes a turn, as in Shattered Pixel Dungeon.
+function changeEquipment(change: () => boolean) {
   finishRunningEffects();
   if (isGameOver) {
     return;
   }
+  stopWalking();
+  if (change()) {
+    inventoryPanel.refresh();
+    inventoryPanel.close();
+    runEnemyTurn(() => {});
+  }
+}
+
+function equipItem(name: ItemName) {
+  changeEquipment(() => equip(equipment, inventory, name));
+}
+
+function unequipItem(slot: EquipmentSlot) {
+  changeEquipment(() => unequip(equipment, inventory, slot));
+}
+
+function useItem(name: ItemName) {
+  finishRunningEffects();
+  const { use } = ITEMS[name];
+  if (isGameOver || !use) {
+    return;
+  }
 
   stopWalking();
-  ITEMS[name].use(createItemContext());
+  use(createItemContext());
   removeItem(inventory, name);
   inventoryPanel.refresh();
   inventoryPanel.close();
@@ -1092,6 +1130,7 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   killCount = 0;
   turnCount = 0;
   inventory = [];
+  equipment = createStartingEquipment();
   inventoryPanel.refresh();
   replaceLevel();
 });

@@ -23,6 +23,12 @@ export function shuffle<T>(random: Random, list: T[]): T[] {
   return list;
 }
 
+// Random.NormalIntRange of Shattered Pixel Dungeon. It averages two rolls, so values near the middle
+// come up more often than the ends. Both ends are included.
+export function normalIntRange(random: Random, min: number, max: number): number {
+  return min + Math.floor(((random() + random()) * (max - min + 1)) / 2);
+}
+
 // Both ends are included.
 export function randomInt(random: Random, min: number, max: number): number {
   return min + Math.floor(random() * (max - min + 1));

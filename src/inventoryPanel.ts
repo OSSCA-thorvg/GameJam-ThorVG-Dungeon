@@ -1,10 +1,23 @@
-import { INVENTORY_SLOTS, ITEMS, type ItemContext, type ItemName, type ItemStack } from './items';
+import {
+  EQUIPMENT_ICONS,
+  EQUIPMENT_SLOTS,
+  INVENTORY_SLOTS,
+  ITEMS,
+  type Equipment,
+  type EquipmentSlot,
+  type ItemContext,
+  type ItemName,
+  type ItemStack,
+} from './items';
 
 export interface InventoryPanelOptions {
   getStacks(): ItemStack[];
+  getEquipment(): Equipment;
   getItemContext(): ItemContext;
   onOpen(): void;
   onUse(name: ItemName): void;
+  onEquip(name: ItemName): void;
+  onUnequip(slot: EquipmentSlot): void;
   onThrow(name: ItemName): void;
   onDrop(name: ItemName): void;
 }
@@ -14,84 +27,162 @@ export interface InventoryPanel {
   close(): void;
 }
 
-// The inventory window. It is HTML because it is made of buttons and text.
+type Selection = { from: 'bag'; name: ItemName } | { from: 'equipment'; slot: EquipmentSlot };
+
+// The inventory window, with the equipment slots above the bag. It is HTML because it is made of
+// buttons and text.
 export function createInventoryPanel({
   getStacks,
+  getEquipment,
   getItemContext,
   onOpen,
   onUse,
+  onEquip,
+  onUnequip,
   onThrow,
   onDrop,
 }: InventoryPanelOptions): InventoryPanel {
   const button = document.querySelector<HTMLButtonElement>('#inventory-button')!;
   const overlay = document.querySelector<HTMLElement>('#inventory')!;
+  const equipmentSlots = document.querySelector<HTMLElement>('#equipment-slots')!;
   const slots = document.querySelector<HTMLElement>('#inventory-slots')!;
   const details = document.querySelector<HTMLElement>('#inventory-details')!;
-  let selected: ItemName | null = null;
+  let selected: Selection | null = null;
+
+  const selectedName = (): ItemName | null => {
+    if (!selected) {
+      return null;
+    }
+    return selected.from === 'bag' ? selected.name : getEquipment()[selected.slot];
+  };
+
+  const actionButton = (label: string, onClick: () => void) => {
+    const element = document.createElement('button');
+    element.textContent = label;
+    element.addEventListener('click', onClick);
+    return element;
+  };
 
   const renderDetails = () => {
     details.replaceChildren();
-    if (!selected) {
+    const name = selectedName();
+    if (!selected || !name) {
       return;
     }
 
-    const item = ITEMS[selected];
-    const name = selected;
-    const reason = item.blockedReason(getItemContext());
+    const item = ITEMS[name];
+    const reason = item.blockedReason?.(getItemContext()) ?? null;
 
     const title = document.createElement('strong');
     title.textContent = item.displayName;
     const description = document.createElement('p');
     description.textContent = reason ?? item.description;
-
-    const actionButton = (label: string, onClick: () => void) => {
-      const element = document.createElement('button');
-      element.textContent = label;
-      element.addEventListener('click', onClick);
+    const stats = [
+      item.damage && `Damage: ${item.damage[0]}-${item.damage[1]}`,
+      item.armor && `Armor: ${item.armor[0]}-${item.armor[1]}`,
+    ].filter((line) => line !== undefined);
+    const statLines = stats.map((line) => {
+      const element = document.createElement('p');
+      element.className = 'item-stat';
+      element.textContent = line;
       return element;
-    };
-    const use = actionButton(item.useLabel, () => onUse(name));
-    use.disabled = reason !== null;
+    });
 
     const actions = document.createElement('div');
     actions.className = 'inventory-actions';
-    actions.append(use, actionButton('Throw', () => onThrow(name)), actionButton('Drop', () => onDrop(name)));
-    details.append(title, description, actions);
+    if (selected.from === 'equipment') {
+      const slot = selected.slot;
+      actions.append(actionButton('Unequip', () => onUnequip(slot)));
+    } else {
+      if (item.use && item.useLabel) {
+        const use = actionButton(item.useLabel, () => onUse(name));
+        use.disabled = reason !== null;
+        actions.append(use);
+      }
+      if (item.equipKind) {
+        actions.append(actionButton('Equip', () => onEquip(name)));
+      }
+      actions.append(actionButton('Throw', () => onThrow(name)), actionButton('Drop', () => onDrop(name)));
+    }
+    details.append(title, description, ...statLines, actions);
+  };
+
+  const renderSlot = (name: ItemName | null, isSelected: boolean, onSelect: () => void) => {
+    const slot = document.createElement('button');
+    slot.className = 'inventory-slot';
+    slot.disabled = !name;
+    if (name) {
+      slot.innerHTML = ITEMS[name].icon;
+      slot.classList.toggle('selected', isSelected);
+      slot.addEventListener('click', () => {
+        onSelect();
+        renderSlots();
+        renderDetails();
+      });
+    }
+    return slot;
   };
 
   const renderSlots = () => {
+    const equipment = getEquipment();
+    equipmentSlots.replaceChildren();
+    for (const { slot, kind } of EQUIPMENT_SLOTS) {
+      const name = equipment[slot];
+      const element = renderSlot(
+        name,
+        selected?.from === 'equipment' && selected.slot === slot,
+        () => (selected = { from: 'equipment', slot }),
+      );
+      if (name) {
+        element.setAttribute('aria-label', ITEMS[name].displayName);
+      } else {
+        // An empty slot shows a faint picture of what goes in it.
+        element.innerHTML = EQUIPMENT_ICONS[kind];
+        element.classList.add('empty-equipment');
+        element.setAttribute('aria-label', `No ${kind}`);
+      }
+      equipmentSlots.append(element);
+    }
+
     const stacks = getStacks();
     slots.replaceChildren();
-
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       const stack = stacks[i];
-      const slot = document.createElement('button');
-      slot.className = 'inventory-slot';
-      slot.disabled = !stack;
-
+      const element = renderSlot(
+        stack?.name ?? null,
+        selected?.from === 'bag' && selected.name === stack?.name,
+        () => (selected = { from: 'bag', name: stack.name }),
+      );
       if (stack) {
-        slot.innerHTML = ITEMS[stack.name].icon;
-        slot.setAttribute('aria-label', `${ITEMS[stack.name].displayName}, ${stack.count}`);
-        slot.classList.toggle('selected', stack.name === selected);
+        element.setAttribute('aria-label', `${ITEMS[stack.name].displayName}, ${stack.count}`);
         if (stack.count > 1) {
           const count = document.createElement('span');
           count.textContent = String(stack.count);
-          slot.append(count);
+          element.append(count);
         }
-        slot.addEventListener('click', () => {
-          selected = stack.name;
-          renderSlots();
-          renderDetails();
-        });
       }
-      slots.append(slot);
+      slots.append(element);
     }
   };
 
+  // Selects the first item in the bag, or the first equipped item when the bag is empty.
+  const selectFirst = () => {
+    const stack = getStacks()[0];
+    const slot = EQUIPMENT_SLOTS.find(({ slot }) => getEquipment()[slot])?.slot;
+    selected = stack
+      ? { from: 'bag', name: stack.name }
+      : slot
+        ? { from: 'equipment', slot }
+        : null;
+  };
+
   const refresh = () => {
-    const stacks = getStacks();
-    if (selected && !stacks.some((stack) => stack.name === selected)) {
-      selected = stacks[0]?.name ?? null;
+    // The selected item may have been used up, dropped, or moved between the bag and a slot.
+    const name = selectedName();
+    const isStillThere =
+      selected?.from !== 'bag' || getStacks().some((stack) => stack.name === name);
+    if (!name || !isStillThere) {
+      selectFirst();
     }
     renderSlots();
     renderDetails();
@@ -103,7 +194,7 @@ export function createInventoryPanel({
 
   button.addEventListener('click', () => {
     onOpen();
-    selected = getStacks()[0]?.name ?? null;
+    selectFirst();
     refresh();
     overlay.hidden = false;
   });
