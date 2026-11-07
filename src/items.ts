@@ -1,6 +1,21 @@
 import { normalIntRange, roundRandomly } from './random';
+import type { GasKind } from './render';
+import type { Point } from './room';
+import type { StatusName } from './status';
 
-export type ItemName = 'healing-potion' | 'worn-shortsword' | 'cloth-armor';
+export type PotionName =
+  | 'healing-potion'
+  | 'strength-potion'
+  | 'experience-potion'
+  | 'haste-potion'
+  | 'invisibility-potion'
+  | 'levitation-potion'
+  | 'telepathy-potion'
+  | 'fire-potion'
+  | 'frost-potion'
+  | 'poison-gas-potion'
+  | 'paralysis-potion';
+export type ItemName = PotionName | 'worn-shortsword' | 'cloth-armor';
 
 // What kind of equipment an item is, which decides the slots it fits.
 export type EquipmentKind = 'weapon' | 'armor' | 'accessory';
@@ -25,6 +40,17 @@ export interface ItemContext {
   hp: number;
   maxHp: number;
   heal(amount: number): void;
+  // Puts an effect on the player.
+  addStatus(name: StatusName, turns: number): void;
+  gainStrength(): void;
+  gainLevel(): void;
+  // The tiles within some steps of a tile, going around walls and closed doors.
+  areaAround(tile: Point, steps: number): Point[];
+  setFire(tiles: Point[], turns: number): void;
+  // Releases gas on a tile, which spreads from there over the next turns.
+  releaseGas(kind: GasKind, tile: Point, amount: number): void;
+  // Freezes every character on the tiles for some turns, and puts out fire there.
+  freeze(tiles: Point[], turns: number): void;
 }
 
 export interface ItemDefinition {
@@ -38,13 +64,27 @@ export interface ItemDefinition {
   // The damage range of a weapon and the range of damage an armor blocks.
   damage?: [min: number, max: number];
   armor?: [min: number, max: number];
-  // Set when the item breaks where it lands when thrown, like a flask. It is the color it splashes.
-  shatterColor?: [r: number, g: number, b: number];
-  // SVG markup, shared by the map and the inventory window.
-  icon: string;
+  // Set for potions, which break where they land when thrown. A helpful one only splashes there.
+  // A harmful one has its effect there, and drinking it breaks it at the player's feet.
+  potion?: 'helpful' | 'harmful';
+  // SVG markup, shared by the map and the inventory window. Potions have none, because their color
+  // changes every run.
+  icon?: string;
   // Why the item cannot be used right now, if there is a reason.
   blockedReason?(context: ItemContext): string | null;
   use?(context: ItemContext): void;
+  shatter?(context: ItemContext, tile: Point): void;
+  // The log line when the player drinks it.
+  drinkMessage?: string;
+  // What a helpful potion does to an enemy it hits. Without it, nothing happens.
+  enemyEffect?: EnemyEffect;
+}
+
+export interface EnemyEffect {
+  heal?: number;
+  status?: { name: StatusName; turns: number };
+  // The log line when the player sees it happen to the enemy with this name.
+  message(enemyName: string): string;
 }
 
 const SWORD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -77,22 +117,108 @@ export function createStartingEquipment(): Equipment {
 // Same as the default capacity of a Bag in Shattered Pixel Dungeon.
 export const INVENTORY_SLOTS = 20;
 
-// Placeholder value.
+// Placeholder values for the potions. Effects last for a number of turns, and spread over the
+// tiles within a number of steps from where a potion breaks.
 const HEALING_POTION_HP = 10;
+const HASTE_TURNS = 20;
+const INVISIBLE_TURNS = 20;
+const LEVITATION_TURNS = 20;
+const TELEPATHY_TURNS = 30;
+const FIRE_STEPS = 1;
+const FIRE_TURNS = 5;
+const FROST_STEPS = 1;
+const FROZEN_TURNS = 6;
+// Placeholder values. How much gas a potion releases. In an open room, poison gas reaches 3 tiles
+// away and lasts 8 turns, and paralyzing gas reaches 2 tiles and lasts 6. In a corridor it has
+// fewer tiles to spread over, so it reaches farther and lasts about 3 times as long.
+const POISON_GAS_AMOUNT = 300;
+const PARALYSIS_GAS_AMOUNT = 200;
+
+const potion = (
+  kind: 'helpful' | 'harmful',
+  definition: Omit<ItemDefinition, 'potion' | 'useLabel'>,
+): ItemDefinition => ({ ...definition, potion: kind, useLabel: 'Drink' });
 
 export const ITEMS: Record<ItemName, ItemDefinition> = {
-  'healing-potion': {
+  'healing-potion': potion('helpful', {
     displayName: 'Healing potion',
-    useLabel: 'Drink',
-    shatterColor: [210, 60, 55],
     description: `Restores ${HEALING_POTION_HP} HP.`,
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-      <path fill="#dfe3ea" d="M9 2H15V4H14V9L19.500 18.500Q20.500 21 18 21H6Q3.500 21 4.500 18.500L10 9V4H9Z"/>
-      <path fill="#d23c37" d="M8.300 13H15.700L18.600 18.800Q19 20 17.500 20H6.500Q5 20 5.400 18.800Z"/>
-    </svg>`,
     blockedReason: ({ hp, maxHp }) => (hp >= maxHp ? 'Your HP is already full.' : null),
     use: ({ heal }) => heal(HEALING_POTION_HP),
-  },
+    drinkMessage: 'Your wounds healed!',
+    enemyEffect: {
+      heal: HEALING_POTION_HP,
+      message: (name) => `The ${name}'s wounds healed!`,
+    },
+  }),
+  'strength-potion': potion('helpful', {
+    displayName: 'Strength potion',
+    description: 'Raises your strength by 1, which makes all your attacks a little stronger.',
+    use: ({ gainStrength }) => gainStrength(),
+    drinkMessage: 'Your strength rose by 1!',
+  }),
+  'experience-potion': potion('helpful', {
+    displayName: 'Experience potion',
+    description: 'Raises your level by one.',
+    use: ({ gainLevel }) => gainLevel(),
+    drinkMessage: 'Your level rose by 1!',
+  }),
+  'haste-potion': potion('helpful', {
+    displayName: 'Haste potion',
+    description: `You act twice for every turn of the enemies, for ${HASTE_TURNS} turns.`,
+    use: ({ addStatus }) => addStatus('haste', HASTE_TURNS),
+    drinkMessage: 'Your body suddenly felt light!',
+    enemyEffect: {
+      status: { name: 'haste', turns: HASTE_TURNS },
+      message: (name) => `The ${name} suddenly started moving fast!`,
+    },
+  }),
+  'invisibility-potion': potion('helpful', {
+    displayName: 'Invisibility potion',
+    description: `Enemies cannot see you for ${INVISIBLE_TURNS} turns, or until you attack.`,
+    use: ({ addStatus }) => addStatus('invisible', INVISIBLE_TURNS),
+    drinkMessage: 'Your body suddenly turned invisible!',
+    enemyEffect: {
+      status: { name: 'invisible', turns: INVISIBLE_TURNS },
+      message: (name) => `The ${name} suddenly turned invisible!`,
+    },
+  }),
+  'levitation-potion': potion('helpful', {
+    displayName: 'Levitation potion',
+    description: `You float for ${LEVITATION_TURNS} turns, above any fire on the floor.`,
+    use: ({ addStatus }) => addStatus('levitating', LEVITATION_TURNS),
+    drinkMessage: 'Your body floated up into the air!',
+    enemyEffect: {
+      status: { name: 'levitating', turns: LEVITATION_TURNS },
+      message: (name) => `The ${name} floated up into the air!`,
+    },
+  }),
+  'telepathy-potion': potion('helpful', {
+    displayName: 'Telepathy potion',
+    description: `You sense every enemy on the floor for ${TELEPATHY_TURNS} turns.`,
+    use: ({ addStatus }) => addStatus('telepathy', TELEPATHY_TURNS),
+    drinkMessage: 'You can see into the minds of your enemies!',
+  }),
+  'fire-potion': potion('harmful', {
+    displayName: 'Fire potion',
+    description: 'Bursts into flames where it breaks. Throw it at enemies.',
+    shatter: ({ areaAround, setFire }, tile) => setFire(areaAround(tile, FIRE_STEPS), FIRE_TURNS),
+  }),
+  'frost-potion': potion('harmful', {
+    displayName: 'Frost potion',
+    description: 'Freezes everything around where it breaks. Throw it at enemies.',
+    shatter: ({ areaAround, freeze }, tile) => freeze(areaAround(tile, FROST_STEPS), FROZEN_TURNS),
+  }),
+  'poison-gas-potion': potion('harmful', {
+    displayName: 'Poison gas potion',
+    description: 'Releases poison gas where it breaks. Throw it at enemies.',
+    shatter: ({ releaseGas }, tile) => releaseGas('poison', tile, POISON_GAS_AMOUNT),
+  }),
+  'paralysis-potion': potion('harmful', {
+    displayName: 'Paralysis potion',
+    description: 'Releases a gas that paralyzes anything in it. Throw it at enemies.',
+    shatter: ({ releaseGas }, tile) => releaseGas('paralysis', tile, PARALYSIS_GAS_AMOUNT),
+  }),
   'worn-shortsword': {
     displayName: 'Worn shortsword',
     description: 'A short sword, worn from use.',

@@ -4,13 +4,15 @@ import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import playerIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
 import { createDamageNumbers } from './damageNumbers';
-import { playBounce, playShatter, playThrow } from './throwEffect';
+import { playBounce, playFrost, playShatter, playThrow } from './throwEffect';
 import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   alertEnemy,
   attackEnemy,
   chaser,
   createEnemy,
+  damageEnemy,
+  healEnemy,
   ENEMY_ACCURACY,
   ENEMY_ATTACK_DAMAGE,
   ENEMY_EVASION,
@@ -20,6 +22,7 @@ import {
   rollHit,
   type Enemy,
 } from './enemy';
+import { createHazardField, spreadArea } from './hazards';
 import { createInventoryPanel } from './inventoryPanel';
 import {
   addItem,
@@ -40,7 +43,8 @@ import {
 import { generateMap } from './mapgen';
 import { createMessageLog } from './messageLog';
 import { findPath } from './path';
-import { createRandom, randomInt } from './random';
+import { createPotionLore, randomPotion } from './potions';
+import { createRandom, normalIntRange, randomInt } from './random';
 import {
   createCharacter,
   createDamageNumber,
@@ -53,9 +57,20 @@ import {
   createPlayerHealthBar,
   createRoomView,
   tileDistance,
+  tintCharacter,
   type DamageTarget,
 } from './render';
-import { isAdjacent, type Point } from './room';
+import { isAdjacent, isWalkable, type Point } from './room';
+import {
+  addStatus,
+  hasStatus,
+  isHelpless,
+  STATUS_LABELS,
+  tickStatuses,
+  tintOf,
+  type StatusName,
+  type Statuses,
+} from './status';
 import { normalRooms, startRooms } from './roomSources';
 import { playSplash } from './splash';
 import { computeVision, DEFAULT_VIEW_DISTANCE } from './vision';
@@ -90,6 +105,20 @@ const LEVEL_UP_HP = 5;
 const LEVEL_UP_ACCURACY = 1;
 const LEVEL_UP_EVASION = 1;
 
+// Placeholder values. Fire sets a character burning for some turns, and burning and poison gas
+// hurt by a roll in these ranges every turn. Paralyzing gas paralyzes for some turns after it.
+const BURNING_TURNS = 4;
+const BURN_DAMAGE: [min: number, max: number] = [1, 3];
+const POISON_DAMAGE: [min: number, max: number] = [1, 3];
+const PARALYZED_TURNS = 2;
+// Placeholder value. How long each turn takes while the player cannot act.
+const HELPLESS_TURN_MS = 300;
+// Placeholder values. How high a levitating player floats, and how see-through an invisible
+// player and an enemy sensed by telepathy are drawn.
+const LEVITATION_HEIGHT = 8;
+const INVISIBLE_OPACITY = 110;
+const SENSED_ENEMY_OPACITY = 150;
+
 const scalePoint = (point: Point, factor: number): Point => ({
   x: point.x * factor,
   y: point.y * factor,
@@ -113,6 +142,7 @@ const floorLabel = document.querySelector<HTMLElement>('#floor')!;
 const hpLabel = document.querySelector<HTMLElement>('#hp')!;
 const statsLabel = document.querySelector<HTMLElement>('#stats')!;
 const messageLog = createMessageLog(document.querySelector<HTMLElement>('#log')!);
+const statusLabel = document.querySelector<HTMLElement>('#status')!;
 
 const renderCanvas = () => canvas.update().render();
 const damageNumbers = createDamageNumbers(renderCanvas);
@@ -143,12 +173,18 @@ function createLevel() {
     random,
   });
 
+  const roomView = createRoomView(TVG, room);
   return {
     room,
     explored: room.tiles.map((row) => row.map(() => false)),
     inView: room.tiles.map((row) => row.map(() => false)),
     seenEnemies: new Set<Enemy>(),
-    roomView: createRoomView(TVG, room),
+    roomView,
+    hazards: createHazardField(TVG, roomView, {
+      isOpen: isOpenTile,
+      isFlammable: isFlammableTile,
+      burnUp: burnUpTile,
+    }),
     player: createCharacter(TVG, playerIcon),
     enemies: room.monsters.map((position) =>
       createEnemy(
@@ -163,13 +199,17 @@ function createLevel() {
   };
 }
 
-let { room, explored, inView, seenEnemies, roomView, player, enemies } = createLevel();
+let { room, explored, inView, seenEnemies, roomView, hazards, player, enemies } = createLevel();
 let playerPosition = room.start;
 let playerHp = PLAYER_MAX_HP;
 let playerMaxHp = PLAYER_MAX_HP;
 let playerLevel = 1;
 let playerExperience = 0;
 let playerStrength = STARTING_STRENGTH;
+let playerStatuses: Statuses = {};
+// Whether a hasted player already took the first of their two actions in this turn.
+let hasActedOnce = false;
+let potionLore = createPotionLore(createRandom(runSeed));
 // How far the player can see, in tiles. An effect that changes it should call updateVision().
 let playerViewDistance = DEFAULT_VIEW_DISTANCE;
 // What the current vision was computed from, to skip computing it when nothing changed.
@@ -201,7 +241,88 @@ function createItemContext(): ItemContext {
       playerHp = Math.min(playerMaxHp, playerHp + amount);
       showPlayerHp();
     },
+    addStatus: addPlayerStatus,
+    gainStrength() {
+      playerStrength++;
+      showPlayerStats();
+    },
+    gainLevel: levelUp,
+    // Fire and frost also reach a closed door, without going through it.
+    areaAround: (tile, steps) => spreadArea(tile, steps, isOpenTile, isFlammableTile),
+    // Fire catches whoever stands in it at once.
+    setFire(tiles, turns) {
+      hazards.setFire(tiles, turns);
+      setAlight(tiles);
+    },
+    // Paralyzing gas paralyzes whoever it lands on at once. Gas does the rest of its harm at the end
+    // of each turn, after it spreads.
+    releaseGas(kind, tile, amount) {
+      hazards.releaseGas(kind, tile, amount);
+      if (kind === 'paralysis') {
+        addStatusOn([tile], 'paralyzed', PARALYZED_TURNS);
+      }
+    },
+    freeze(tiles, turns) {
+      playFrost(TVG, roomView, tiles, renderCanvas);
+      hazards.putOutFire(tiles);
+      addStatusOn(tiles, 'frozen', turns);
+    },
   };
+}
+
+function addStatusOn(tiles: Point[], name: StatusName, turns: number) {
+  if (tiles.some((tile) => isSameTile(tile, playerPosition))) {
+    addPlayerStatus(name, turns);
+  }
+  for (const enemy of enemies) {
+    if (tiles.some((tile) => isSameTile(tile, enemy.position))) {
+      addStatus(enemy.statuses, name, turns);
+      showEnemy(enemy);
+    }
+  }
+}
+
+// Gas and fire spread over walkable tiles, through open doors but not closed ones.
+function isOpenTile({ x, y }: Point): boolean {
+  const isClosedDoor = room.tiles[y]?.[x] === 'door' && !openDoors.has(y * room.width + x);
+  return isWalkable(room, x, y) && !isClosedDoor;
+}
+
+// Wooden things burn. For now, doors are the only ones.
+function isFlammableTile({ x, y }: Point): boolean {
+  return room.tiles[y]?.[x] === 'door';
+}
+
+// A door that burns down leaves an open doorway.
+function burnUpTile(tile: Point) {
+  room.tiles[tile.y][tile.x] = 'floor';
+  openDoors.delete(tile.y * room.width + tile.x);
+  roomView.burnDoor(tile);
+  // The door is gone, so the vision must be computed again even if nothing else changed.
+  visionState = '';
+  updateVision();
+}
+
+// Sets burning the characters on the tiles, except levitating ones.
+function setAlight(tiles: Point[]) {
+  const isOn = (position: Point) => tiles.some((tile) => isSameTile(tile, position));
+  if (isOn(playerPosition) && !hasStatus(playerStatuses, 'levitating')) {
+    addPlayerStatus('burning', BURNING_TURNS);
+  }
+  const isBurnable = ({ position, statuses }: Enemy) =>
+    isOn(position) && !hasStatus(statuses, 'levitating');
+  for (const enemy of enemies.filter(isBurnable)) {
+    addStatus(enemy.statuses, 'burning', BURNING_TURNS);
+    showEnemy(enemy);
+  }
+}
+
+function addPlayerStatus(name: StatusName, turns: number) {
+  addStatus(playerStatuses, name, turns);
+  if (isHelpless(playerStatuses)) {
+    stopWalking();
+  }
+  updatePlayerLook();
 }
 
 const playerAccuracy = () => PLAYER_ACCURACY + (playerLevel - 1) * LEVEL_UP_ACCURACY;
@@ -227,13 +348,49 @@ function gainExperience(amount: number) {
 }
 
 function showPlayerStats() {
-  statsLabel.textContent = `Lv ${playerLevel} · XP ${playerExperience}/${experienceToLevelUp()}`;
+  const experience = `XP ${playerExperience}/${experienceToLevelUp()}`;
+  // Strength shows once it differs from where it started.
+  const strength = playerStrength !== STARTING_STRENGTH ? ` · Str ${playerStrength}` : '';
+  statsLabel.textContent = `Lv ${playerLevel} · ${experience}${strength}`;
+  statusLabel.textContent = (Object.keys(STATUS_LABELS) as StatusName[])
+    .filter((name) => hasStatus(playerStatuses, name))
+    .map((name) => `${STATUS_LABELS[name]} ${playerStatuses[name]}`)
+    .join(' · ');
+}
+
+// A levitating character floats above its tile.
+function nudgePlayer(tile: Point, offset: Point) {
+  const lift = hasStatus(playerStatuses, 'levitating') ? LEVITATION_HEIGHT : 0;
+  roomView.nudge(player, tile, { x: offset.x, y: offset.y - lift });
+}
+
+function nudgeEnemy(enemy: Enemy, tile: Point, offset: Point) {
+  const lift = hasStatus(enemy.statuses, 'levitating') ? LEVITATION_HEIGHT : 0;
+  roomView.nudge(enemy.paint, tile, { x: offset.x, y: offset.y - lift });
+}
+
+// Shows the player's effects: their colors, and the enemies sensed by telepathy.
+function updatePlayerLook() {
+  tintCharacter(player, tintOf(playerStatuses));
+  player.opacity(hasStatus(playerStatuses, 'invisible') ? INVISIBLE_OPACITY : 255);
+  nudgePlayer(playerPosition, { x: 0, y: 0 });
+  updateVision();
+  for (const enemy of enemies) {
+    showEnemy(enemy);
+  }
+  showPlayerStats();
 }
 
 const inventoryPanel = createInventoryPanel({
   getStacks: () => inventory,
   getEquipment: () => equipment,
-  getItemContext: createItemContext,
+  describeItem(name) {
+    const look = potionLore.lookOf(name);
+    const blockedReason = look.isKnown
+      ? (ITEMS[name].blockedReason?.(createItemContext()) ?? null)
+      : null;
+    return { ...look, blockedReason };
+  },
   onOpen() {
     stopWalking();
     cancelTargeting();
@@ -305,7 +462,7 @@ function updateCursorTile() {
 }
 
 function dropItem(name: ItemName, position: Point) {
-  const paint = createItemPaint(TVG, ITEMS[name].icon);
+  const paint = createItemPaint(TVG, potionLore.lookOf(name).icon);
   roomView.place(paint, position.x, position.y);
   groundItems.push({ name, position, paint });
   enterDoor(position);
@@ -407,7 +564,8 @@ function updateVision() {
   }
 
   for (const enemy of enemies) {
-    const isSeen = isInView(enemy.position);
+    // An invisible enemy is not seen, so the cursor and clicks treat its tile as empty.
+    const isSeen = isInView(enemy.position) && !hasStatus(enemy.statuses, 'invisible');
     if (isSeen === seenEnemies.has(enemy)) {
       continue;
     }
@@ -455,17 +613,27 @@ function placePlayer(tile: Point) {
   leaveDoor(previous);
   enterDoor(tile);
   roomView.place(player, tile.x, tile.y);
+  nudgePlayer(tile, { x: 0, y: 0 });
   updateVision();
   roomView.cutAwayWalls(tile);
   followPlayer();
 }
 
-// Draws an enemy only while it is in view.
+// Draws an enemy while it is in view, or while the player senses it by telepathy.
 function showEnemy(enemy: Enemy) {
   const { x, y } = enemy.position;
+  tintCharacter(enemy.paint, tintOf(enemy.statuses));
   if (seenEnemies.has(enemy)) {
+    enemy.paint.opacity(255);
     roomView.place(enemy.paint, x, y);
+    nudgeEnemy(enemy, enemy.position, { x: 0, y: 0 });
     roomView.placeOverlay(enemy.healthBar.scene, x, y);
+  } else if (hasStatus(playerStatuses, 'telepathy')) {
+    // Drawn above the darkness, so it shows through walls.
+    enemy.paint.opacity(SENSED_ENEMY_OPACITY);
+    roomView.placeOverlay(enemy.paint, x, y);
+    nudgeEnemy(enemy, enemy.position, { x: 0, y: 0 });
+    roomView.remove(enemy.healthBar.scene);
   } else {
     roomView.remove(enemy.paint);
     roomView.remove(enemy.healthBar.scene);
@@ -501,8 +669,9 @@ function startLevel() {
   }
   playerPosition = room.start;
   placePlayer(room.start);
+  // The player is drawn anew on each level, so the effects on them are shown again.
+  updatePlayerLook();
   showPlayerHp({ jump: true });
-  showPlayerStats();
 
   // A new level starts with the camera already on the player.
   cancelAnimationFrame(cameraFrame);
@@ -530,7 +699,7 @@ function goDownStairs() {
 function replaceLevel() {
   damageNumbers.clear();
   mapScene.remove(roomView.scene);
-  ({ room, explored, inView, seenEnemies, roomView, player, enemies } = createLevel());
+  ({ room, explored, inView, seenEnemies, roomView, hazards, player, enemies } = createLevel());
   startLevel();
 }
 
@@ -578,19 +747,57 @@ function endGame() {
   gameOverScreen.hidden = false;
 }
 
+// Damage breaks the ice of a frozen player.
+function damagePlayer(amount: number) {
+  playerHp = Math.max(0, playerHp - amount);
+  delete playerStatuses.frozen;
+  showPlayerHp();
+  showDamage(amount, playerPosition, 'player');
+}
+
+// The number is only shown for an enemy in view, so it does not give away the others.
+function hurtEnemy(enemy: Enemy, amount: number) {
+  damageEnemy(enemy, amount);
+  if (seenEnemies.has(enemy)) {
+    showDamage(amount, enemy.position, 'enemy');
+  }
+}
+
+// The log only tells of an enemy in view, so it does not give away the others. An invisible enemy in
+// view is named too, so the player learns what it was.
+function killEnemy(enemy: Enemy) {
+  if (isInView(enemy.position)) {
+    messageLog.add(`You defeated the ${enemy.name}.`);
+  }
+  roomView.remove(enemy.paint);
+  roomView.remove(enemy.healthBar.scene);
+  enemies.splice(enemies.indexOf(enemy), 1);
+  killCount++;
+  seenEnemies.delete(enemy);
+  dropItem(randomPotion(Math.random), enemy.position);
+  gainExperience(EXPERIENCE_PER_KILL);
+  updateVision();
+}
+
+// A paralyzed or frozen player cannot evade.
 function playEnemyAttack(enemy: Enemy, onDone: () => void) {
   const attackerTile = enemy.position;
-  const isHit = rollHit(ENEMY_ACCURACY, playerEvasion());
+  const isHit = isHelpless(playerStatuses) || rollHit(ENEMY_ACCURACY, playerEvasion());
+  if (!seenEnemies.has(enemy)) {
+    messageLog.add('Something unseen attacked you.');
+  }
 
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, playerPosition), LUNGE_DISTANCE),
     isMiss: !isHit,
-    moveAttacker: (offset) => roomView.nudge(enemy.paint, attackerTile, offset),
-    moveTarget: (offset) => roomView.nudge(player, playerPosition, offset),
+    moveAttacker: (offset) => nudgeEnemy(enemy, attackerTile, offset),
+    moveTarget: (offset) => nudgePlayer(playerPosition, offset),
     flashTarget: (isFlashing) => {
-      player.resetEffects();
       if (isFlashing) {
+        player.resetEffects();
         player.fillEffect(220, 60, 60, 255);
+      } else {
+        tintCharacter(player, tintOf(playerStatuses));
       }
     },
     shake: (offset) => {
@@ -601,10 +808,8 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     onHit: () => {
       if (isHit) {
         // The armor takes away part of the hit, as in Char.attack() of Shattered Pixel Dungeon.
-        const damage = Math.max(0, ENEMY_ATTACK_DAMAGE - rollArmor(equipment));
-        playerHp = Math.max(0, playerHp - damage);
-        showPlayerHp();
-        showDamage(damage, playerPosition, 'player');
+        damagePlayer(Math.max(0, ENEMY_ATTACK_DAMAGE - rollArmor(equipment)));
+        showPlayerStats();
       } else {
         damageNumbers.show(roomView, createEvadeText(TVG), playerPosition);
       }
@@ -622,22 +827,109 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
   });
 }
 
-// Lets each enemy act once, one after another.
+// Ends one action of the player. A hasted player takes two actions in each turn of the enemies.
+function passTurn(onDone: () => void) {
+  if (hasStatus(playerStatuses, 'haste') && !hasActedOnce) {
+    hasActedOnce = true;
+    canvas.update().render();
+    onDone();
+    return;
+  }
+  hasActedOnce = false;
+  runEnemyTurn(onDone);
+}
+
+// Sight goes both ways, unless the player is invisible.
+function canEnemySeePlayer(enemy: Enemy) {
+  return isInView(enemy.position) && !hasStatus(playerStatuses, 'invisible');
+}
+
+// Fire sets alight whoever stands in it, poison gas hurts, and paralyzing gas paralyzes. Then
+// burning hurts.
+function applyHazards() {
+  const isOnFire = (tile: Point) => hazards.kindsAt(tile).includes('fire');
+  setAlight([playerPosition, ...enemies.map(({ position }) => position)].filter(isOnFire));
+
+  const playerHazards = hazards.kindsAt(playerPosition);
+  if (playerHazards.includes('paralysis')) {
+    addPlayerStatus('paralyzed', PARALYZED_TURNS);
+  }
+  if (playerHazards.includes('poison')) {
+    damagePlayer(normalIntRange(Math.random, ...POISON_DAMAGE));
+  }
+  if (hasStatus(playerStatuses, 'burning')) {
+    damagePlayer(normalIntRange(Math.random, ...BURN_DAMAGE));
+  }
+
+  for (const enemy of enemies) {
+    const enemyHazards = hazards.kindsAt(enemy.position);
+    if (enemyHazards.includes('paralysis')) {
+      addStatus(enemy.statuses, 'paralyzed', PARALYZED_TURNS);
+    }
+    if (enemyHazards.includes('poison')) {
+      hurtEnemy(enemy, normalIntRange(Math.random, ...POISON_DAMAGE));
+    }
+    if (hasStatus(enemy.statuses, 'burning')) {
+      hurtEnemy(enemy, normalIntRange(Math.random, ...BURN_DAMAGE));
+    }
+  }
+}
+
+// The end of a turn, after every enemy acted. Effects wear off and gas spreads, then fire and gas
+// do their harm, and then fire burns down.
+// While the player cannot act, the next turn follows by itself.
+function endTurn(onDone: () => void) {
+  if (isGameOver) {
+    canvas.update().render();
+    onDone();
+    return;
+  }
+
+  tickStatuses(playerStatuses);
+  for (const enemy of enemies) {
+    tickStatuses(enemy.statuses);
+  }
+  hazards.spreadGas();
+  applyHazards();
+  hazards.burnDown();
+  for (const enemy of enemies.filter(({ hp }) => hp === 0)) {
+    killEnemy(enemy);
+  }
+  updatePlayerLook();
+  if (playerHp === 0) {
+    endGame();
+  }
+  canvas.update().render();
+
+  if (!isGameOver && isHelpless(playerStatuses)) {
+    setTimeout(() => runEnemyTurn(onDone), HELPLESS_TURN_MS);
+    return;
+  }
+  onDone();
+}
+
+// Lets each enemy act once, one after another, then ends the turn.
 // Every action of the player ends with this, so it also counts the player's turns.
 function runEnemyTurn(onDone: () => void) {
   turnCount++;
-  const waiting = [...enemies];
+  // A hasted enemy acts twice in a row.
+  const waiting = enemies.flatMap((enemy) =>
+    hasStatus(enemy.statuses, 'haste') ? [enemy, enemy] : [enemy],
+  );
 
   const actNext = () => {
     const enemy = waiting.shift();
     if (!enemy || isGameOver) {
-      canvas.update().render();
-      onDone();
+      endTurn(onDone);
       return;
     }
 
     const wasHunting = enemy.state === 'hunting';
-    enemy.hasSeenPlayer = isInView(enemy.position);
+    enemy.hasSeenPlayer = canEnemySeePlayer(enemy);
+    if (isHelpless(enemy.statuses)) {
+      actNext();
+      return;
+    }
     const action = enemy.behavior(enemy, {
       room,
       player: playerPosition,
@@ -674,19 +966,30 @@ function runEnemyTurn(onDone: () => void) {
 
 function playPlayerAttack(enemy: Enemy) {
   const attackerTile = playerPosition;
-  // A surprised enemy cannot evade.
+  // A surprised enemy cannot evade, and neither can a paralyzed or frozen one.
   const isSurprise = !enemy.hasSeenPlayer;
-  const isHit = isSurprise || rollHit(playerAccuracy(), ENEMY_EVASION);
+  const isHit =
+    isSurprise || isHelpless(enemy.statuses) || rollHit(playerAccuracy(), ENEMY_EVASION);
+  // Attacking ends invisibility.
+  if (hasStatus(playerStatuses, 'invisible')) {
+    delete playerStatuses.invisible;
+    updatePlayerLook();
+  }
+  if (!seenEnemies.has(enemy)) {
+    messageLog.add('You attacked an unseen enemy.');
+  }
 
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE),
     isMiss: !isHit,
-    moveAttacker: (offset) => roomView.nudge(player, attackerTile, offset),
-    moveTarget: (offset) => roomView.nudge(enemy.paint, enemy.position, offset),
+    moveAttacker: (offset) => nudgePlayer(attackerTile, offset),
+    moveTarget: (offset) => nudgeEnemy(enemy, enemy.position, offset),
     flashTarget: (isFlashing) => {
-      enemy.paint.resetEffects();
       if (isFlashing) {
+        enemy.paint.resetEffects();
         enemy.paint.fillEffect(255, 255, 255, 255);
+      } else {
+        tintCharacter(enemy.paint, tintOf(enemy.statuses));
       }
     },
     render: () => canvas.update().render(),
@@ -706,17 +1009,9 @@ function playPlayerAttack(enemy: Enemy) {
     onEnd: () => {
       finishAttackEffect = null;
       if (enemy.hp === 0) {
-        roomView.remove(enemy.paint);
-        roomView.remove(enemy.healthBar.scene);
-        enemies.splice(enemies.indexOf(enemy), 1);
-        killCount++;
-        seenEnemies.delete(enemy);
-        dropItem('healing-potion', enemy.position);
-        messageLog.add(`You defeated the ${enemy.name}.`);
-        gainExperience(EXPERIENCE_PER_KILL);
-        updateVision();
+        killEnemy(enemy);
       }
-      runEnemyTurn(() => {});
+      passTurn(() => {});
     },
   });
 }
@@ -754,11 +1049,17 @@ function walk() {
     return;
   }
 
-  // An enemy may have stepped onto the path.
-  if (occupiedTiles().some((tile) => tile.x === next.x && tile.y === next.y)) {
+  // An enemy may have stepped onto the path. An unseen one on the tile the player chose is
+  // attacked, because the player meant to step there.
+  const blocker = enemies.find(({ position }) => isSameTile(position, next));
+  if (blocker) {
+    const isChosenTile = path.length === 0 && !attackTarget;
     path = [];
     attackTarget = null;
     isWalking = false;
+    if (isChosenTile && !seenEnemies.has(blocker)) {
+      playPlayerAttack(blocker);
+    }
     return;
   }
 
@@ -774,7 +1075,12 @@ function walk() {
     return;
   }
 
-  runEnemyTurn(() => setTimeout(walk, STEP_INTERVAL_MS));
+  passTurn(() => setTimeout(walk, STEP_INTERVAL_MS));
+}
+
+// A paralyzed or frozen player cannot act until the turns pass by themselves.
+function cannotAct() {
+  return isGameOver || isHelpless(playerStatuses);
 }
 
 // A new input ends the running effects, so they never delay play.
@@ -849,7 +1155,7 @@ function pressTarget(tile: Point, isMouse: boolean) {
 
 function pressTileAt(position: Point, isMouse: boolean) {
   finishRunningEffects();
-  if (isGameOver) {
+  if (cannotAct()) {
     return;
   }
 
@@ -1039,7 +1345,7 @@ function stopWalking() {
 // Takes an item out of the bag before an action with it, and ends the panel and any walk.
 function takeFromBag(name: ItemName): boolean {
   finishRunningEffects();
-  if (isGameOver) {
+  if (cannotAct()) {
     return false;
   }
   stopWalking();
@@ -1053,15 +1359,55 @@ function dropFromBag(name: ItemName) {
   if (takeFromBag(name)) {
     dropItem(name, playerPosition);
     updateVision();
-    runEnemyTurn(() => {});
+    passTurn(() => {});
+  }
+}
+
+// A potion breaks where it lands. A harmful one has its effect there, which tells the player what it
+// is when they see it.
+function shatterPotion(name: ItemName, tile: Point) {
+  const { color } = potionLore.lookOf(name);
+  const { shatter } = ITEMS[name];
+  if (color) {
+    playShatter(TVG, roomView, tile, color, renderCanvas);
+  }
+  if (shatter) {
+    shatter(createItemContext(), tile);
+    if (isInView(tile)) {
+      potionLore.identify(name);
+    }
+    return;
+  }
+
+  // A helpful potion only affects an enemy it hits. The player learns what it is by seeing that.
+  const { enemyEffect } = ITEMS[name];
+  const enemy = enemyEffect && enemies.find(({ position }) => isSameTile(position, tile));
+  if (!enemy) {
+    messageLog.add("The potion's flask broke, but nothing happened.");
+    return;
+  }
+  // Checked before the effect, because the player still sees an enemy turn invisible.
+  const isSeen = seenEnemies.has(enemy);
+  if (enemyEffect.heal) {
+    healEnemy(enemy, enemyEffect.heal);
+  }
+  if (enemyEffect.status) {
+    addStatus(enemy.statuses, enemyEffect.status.name, enemyEffect.status.turns);
+  }
+  updateVision();
+  showEnemy(enemy);
+  if (isSeen) {
+    messageLog.add(enemyEffect.message(enemy.name));
+    potionLore.identify(name);
+  } else {
+    messageLog.add("The potion's flask broke, but nothing happened.");
   }
 }
 
 function throwItem(name: ItemName) {
-  const item = ITEMS[name];
   inventoryPanel.close();
   requestTarget({
-    prompt: `Throw the ${item.displayName.toLowerCase()} where?`,
+    prompt: `Throw the ${potionLore.lookOf(name).displayName.toLowerCase()} where?`,
     rule: THROWN,
     onSelect({ end }) {
       if (!takeFromBag(name)) {
@@ -1069,19 +1415,19 @@ function throwItem(name: ItemName) {
       }
       finishAttackEffect = playThrow({
         view: roomView,
-        paint: createItemPaint(TVG, item.icon),
+        paint: createItemPaint(TVG, potionLore.lookOf(name).icon),
         from: playerPosition,
         to: end,
         render: renderCanvas,
         onLand() {
           finishAttackEffect = null;
-          if (item.shatterColor) {
-            playShatter(TVG, roomView, end, item.shatterColor, renderCanvas);
+          if (ITEMS[name].potion) {
+            shatterPotion(name, end);
           } else {
             dropItem(name, end);
           }
           updateVision();
-          runEnemyTurn(() => {});
+          passTurn(() => {});
         },
       });
     },
@@ -1091,14 +1437,14 @@ function throwItem(name: ItemName) {
 // Equipping or taking off an item takes a turn, as in Shattered Pixel Dungeon.
 function changeEquipment(change: () => boolean) {
   finishRunningEffects();
-  if (isGameOver) {
+  if (cannotAct()) {
     return;
   }
   stopWalking();
   if (change()) {
     inventoryPanel.refresh();
     inventoryPanel.close();
-    runEnemyTurn(() => {});
+    passTurn(() => {});
   }
 }
 
@@ -1110,19 +1456,29 @@ function unequipItem(slot: EquipmentSlot) {
   changeEquipment(() => unequip(equipment, inventory, slot));
 }
 
+// Drinking a potion tells the player what it is. A harmful one breaks at the player's feet.
 function useItem(name: ItemName) {
   finishRunningEffects();
-  const { use } = ITEMS[name];
-  if (isGameOver || !use) {
+  const { use, shatter, drinkMessage } = ITEMS[name];
+  if (cannotAct() || (!use && !shatter)) {
     return;
+  }
+  if (drinkMessage) {
+    messageLog.add(drinkMessage);
   }
 
   stopWalking();
-  use(createItemContext());
   removeItem(inventory, name);
+  potionLore.identify(name);
   inventoryPanel.refresh();
   inventoryPanel.close();
-  runEnemyTurn(() => {});
+  if (shatter) {
+    shatterPotion(name, playerPosition);
+  } else {
+    use?.(createItemContext());
+  }
+  updateVision();
+  passTurn(() => {});
 }
 
 function playWaitEffect() {
@@ -1144,7 +1500,7 @@ function playWaitEffect() {
 
 waitButton.addEventListener('click', () => {
   finishRunningEffects();
-  if (isGameOver) {
+  if (cannotAct()) {
     return;
   }
 
@@ -1161,7 +1517,7 @@ waitButton.addEventListener('click', () => {
   }
 
   playWaitEffect();
-  runEnemyTurn(() => {});
+  passTurn(() => {});
 });
 
 document.querySelector('#target-cancel')!.addEventListener('click', cancelTargeting);
@@ -1180,6 +1536,9 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   playerLevel = 1;
   playerExperience = 0;
   playerStrength = STARTING_STRENGTH;
+  playerStatuses = {};
+  hasActedOnce = false;
+  potionLore = createPotionLore(createRandom(runSeed));
   killCount = 0;
   turnCount = 0;
   inventory = [];

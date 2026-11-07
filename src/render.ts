@@ -9,6 +9,13 @@ export type CursorTarget = 'floor' | 'enemy' | 'item' | 'target';
 // Who took the damage, which decides the color of the number.
 export type DamageTarget = 'enemy' | 'player';
 
+// An effect that shows as a color over a character.
+export type CharacterTint = 'frozen' | 'paralyzed' | 'burning';
+
+// Fire or gas lying on a tile.
+export type GasKind = 'poison' | 'paralysis';
+export type HazardKind = 'fire' | GasKind;
+
 export interface Light {
   // The tile the light comes from.
   center: Point;
@@ -24,10 +31,14 @@ export interface RoomView {
   scene: Scene;
   // Draws the doors on these tiles as open, and all other doors as closed.
   setOpenDoors(tiles: Point[]): void;
+  // Draws a door that burned down as a charred doorway. The room must already have floor there.
+  burnDoor(tile: Point): void;
   // Hides everything that was never lit, and darkens everything outside the light.
   setLight(light: Light): void;
   // Moves a paint onto a tile and into that tile's draw layer.
   place(paint: Paint, x: number, y: number): void;
+  // Moves a paint onto a tile's floor, below everything else placed on the tile.
+  placeOnFloor(paint: Paint, x: number, y: number): void;
   // Cuts a hole in the walls in front of a tile, but only when they cover that tile.
   cutAwayWalls(tile: Point): void;
   // Shows a walkable tile through the walls with an outline. Returns whether anything changed.
@@ -117,6 +128,8 @@ const DARKNESS: Color = [20, 21, 26];
 const FLOOR_LIGHT: Color = [96, 100, 110];
 const FLOOR_DARK: Color = [86, 90, 100];
 const DOOR: Color = [150, 104, 60];
+// Placeholder color of the floor left where a door burned down.
+const BURNT_DOORWAY: Color = [62, 54, 50];
 // Placeholder colors for a closed door, shaded like a wall.
 const CLOSED_DOOR_TOP: Color = [168, 118, 70];
 const CLOSED_DOOR_LEFT: Color = [120, 82, 46];
@@ -150,6 +163,20 @@ const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   player: [255, 80, 70],
 };
 const DUMMY_ENEMY: Color = [196, 64, 64];
+// Placeholder colors, laid over a character with the alpha at the end.
+const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {
+  frozen: [130, 200, 255, 150],
+  paralyzed: [240, 220, 90, 130],
+  burning: [255, 120, 40, 130],
+};
+// Placeholder color of the frost that flashes over the floor where a frost potion breaks.
+const FROST_COLOR: [...Color, number] = [190, 230, 255, 210];
+// Placeholder colors of fire and gas on the floor, with the alpha at the end.
+const HAZARD_COLORS: Record<HazardKind, [...Color, number]> = {
+  fire: [255, 110, 30, 170],
+  poison: [110, 200, 70, 120],
+  paralysis: [235, 215, 80, 120],
+};
 const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
 const ENEMY_HEALTH_BAR_FILL: Color = [90, 200, 90];
 const ENEMY_HEALTH_BAR_TRAIL: Color = [220, 80, 60];
@@ -245,7 +272,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   const walls: Wall[] = [];
   // Every wall's outline on the screen, whether it was seen or not.
   const wallArea = new TVG.Shape();
-  const doors: (Wall & { area: Shape })[] = [];
+  const doors: (Wall & { area: Shape; floor: Shape })[] = [];
   let openDoors = new Set<number>();
   const tileKey = ({ x, y }: Point) => y * room.width + x;
   const cutLayers = new Map<number, { scene: Scene; playerHole: Shape; cursorHole: Shape }>();
@@ -301,7 +328,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
           addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
           break;
         case 'door': {
-          addPolygon([top, right, bottom, left], DOOR);
+          const floor = addPolygon([top, right, bottom, left], DOOR);
           const faces = [
             addPolygon([left, bottom, lift(bottom), lift(left)], CLOSED_DOOR_LEFT),
             addPolygon([right, bottom, lift(bottom), lift(right)], CLOSED_DOOR_RIGHT),
@@ -310,7 +337,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
           const area = new TVG.Shape();
           appendLightOutline(area, [lift(top), lift(right), right, bottom, left, lift(left)]);
           area.fill(255, 255, 255);
-          doors.push({ tile: { x, y }, center, faces, area });
+          doors.push({ tile: { x, y }, center, faces, area, floor });
           break;
         }
         case 'wall':
@@ -328,6 +355,13 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       }
     }
   }
+
+  // Added after the tiles of each layer, so what lies on the floor is drawn under the characters.
+  const floorLayers = layers.map((layer) => {
+    const floorLayer = new TVG.Scene();
+    layer.add(floorLayer);
+    return floorLayer;
+  });
 
   // The light map is a grayscale image, where brighter means less darkness. Black is what was never
   // lit, gray is what was lit before, and the light itself is drawn over those.
@@ -515,6 +549,19 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       }
       updateCuts();
     },
+    burnDoor(tile) {
+      const index = doors.findIndex((door) => door.tile.x === tile.x && door.tile.y === tile.y);
+      if (index === -1) {
+        return;
+      }
+      const [door] = doors.splice(index, 1);
+      for (const face of door.faces) {
+        layers[layerOf(tile)].remove(face);
+      }
+      solidArea.remove(door.area);
+      door.floor.fill(...BURNT_DOORWAY);
+      updateCuts();
+    },
     setLight(light) {
       const remember = (key: string, shape: Shape, outline: Point[]) => {
         if (!rememberedOutlines.has(key)) {
@@ -580,6 +627,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     },
     place(paint, x, y) {
       placeInLayer(paint, layers[x + y], x, y);
+    },
+    placeOnFloor(paint, x, y) {
+      placeInLayer(paint, floorLayers[x + y], x, y);
     },
     cutAwayWalls(tile) {
       coveredPlayerTile = isCovered(tile) ? tile : null;
@@ -660,6 +710,28 @@ export function createDummyEnemy(TVG: ThorVGNamespace): Scene {
   const scene = new TVG.Scene();
   scene.add(shape);
   return scene;
+}
+
+// Lays a color over a character, or takes it away.
+export function tintCharacter(scene: Scene, tint: CharacterTint | null): void {
+  scene.resetEffects();
+  if (tint) {
+    scene.fillEffect(...CHARACTER_TINTS[tint]);
+  }
+}
+
+// Fire or gas covering a tile's floor, centered on the paint's local origin.
+export function createHazardPaint(TVG: ThorVGNamespace, kind: HazardKind): Shape {
+  const shape = appendTileDiamond(new TVG.Shape());
+  shape.fill(...HAZARD_COLORS[kind]);
+  return shape;
+}
+
+// Frost covering a tile's floor, centered on the paint's local origin.
+export function createFrostPaint(TVG: ThorVGNamespace): Shape {
+  const shape = appendTileDiamond(new TVG.Shape());
+  shape.fill(...FROST_COLOR);
+  return shape;
 }
 
 // Each digit is one path in a 10 by 16 box, before DIGIT_SCALE. The first point of a path is a

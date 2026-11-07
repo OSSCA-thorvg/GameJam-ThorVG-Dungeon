@@ -2,6 +2,7 @@ import type { Scene } from '@thorvg/webcanvas';
 import { distancesFrom, findPath } from './path';
 import type { HealthBar } from './render';
 import { isAdjacent, isWalkable, type Point, type Room } from './room';
+import type { Statuses } from './status';
 
 // Placeholder values for testing combat.
 const ENEMY_MAX_HP = 10;
@@ -66,6 +67,7 @@ export interface Enemy {
   // an enemy that did not is surprised by the player's attack, such as one that just came through
   // a door.
   hasSeenPlayer: boolean;
+  statuses: Statuses;
   paint: Scene;
   healthBar: HealthBar;
   behavior: EnemyBehavior;
@@ -190,15 +192,27 @@ export function createEnemy(
     heading: null,
     hasSearched: false,
     hasSeenPlayer: false,
+    statuses: {},
     paint,
     healthBar,
     behavior,
   };
 }
 
+// Damage breaks the ice of a frozen enemy.
+export function damageEnemy(enemy: Enemy, damage: number): void {
+  enemy.hp = Math.max(0, enemy.hp - damage);
+  enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
+  delete enemy.statuses.frozen;
+}
+
+export function healEnemy(enemy: Enemy, amount: number): void {
+  enemy.hp = Math.min(ENEMY_MAX_HP, enemy.hp + amount);
+  enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
+}
+
 // Being attacked makes the enemy hunt the player.
 export function attackEnemy(enemy: Enemy, player: Point, damage: number): void {
   alertEnemy(enemy, player);
-  enemy.hp = Math.max(0, enemy.hp - damage);
-  enemy.healthBar.show(enemy.hp / ENEMY_MAX_HP);
+  damageEnemy(enemy, damage);
 }

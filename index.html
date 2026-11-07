@@ -39,14 +39,21 @@
         pointer-events: none;
       }
       /* Below the player health bar. */
-      #stats {
+      #stats,
+      #status {
         position: fixed;
-        top: 34px;
         left: 12px;
         font: 12px sans-serif;
         color: #c8cad2;
         text-shadow: 0 1px 2px #000;
         pointer-events: none;
+      }
+      #stats {
+        top: 34px;
+      }
+      #status {
+        top: 52px;
+        color: #f0d070;
       }
       /* Above the wait button. */
       #log {
@@ -273,6 +280,7 @@
     <canvas id="canvas"></canvas>
     <div id="hp"></div>
     <div id="stats"></div>
+    <div id="status"></div>
     <div id="log" aria-live="polite"></div>
     <div id="floor"></div>
     <button id="wait" hidden>

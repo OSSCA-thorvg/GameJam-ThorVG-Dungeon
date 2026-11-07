@@ -5,15 +5,23 @@ import {
   ITEMS,
   type Equipment,
   type EquipmentSlot,
-  type ItemContext,
   type ItemName,
   type ItemStack,
 } from './items';
 
+// How an item looks in the bag, which hides what an unidentified potion is.
+export interface ItemDescription {
+  displayName: string;
+  description: string;
+  icon: string;
+  // Why the item cannot be used right now, if there is a reason.
+  blockedReason: string | null;
+}
+
 export interface InventoryPanelOptions {
   getStacks(): ItemStack[];
   getEquipment(): Equipment;
-  getItemContext(): ItemContext;
+  describeItem(name: ItemName): ItemDescription;
   onOpen(): void;
   onUse(name: ItemName): void;
   onEquip(name: ItemName): void;
@@ -34,7 +42,7 @@ type Selection = { from: 'bag'; name: ItemName } | { from: 'equipment'; slot: Eq
 export function createInventoryPanel({
   getStacks,
   getEquipment,
-  getItemContext,
+  describeItem,
   onOpen,
   onUse,
   onEquip,
@@ -71,12 +79,13 @@ export function createInventoryPanel({
     }
 
     const item = ITEMS[name];
-    const reason = item.blockedReason?.(getItemContext()) ?? null;
+    const look = describeItem(name);
+    const reason = look.blockedReason;
 
     const title = document.createElement('strong');
-    title.textContent = item.displayName;
+    title.textContent = look.displayName;
     const description = document.createElement('p');
-    description.textContent = reason ?? item.description;
+    description.textContent = reason ?? look.description;
     const stats = [
       item.damage && `Damage: ${item.damage[0]}-${item.damage[1]}`,
       item.armor && `Armor: ${item.armor[0]}-${item.armor[1]}`,
@@ -94,7 +103,7 @@ export function createInventoryPanel({
       const slot = selected.slot;
       actions.append(actionButton('Unequip', () => onUnequip(slot)));
     } else {
-      if (item.use && item.useLabel) {
+      if (item.useLabel) {
         const use = actionButton(item.useLabel, () => onUse(name));
         use.disabled = reason !== null;
         actions.append(use);
@@ -112,7 +121,7 @@ export function createInventoryPanel({
     slot.className = 'inventory-slot';
     slot.disabled = !name;
     if (name) {
-      slot.innerHTML = ITEMS[name].icon;
+      slot.innerHTML = describeItem(name).icon;
       slot.classList.toggle('selected', isSelected);
       slot.addEventListener('click', () => {
         onSelect();
@@ -134,7 +143,7 @@ export function createInventoryPanel({
         () => (selected = { from: 'equipment', slot }),
       );
       if (name) {
-        element.setAttribute('aria-label', ITEMS[name].displayName);
+        element.setAttribute('aria-label', describeItem(name).displayName);
       } else {
         // An empty slot shows a faint picture of what goes in it.
         element.innerHTML = EQUIPMENT_ICONS[kind];
@@ -154,7 +163,8 @@ export function createInventoryPanel({
         () => (selected = { from: 'bag', name: stack.name }),
       );
       if (stack) {
-        element.setAttribute('aria-label', `${ITEMS[stack.name].displayName}, ${stack.count}`);
+        const { displayName } = describeItem(stack.name);
+        element.setAttribute('aria-label', `${displayName}, ${stack.count}`);
         if (stack.count > 1) {
           const count = document.createElement('span');
           count.textContent = String(stack.count);
