@@ -27,6 +27,7 @@ import {
   equip,
   rollArmor,
   rollDamage,
+  STARTING_STRENGTH,
   unequip,
   type Equipment,
   type EquipmentSlot,
@@ -164,6 +165,7 @@ let playerHp = PLAYER_MAX_HP;
 let playerMaxHp = PLAYER_MAX_HP;
 let playerLevel = 1;
 let playerExperience = 0;
+let playerStrength = STARTING_STRENGTH;
 // How far the player can see, in tiles. An effect that changes it should call updateVision().
 let playerViewDistance = DEFAULT_VIEW_DISTANCE;
 // What the current vision was computed from, to skip computing it when nothing changed.
@@ -686,7 +688,7 @@ function playPlayerAttack(enemy: Enemy) {
         if (isSurprise) {
           damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
         }
-        const damage = rollDamage(equipment);
+        const damage = rollDamage(equipment, playerStrength);
         attackEnemy(enemy, playerPosition, damage);
         showDamage(damage, enemy.position, 'enemy');
       } else {
@@ -1169,6 +1171,7 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   playerMaxHp = PLAYER_MAX_HP;
   playerLevel = 1;
   playerExperience = 0;
+  playerStrength = STARTING_STRENGTH;
   killCount = 0;
   turnCount = 0;
   inventory = [];

@@ -1,4 +1,4 @@
-import { normalIntRange } from './random';
+import { normalIntRange, roundRandomly } from './random';
 
 export type ItemName = 'healing-potion' | 'worn-shortsword' | 'cloth-armor';
 
@@ -114,11 +114,18 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
 // Same as fighting unarmed in Shattered Pixel Dungeon with the starting 10 strength.
 const UNARMED_DAMAGE: [min: number, max: number] = [1, 2];
 
-// Rolls the damage of an attack with the equipped weapon, as Hero.damageRoll() of Shattered Pixel
-// Dungeon.
-export function rollDamage(equipment: Equipment): number {
+// Damage is unchanged at the strength the player starts with.
+export const STARTING_STRENGTH = 10;
+// Each point of strength above the starting strength adds this fraction of the damage, as each point
+// above 10 does in stat_modify_damage() of Dungeon Crawl Stone Soup.
+const DAMAGE_PER_STRENGTH = 0.025;
+
+// Rolls the damage of an attack with the equipped weapon, scaled by strength. The result is rounded
+// up or down at random, so that every point of strength raises the average damage a little.
+export function rollDamage(equipment: Equipment, strength: number): number {
   const [min, max] = (equipment.weapon && ITEMS[equipment.weapon].damage) ?? UNARMED_DAMAGE;
-  return normalIntRange(Math.random, min, max);
+  const scale = 1 + (strength - STARTING_STRENGTH) * DAMAGE_PER_STRENGTH;
+  return roundRandomly(Math.random, normalIntRange(Math.random, min, max) * scale);
 }
 
 // Rolls how much of a hit the equipped armor blocks, as Hero.drRoll() of Shattered Pixel Dungeon.

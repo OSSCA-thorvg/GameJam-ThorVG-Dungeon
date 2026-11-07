@@ -29,6 +29,13 @@ export function normalIntRange(random: Random, min: number, max: number): number
   return min + Math.floor(((random() + random()) * (max - min + 1)) / 2);
 }
 
+// Rounds down or up at random, with the chance of rounding up equal to the fraction, so that the
+// average stays the same.
+export function roundRandomly(random: Random, value: number): number {
+  const floor = Math.floor(value);
+  return floor + (random() < value - floor ? 1 : 0);
+}
+
 // Both ends are included.
 export function randomInt(random: Random, min: number, max: number): number {
   return min + Math.floor(random() * (max - min + 1));
