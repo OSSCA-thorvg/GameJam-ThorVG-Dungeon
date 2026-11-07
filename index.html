@@ -38,6 +38,16 @@
         text-shadow: 0 1px 2px #000;
         pointer-events: none;
       }
+      /* Below the player health bar. */
+      #stats {
+        position: fixed;
+        top: 34px;
+        left: 12px;
+        font: 12px sans-serif;
+        color: #c8cad2;
+        text-shadow: 0 1px 2px #000;
+        pointer-events: none;
+      }
       #floor {
         position: fixed;
         top: 10px;
@@ -251,6 +261,7 @@
   <body>
     <canvas id="canvas"></canvas>
     <div id="hp"></div>
+    <div id="stats"></div>
     <div id="floor"></div>
     <button id="wait" hidden>
       <span id="wait-label">Wait</span>

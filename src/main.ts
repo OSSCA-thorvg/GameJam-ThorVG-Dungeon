@@ -80,6 +80,14 @@ const CAMERA_DRAG_THRESHOLD = 8;
 // The camera snaps to its target below this distance, which is too small to see.
 const CAMERA_SETTLE_DISTANCE = 0.1;
 
+// Placeholder values for the player's growth. Each enemy gives this much experience, and each level
+// needs this much more than the one before. A new level adds these to the player's stats.
+const EXPERIENCE_PER_KILL = 1;
+const EXPERIENCE_PER_LEVEL = 3;
+const LEVEL_UP_HP = 5;
+const LEVEL_UP_ACCURACY = 1;
+const LEVEL_UP_EVASION = 1;
+
 const scalePoint = (point: Point, factor: number): Point => ({
   x: point.x * factor,
   y: point.y * factor,
@@ -101,6 +109,7 @@ waitButton.hidden = false;
 const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
 const floorLabel = document.querySelector<HTMLElement>('#floor')!;
 const hpLabel = document.querySelector<HTMLElement>('#hp')!;
+const statsLabel = document.querySelector<HTMLElement>('#stats')!;
 
 const renderCanvas = () => canvas.update().render();
 const damageNumbers = createDamageNumbers(renderCanvas);
@@ -152,6 +161,9 @@ function createLevel() {
 let { room, explored, inView, seenEnemies, roomView, player, enemies } = createLevel();
 let playerPosition = room.start;
 let playerHp = PLAYER_MAX_HP;
+let playerMaxHp = PLAYER_MAX_HP;
+let playerLevel = 1;
+let playerExperience = 0;
 // How far the player can see, in tiles. An effect that changes it should call updateVision().
 let playerViewDistance = DEFAULT_VIEW_DISTANCE;
 // What the current vision was computed from, to skip computing it when nothing changed.
@@ -178,12 +190,37 @@ let groundItems: { name: ItemName; position: Point; paint: Paint }[] = [];
 function createItemContext(): ItemContext {
   return {
     hp: playerHp,
-    maxHp: PLAYER_MAX_HP,
+    maxHp: playerMaxHp,
     heal(amount) {
-      playerHp = Math.min(PLAYER_MAX_HP, playerHp + amount);
+      playerHp = Math.min(playerMaxHp, playerHp + amount);
       showPlayerHp();
     },
   };
+}
+
+const playerAccuracy = () => PLAYER_ACCURACY + (playerLevel - 1) * LEVEL_UP_ACCURACY;
+const playerEvasion = () => PLAYER_EVASION + (playerLevel - 1) * LEVEL_UP_EVASION;
+const experienceToLevelUp = () => playerLevel * EXPERIENCE_PER_LEVEL;
+
+function levelUp() {
+  playerLevel++;
+  playerMaxHp += LEVEL_UP_HP;
+  playerHp += LEVEL_UP_HP;
+  showPlayerHp();
+  showPlayerStats();
+}
+
+function gainExperience(amount: number) {
+  playerExperience += amount;
+  while (playerExperience >= experienceToLevelUp()) {
+    playerExperience -= experienceToLevelUp();
+    levelUp();
+  }
+  showPlayerStats();
+}
+
+function showPlayerStats() {
+  statsLabel.textContent = `Lv ${playerLevel} · XP ${playerExperience}/${experienceToLevelUp()}`;
 }
 
 const inventoryPanel = createInventoryPanel({
@@ -327,8 +364,8 @@ function followPlayer() {
 }
 
 function showPlayerHp(options?: { jump: boolean }) {
-  playerHealthBar.show(playerHp / PLAYER_MAX_HP, options);
-  hpLabel.textContent = `${playerHp}/${PLAYER_MAX_HP}`;
+  playerHealthBar.show(playerHp / playerMaxHp, options);
+  hpLabel.textContent = `${playerHp}/${playerMaxHp}`;
 }
 
 // Computes what the player sees, and shows it on the map.
@@ -458,6 +495,7 @@ function startLevel() {
   playerPosition = room.start;
   placePlayer(room.start);
   showPlayerHp({ jump: true });
+  showPlayerStats();
 
   // A new level starts with the camera already on the player.
   cancelAnimationFrame(cameraFrame);
@@ -533,7 +571,7 @@ function endGame() {
 
 function playEnemyAttack(enemy: Enemy, onDone: () => void) {
   const attackerTile = enemy.position;
-  const isHit = rollHit(ENEMY_ACCURACY, PLAYER_EVASION);
+  const isHit = rollHit(ENEMY_ACCURACY, playerEvasion());
 
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, playerPosition), LUNGE_DISTANCE),
@@ -629,7 +667,7 @@ function playPlayerAttack(enemy: Enemy) {
   const attackerTile = playerPosition;
   // A surprised enemy cannot evade.
   const isSurprise = !enemy.hasSeenPlayer;
-  const isHit = isSurprise || rollHit(PLAYER_ACCURACY, ENEMY_EVASION);
+  const isHit = isSurprise || rollHit(playerAccuracy(), ENEMY_EVASION);
 
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE),
@@ -665,6 +703,7 @@ function playPlayerAttack(enemy: Enemy) {
         killCount++;
         seenEnemies.delete(enemy);
         dropItem('healing-potion', enemy.position);
+        gainExperience(EXPERIENCE_PER_KILL);
         updateVision();
       }
       runEnemyTurn(() => {});
@@ -1127,6 +1166,9 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   runSeed = newRunSeed();
   floor = 1;
   playerHp = PLAYER_MAX_HP;
+  playerMaxHp = PLAYER_MAX_HP;
+  playerLevel = 1;
+  playerExperience = 0;
   killCount = 0;
   turnCount = 0;
   inventory = [];
