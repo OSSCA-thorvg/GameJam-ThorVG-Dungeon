@@ -48,6 +48,17 @@
         text-shadow: 0 1px 2px #000;
         pointer-events: none;
       }
+      /* Above the wait button. */
+      #log {
+        position: fixed;
+        left: 12px;
+        bottom: 84px;
+        width: min(360px, calc(100vw - 24px));
+        font: 15px/1.4 sans-serif;
+        color: #e8e8ec;
+        text-shadow: 0 1px 2px #000;
+        pointer-events: none;
+      }
       #floor {
         position: fixed;
         top: 10px;
@@ -262,6 +273,7 @@
     <canvas id="canvas"></canvas>
     <div id="hp"></div>
     <div id="stats"></div>
+    <div id="log" aria-live="polite"></div>
     <div id="floor"></div>
     <button id="wait" hidden>
       <span id="wait-label">Wait</span>

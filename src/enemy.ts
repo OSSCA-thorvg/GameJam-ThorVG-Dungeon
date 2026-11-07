@@ -48,6 +48,8 @@ export interface EnemyContext {
 export type EnemyBehavior = (enemy: Enemy, context: EnemyContext) => EnemyAction;
 
 export interface Enemy {
+  // The name shown to the player.
+  name: string;
   position: Point;
   hp: number;
   // A wandering enemy walks to random places. A hunting one goes after the player, or after where
@@ -172,12 +174,14 @@ export const chaser: EnemyBehavior = (enemy, { room, player, canSeePlayer, occup
 };
 
 export function createEnemy(
+  name: string,
   position: Point,
   paint: Scene,
   healthBar: HealthBar,
   behavior: EnemyBehavior,
 ): Enemy {
   return {
+    name,
     position,
     hp: ENEMY_MAX_HP,
     state: 'wandering',

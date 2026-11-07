@@ -38,6 +38,7 @@ import {
   type ItemStack,
 } from './items';
 import { generateMap } from './mapgen';
+import { createMessageLog } from './messageLog';
 import { findPath } from './path';
 import { createRandom, randomInt } from './random';
 import {
@@ -111,6 +112,7 @@ const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
 const floorLabel = document.querySelector<HTMLElement>('#floor')!;
 const hpLabel = document.querySelector<HTMLElement>('#hp')!;
 const statsLabel = document.querySelector<HTMLElement>('#stats')!;
+const messageLog = createMessageLog(document.querySelector<HTMLElement>('#log')!);
 
 const renderCanvas = () => canvas.update().render();
 const damageNumbers = createDamageNumbers(renderCanvas);
@@ -150,6 +152,8 @@ function createLevel() {
     player: createCharacter(TVG, playerIcon),
     enemies: room.monsters.map((position) =>
       createEnemy(
+        // A placeholder name, as the enemy is drawn as a placeholder.
+        'dummy',
         position,
         createDummyEnemy(TVG),
         createEnemyHealthBar(TVG, renderCanvas),
@@ -210,6 +214,7 @@ function levelUp() {
   playerHp += LEVEL_UP_HP;
   showPlayerHp();
   showPlayerStats();
+  messageLog.add('Level up! Your max HP, accuracy, and evasion went up.');
 }
 
 function gainExperience(amount: number) {
@@ -519,6 +524,7 @@ function canGoDownStairs() {
 function goDownStairs() {
   floor++;
   replaceLevel();
+  messageLog.add('You went down to the next floor.');
 }
 
 function replaceLevel() {
@@ -529,6 +535,7 @@ function replaceLevel() {
 }
 
 startLevel();
+messageLog.add('You entered an unknown dungeon.');
 
 window.addEventListener('resize', () => {
   canvas.resize(window.innerWidth, window.innerHeight);
@@ -705,6 +712,7 @@ function playPlayerAttack(enemy: Enemy) {
         killCount++;
         seenEnemies.delete(enemy);
         dropItem('healing-potion', enemy.position);
+        messageLog.add(`You defeated the ${enemy.name}.`);
         gainExperience(EXPERIENCE_PER_KILL);
         updateVision();
       }
@@ -1178,6 +1186,8 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   equipment = createStartingEquipment();
   inventoryPanel.refresh();
   replaceLevel();
+  messageLog.clear();
+  messageLog.add('You entered an unknown dungeon.');
 });
 
 // Same wheel sensitivity as defaultWheelDelta in d3-zoom.
