@@ -104,10 +104,11 @@ const ENEMY_HEALTH_BAR_WIDTH = CHARACTER_SIZE * 0.8;
 const ENEMY_HEALTH_BAR_HEIGHT = 5;
 const ENEMY_HEALTH_BAR_GAP = 4;
 
-// Placeholder values for the health bar at the top left of the screen.
+// Placeholder values for the health bar at the top left of the screen. Its height is the line
+// height of #hp in index.html, whose text sits on it.
 const HERO_HEALTH_BAR_MARGIN = 12;
 const HERO_HEALTH_BAR_WIDTH = 200;
-const HERO_HEALTH_BAR_HEIGHT = 16;
+const HERO_HEALTH_BAR_HEIGHT = 23;
 
 // No standard exists for these. Lost health stays visible briefly, then catches up.
 const HEALTH_TRAIL_HOLD_MS = 300;
