@@ -669,8 +669,7 @@ function revealMimic(enemy: Enemy) {
   if (isInView(enemy.position)) {
     alertEnemy(enemy, heroPosition);
     enemy.hasSeenHero = true;
-    // Same as reveal of Mimic in Shattered Pixel Dungeon.
-    messageLog.add('That chest is a mimic!');
+    messageLog.add('The chest bares its teeth. It was a mimic!');
   }
   updateVision();
   showEnemy(enemy);
@@ -1735,10 +1734,8 @@ function describeTile(tile: Point): string[] {
     return [describeEnemy(enemy)];
   }
   if (disguisedMimicAt(tile)) {
-    // The chest's description and hidden_hint of Mimic in Shattered Pixel Dungeon.
-    return [
-      'A chest. Something about this chest feels off... Trying to open it might be a bad idea.',
-    ];
+    // Examining gives a mimic away, as it does in Shattered Pixel Dungeon.
+    return ['A chest. Its latch twitches now and then. Opening it could be dangerous.'];
   }
   const things = itemsAt(tile);
   if (things.length > 0) {
