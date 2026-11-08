@@ -24,31 +24,63 @@ export const POTIONS = (Object.keys(ITEMS) as ItemName[]).filter(
   (name): name is PotionName => ITEMS[name].potion !== undefined,
 );
 
-// Placeholder values. How often each potion drops, against the others.
-const POTION_WEIGHTS: Record<PotionName, number> = {
-  'healing-potion': 8,
-  'strength-potion': 1,
-  'experience-potion': 1,
-  'haste-potion': 3,
-  'invisibility-potion': 3,
-  'levitation-potion': 3,
-  'telepathy-potion': 3,
+// Floors in a stage, as in a chapter of Shattered Pixel Dungeon. The last one is a boss floor, and
+// no potions lie there, as on the boss floors of Shattered Pixel Dungeon.
+export const FLOORS_PER_STAGE = 5;
+const POTION_FLOORS_PER_STAGE = FLOORS_PER_STAGE - 1;
+// Placeholder value.
+const RANDOM_POTIONS_PER_STAGE = 4;
+
+type RandomPotionName = Exclude<PotionName, 'strength-potion' | 'healing-potion'>;
+
+// How often each potion comes up among the random ones, as its cards in the two potion decks of
+// Generator in Shattered Pixel Dungeon together. Telepathy, its mind vision, has 4 cards there but
+// is as rare here as haste, invisibility, and levitation.
+const RANDOM_POTION_WEIGHTS: Record<RandomPotionName, number> = {
+  'telepathy-potion': 2,
   'fire-potion': 3,
   'frost-potion': 3,
   'poison-gas-potion': 3,
-  'paralysis-potion': 3,
+  'haste-potion': 2,
+  'invisibility-potion': 2,
+  'levitation-potion': 2,
+  'paralysis-potion': 2,
+  'experience-potion': 1,
 };
 
-export function randomPotion(random: Random): PotionName {
-  const total = POTIONS.reduce((sum, name) => sum + POTION_WEIGHTS[name], 0);
+function randomPotion(random: Random): RandomPotionName {
+  const names = Object.keys(RANDOM_POTION_WEIGHTS) as RandomPotionName[];
+  const total = names.reduce((sum, name) => sum + RANDOM_POTION_WEIGHTS[name], 0);
   let roll = random() * total;
-  for (const name of POTIONS) {
-    roll -= POTION_WEIGHTS[name];
+  for (const name of names) {
+    roll -= RANDOM_POTION_WEIGHTS[name];
     if (roll < 0) {
       return name;
     }
   }
-  return POTIONS[POTIONS.length - 1];
+  return names[names.length - 1];
+}
+
+// One floor among floors 1 and 2 of a stage and one among floors 3 and 4, each the earlier floor
+// half the time, as Dungeon.posNeeded() of Shattered Pixel Dungeon places strength potions.
+const pickTwoFloors = (random: Random) => [random() < 0.5 ? 0 : 1, random() < 0.5 ? 2 : 3];
+
+// Decides the potions lying on each floor of a stage: 2 strength potions, 2 healing potions, and
+// some random others, each of those on a different floor before the boss floor.
+export function planStagePotions(random: Random): PotionName[][] {
+  const floors = Array.from({ length: FLOORS_PER_STAGE }, (): PotionName[] => []);
+  for (const index of pickTwoFloors(random)) {
+    floors[index].push('strength-potion');
+  }
+  for (const index of pickTwoFloors(random)) {
+    floors[index].push('healing-potion');
+  }
+  const potionFloors = [...Array(POTION_FLOORS_PER_STAGE).keys()];
+  const randomFloors = shuffle(random, potionFloors).slice(0, RANDOM_POTIONS_PER_STAGE);
+  for (const index of randomFloors) {
+    floors[index].push(randomPotion(random));
+  }
+  return floors;
 }
 
 function potionIcon([r, g, b]: Color): string {

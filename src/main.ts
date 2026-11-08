@@ -45,11 +45,12 @@ import {
   type ItemContext,
   type ItemName,
   type ItemStack,
+  type PotionName,
 } from './items';
-import { generateMap } from './mapgen';
+import { generateMap, pickItemTiles } from './mapgen';
 import { createMessageLog } from './messageLog';
 import { canReach, findPath } from './path';
-import { createPotionLore, randomPotion } from './potions';
+import { createPotionLore, FLOORS_PER_STAGE, planStagePotions } from './potions';
 import { createRandom, normalIntRange, randomInt } from './random';
 import {
   createCharacter,
@@ -173,6 +174,15 @@ let floor = 1;
 let killCount = 0;
 let turnCount = 0;
 
+// The potions lying on the current floor. Each floor plans its stage again from the same seed, so
+// the floors of a stage agree on the plan. The seeds are below the run seed, which the floors'
+// seeds are above.
+function floorPotions(): PotionName[] {
+  const stage = Math.floor((floor - 1) / FLOORS_PER_STAGE);
+  const plan = planStagePotions(createRandom(runSeed - 1 - stage));
+  return plan[(floor - 1) % FLOORS_PER_STAGE];
+}
+
 function createLevel() {
   const random = createRandom(runSeed + floor);
   const room = generateMap({
@@ -181,6 +191,24 @@ function createLevel() {
     roomCount: randomInt(random, MIN_ROOMS, MAX_ROOMS),
     random,
   });
+
+  const enemies = room.monsters.map((position) => {
+    const kind = pickEnemyKind(random, floor);
+    return createEnemy(
+      kind,
+      position,
+      random() < ASLEEP_CHANCE,
+      createDummyEnemy(TVG, kind),
+      createEnemyHealthBar(TVG, renderCanvas),
+      createSleepMark(TVG),
+      chaser,
+    );
+  });
+  const potions = floorPotions();
+  const floorItems = pickItemTiles(room, potions.length, random).map((position, index) => ({
+    name: potions[index],
+    position,
+  }));
 
   const roomView = createRoomView(TVG, room);
   return {
@@ -195,22 +223,13 @@ function createLevel() {
       burnUp: burnUpTile,
     }),
     hero: createCharacter(TVG, heroIcon),
-    enemies: room.monsters.map((position) => {
-      const kind = pickEnemyKind(random, floor);
-      return createEnemy(
-        kind,
-        position,
-        random() < ASLEEP_CHANCE,
-        createDummyEnemy(TVG, kind),
-        createEnemyHealthBar(TVG, renderCanvas),
-        createSleepMark(TVG),
-        chaser,
-      );
-    }),
+    enemies,
+    floorItems,
   };
 }
 
-let { room, explored, inView, seenEnemies, roomView, hazards, hero, enemies } = createLevel();
+let { room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems } =
+  createLevel();
 let heroPosition = room.start;
 let heroHp = HERO_MAX_HP;
 let heroMaxHp = HERO_MAX_HP;
@@ -698,6 +717,9 @@ function startLevel() {
   for (const enemy of enemies) {
     enterDoor(enemy.position);
   }
+  for (const { name, position } of floorItems) {
+    dropItem(name, position);
+  }
   heroPosition = room.start;
   placeHero(room.start);
   // The hero is drawn anew on each level, so the effects on them are shown again.
@@ -730,7 +752,8 @@ function goDownStairs() {
 function replaceLevel() {
   damageNumbers.clear();
   mapScene.remove(roomView.scene);
-  ({ room, explored, inView, seenEnemies, roomView, hazards, hero, enemies } = createLevel());
+  ({ room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems } =
+    createLevel());
   startLevel();
 }
 
@@ -806,7 +829,6 @@ function killEnemy(enemy: Enemy) {
   enemies.splice(enemies.indexOf(enemy), 1);
   killCount++;
   seenEnemies.delete(enemy);
-  dropItem(randomPotion(Math.random), enemy.position);
   gainExperience(enemy.stats.experience);
   updateVision();
 }

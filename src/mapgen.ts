@@ -237,6 +237,24 @@ function addLoops(grid: Room, random: Random) {
   }
 }
 
+// Picks different floor tiles for items to lie on, as randomDropCell() of Shattered Pixel Dungeon:
+// outside the start room unless the map is only that room, and not under the hero or a monster.
+// Returns fewer tiles when there are not enough.
+export function pickItemTiles(map: GeneratedMap, count: number, random: Random): Point[] {
+  const doorCounts = doorCountsFrom(map, map.start);
+  const minDoors = Math.min(1, Math.max(...doorCounts.flat()));
+  const tiles: Point[] = [];
+  map.tiles.forEach((row, y) =>
+    row.forEach((tile, x) => {
+      const isTaken = [map.start, ...map.monsters].some((taken) => taken.x === x && taken.y === y);
+      if (tile === 'floor' && !isTaken && doorCounts[y][x] >= minDoors) {
+        tiles.push({ x, y });
+      }
+    }),
+  );
+  return shuffle(random, tiles).slice(0, count);
+}
+
 // Crops the map to its rooms and puts the stairs on a random floor tile away from the start.
 function finishMap(grid: Room, start: Point, monsters: Point[], random: Random): GeneratedMap {
   const doorCounts = doorCountsFrom(grid, start);
