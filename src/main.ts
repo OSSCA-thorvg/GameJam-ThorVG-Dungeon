@@ -585,10 +585,13 @@ function pickUpItems(tile: Point): boolean {
       heroGold += thing.amount;
       removeFromGround(item);
       hasPickedUp = true;
+      messageLog.add(`You picked up ${thing.amount} gold.`);
     } else if (thing.kind === 'item') {
       if (addItem(inventory, thing.name)) {
         removeFromGround(item);
         hasPickedUp = true;
+        // Same wording as you_now_have of Hero in Shattered Pixel Dungeon.
+        messageLog.add(`You picked up: ${potionLore.lookOf(thing.name).displayName}.`);
       } else {
         playBounce(roomView, item.paint, tile, renderCanvas);
       }
