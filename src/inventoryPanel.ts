@@ -100,9 +100,18 @@ export function createInventoryPanel({
 
     const actions = document.createElement('div');
     actions.className = 'inventory-actions';
+    // The selection follows an item moved between the bag and a slot, as the bag stays open.
     if (selected.from === 'equipment') {
       const slot = selected.slot;
-      actions.append(actionButton('Unequip', () => onUnequip(slot)));
+      actions.append(
+        actionButton('Unequip', () => {
+          onUnequip(slot);
+          if (!getEquipment()[slot]) {
+            selected = { from: 'bag', name };
+          }
+          refresh();
+        }),
+      );
     } else {
       if (item.useLabel) {
         const use = actionButton(item.useLabel, () => onUse(name));
@@ -110,7 +119,16 @@ export function createInventoryPanel({
         actions.append(use);
       }
       if (item.equipKind) {
-        actions.append(actionButton('Equip', () => onEquip(name)));
+        actions.append(
+          actionButton('Equip', () => {
+            onEquip(name);
+            const slot = EQUIPMENT_SLOTS.find(({ slot }) => getEquipment()[slot] === name)?.slot;
+            if (slot) {
+              selected = { from: 'equipment', slot };
+            }
+            refresh();
+          }),
+        );
       }
       actions.append(actionButton('Throw', () => onThrow(name)), actionButton('Drop', () => onDrop(name)));
     }

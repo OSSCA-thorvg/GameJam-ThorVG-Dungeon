@@ -888,6 +888,8 @@ function showDamage(amount: number, tile: Point, target: DamageTarget) {
 function endGame() {
   isGameOver = true;
   roomView.remove(hero);
+  // The hero can die to the enemy turn after changing equipment, while the bag is open.
+  inventoryPanel.close();
 
   const plural = (count: number, one: string, many: string) =>
     `${count} ${count === 1 ? one : many}`;
@@ -1702,9 +1704,9 @@ function changeEquipment(change: () => boolean) {
     return;
   }
   stopWalking();
+  // The bag stays open, so that more equipment can be changed in a row.
   if (change()) {
     inventoryPanel.refresh();
-    inventoryPanel.close();
     passTurn(() => {});
   }
 }
