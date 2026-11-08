@@ -45,13 +45,26 @@ import {
   type ItemContext,
   type ItemName,
   type ItemStack,
-  type PotionName,
 } from './items';
 import { generateMap, pickItemTiles } from './mapgen';
 import { createMessageLog } from './messageLog';
 import { canReach, findPath } from './path';
-import { createPotionLore, FLOORS_PER_STAGE, planStagePotions } from './potions';
-import { createRandom, normalIntRange, randomInt } from './random';
+import {
+  CHEST_ICON,
+  GOLD_ICON,
+  GOLD_PILES_PER_FLOOR,
+  hideInChests,
+  rollGold,
+  type GroundThing,
+  type Loot,
+} from './loot';
+import {
+  createPotionLore,
+  FLOORS_PER_STAGE,
+  ITEM_FLOORS_PER_STAGE,
+  planStagePotions,
+} from './potions';
+import { createRandom, normalIntRange, randomInt, type Random } from './random';
 import {
   createCharacter,
   createDamageNumber,
@@ -69,7 +82,7 @@ import {
   tintCharacter,
   type DamageTarget,
 } from './render';
-import { isWalkable, type Point } from './room';
+import { isAdjacent, isWalkable, type Point } from './room';
 import {
   addStatus,
   hasStatus,
@@ -174,13 +187,23 @@ let floor = 1;
 let killCount = 0;
 let turnCount = 0;
 
-// The potions lying on the current floor. Each floor plans its stage again from the same seed, so
-// the floors of a stage agree on the plan. The seeds are below the run seed, which the floors'
-// seeds are above.
-function floorPotions(): PotionName[] {
+// The loot lying on the current floor, none of it in chests yet. Each floor plans its stage's
+// potions again from the same seed, so the floors of a stage agree on the plan. Those seeds are
+// below the run seed, which the floors' seeds are above.
+function floorLoot(random: Random): Loot[] {
+  const index = (floor - 1) % FLOORS_PER_STAGE;
+  if (index >= ITEM_FLOORS_PER_STAGE) {
+    return [];
+  }
   const stage = Math.floor((floor - 1) / FLOORS_PER_STAGE);
-  const plan = planStagePotions(createRandom(runSeed - 1 - stage));
-  return plan[(floor - 1) % FLOORS_PER_STAGE];
+  const potions = planStagePotions(createRandom(runSeed - 1 - stage))[index];
+  return [
+    ...potions.map((name): Loot => ({ kind: 'item', name })),
+    ...Array.from({ length: GOLD_PILES_PER_FLOOR }, (): Loot => ({
+      kind: 'gold',
+      amount: rollGold(random, floor),
+    })),
+  ];
 }
 
 function createLevel() {
@@ -204,10 +227,11 @@ function createLevel() {
       chaser,
     );
   });
-  const potions = floorPotions();
-  const floorItems = pickItemTiles(room, potions.length, random).map((position, index) => ({
-    name: potions[index],
-    position,
+  const loot = floorLoot(random);
+  const tiles = pickItemTiles(room, loot.length, random);
+  const floorItems = hideInChests(random, loot.slice(0, tiles.length)).map((thing, index) => ({
+    thing,
+    position: tiles[index],
   }));
 
   const roomView = createRoomView(TVG, room);
@@ -236,6 +260,7 @@ let heroMaxHp = HERO_MAX_HP;
 let heroLevel = 1;
 let heroExperience = 0;
 let heroStrength = STARTING_STRENGTH;
+let heroGold = 0;
 let heroStatuses: Statuses = {};
 // Whether a hasted hero already took the first of their two actions in this turn.
 let hasActedOnce = false;
@@ -246,6 +271,8 @@ let heroViewDistance = DEFAULT_VIEW_DISTANCE;
 let visionState = '';
 let path: Point[] = [];
 let attackTarget: Enemy | null = null;
+// A closed chest the hero walks to, to open it from a tile next to it.
+let chestTarget: Point | null = null;
 // Whether the player clicked the stairs, as opposed to the walk merely ending on them.
 let isWalkingToStairs = false;
 let isWalking = false;
@@ -261,7 +288,7 @@ let cameraDrag: { pointerId: number; start: Point; last: Point; isDragging: bool
 const activePointers = new Map<number, Point>();
 let inventory: ItemStack[] = [];
 let equipment: Equipment = createStartingEquipment();
-let groundItems: { name: ItemName; position: Point; paint: Paint }[] = [];
+let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
 
 function createItemContext(): ItemContext {
   return {
@@ -397,7 +424,7 @@ function gainExperience(amount: number) {
 
 function showHeroStats() {
   const experience = `XP ${heroExperience}/${experienceToLevelUp()}`;
-  statsLabel.textContent = `Lv ${heroLevel} · ${experience} · Str ${heroStrength}`;
+  statsLabel.textContent = `Lv ${heroLevel} · ${experience} · Str ${heroStrength} · ${heroGold}G`;
   statusBar.show(heroStatuses);
 }
 
@@ -507,25 +534,68 @@ function updateCursorTile() {
 }
 
 function dropItem(name: ItemName, position: Point) {
-  const paint = createItemPaint(TVG, potionLore.lookOf(name).icon);
+  dropThing({ kind: 'item', name }, position);
+}
+
+function dropThing(thing: GroundThing, position: Point) {
+  const icon =
+    thing.kind === 'item'
+      ? potionLore.lookOf(thing.name).icon
+      : thing.kind === 'gold'
+        ? GOLD_ICON
+        : CHEST_ICON;
+  const paint = createItemPaint(TVG, icon);
   roomView.place(paint, position.x, position.y);
-  groundItems.push({ name, position, paint });
+  groundItems.push({ thing, position, paint });
   enterDoor(position);
 }
 
-// Returns whether anything was picked up.
+function removeFromGround(item: (typeof groundItems)[number]) {
+  roomView.remove(item.paint);
+  groundItems.splice(groundItems.indexOf(item), 1);
+}
+
+function chestTiles(): Point[] {
+  return groundItems.filter(({ thing }) => thing.kind === 'chest').map(({ position }) => position);
+}
+
+function hasChest(tile: Point): boolean {
+  return chestTiles().some((chest) => isSameTile(chest, tile));
+}
+
+// Opens the chests on a tile next to the hero, leaving what was in them lying there, as Heap.open()
+// of Shattered Pixel Dungeon. It takes a turn, as Key.TIME_TO_UNLOCK does there.
+function openChests(tile: Point) {
+  for (const item of itemsAt(tile)) {
+    if (item.thing.kind === 'chest') {
+      removeFromGround(item);
+      dropThing(item.thing.contents, tile);
+    }
+  }
+  renderCanvas();
+  passTurn(() => {});
+}
+
+// Returns whether anything was picked up. Chests stay until they are opened.
 function pickUpItems(tile: Point): boolean {
   let hasPickedUp = false;
   for (const item of itemsAt(tile)) {
-    if (addItem(inventory, item.name)) {
-      roomView.remove(item.paint);
-      groundItems.splice(groundItems.indexOf(item), 1);
+    const { thing } = item;
+    if (thing.kind === 'gold') {
+      heroGold += thing.amount;
+      removeFromGround(item);
       hasPickedUp = true;
-    } else {
-      playBounce(roomView, item.paint, tile, renderCanvas);
+    } else if (thing.kind === 'item') {
+      if (addItem(inventory, thing.name)) {
+        removeFromGround(item);
+        hasPickedUp = true;
+      } else {
+        playBounce(roomView, item.paint, tile, renderCanvas);
+      }
     }
   }
   inventoryPanel.refresh();
+  showHeroStats();
   return hasPickedUp;
 }
 
@@ -617,8 +687,7 @@ function updateVision() {
     if (isSeen) {
       seenEnemies.add(enemy);
       // A new enemy stops the walk, so the player can decide again.
-      path = [];
-      attackTarget = null;
+      stopWalking();
     } else {
       seenEnemies.delete(enemy);
     }
@@ -703,8 +772,7 @@ function placeEnemy(enemy: Enemy, tile: Point) {
 function startLevel() {
   visionState = '';
   groundItems = [];
-  path = [];
-  attackTarget = null;
+  stopWalking();
   isWalkingToStairs = false;
   isWalking = false;
   isGameOver = false;
@@ -717,10 +785,9 @@ function startLevel() {
   for (const enemy of enemies) {
     enterDoor(enemy.position);
   }
-  for (const { name, position } of floorItems) {
-    dropItem(name, position);
-  }
-  heroPosition = room.start;
+  for (const { thing, position } of floorItems) {
+    dropThing(thing, position);
+  }  heroPosition = room.start;
   placeHero(room.start);
   // The hero is drawn anew on each level, so the effects on them are shown again.
   updateHeroLook();
@@ -772,9 +839,11 @@ function occupiedTiles(except?: Enemy): Point[] {
   return enemies.filter((enemy) => enemy !== except).map((enemy) => enemy.position);
 }
 
-// The tiles the hero knows are taken, so the hero's paths cannot reveal unseen enemies.
-function seenEnemyTiles(except?: Enemy): Point[] {
-  return [...seenEnemies].filter((enemy) => enemy !== except).map((enemy) => enemy.position);
+// The tiles the hero's paths go around: closed chests, and the enemies the hero has seen, so that
+// the paths cannot reveal unseen ones. A path may end on `end`, so whatever is there is left out.
+function heroObstacles(end?: Point): Point[] {
+  const tiles = [...[...seenEnemies].map((enemy) => enemy.position), ...chestTiles()];
+  return tiles.filter((tile) => !isSameTile(tile, end ?? null));
 }
 
 function showDamage(amount: number, tile: Point, target: DamageTarget) {
@@ -869,8 +938,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
         damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
       }
       // Being attacked stops the walk, even by a miss, so the player can decide again.
-      path = [];
-      attackTarget = null;
+      stopWalking();
     },
     onEnd: () => {
       finishAttackEffect = null;
@@ -992,7 +1060,7 @@ function runEnemyTurn(onDone: () => void) {
       room,
       hero: heroPosition,
       canSeeHero,
-      occupied: occupiedTiles(enemy),
+      occupied: [...occupiedTiles(enemy), ...chestTiles()],
     });
 
     // Shown where the enemy ends its turn, so the mark does not stay behind when it moves.
@@ -1093,12 +1161,20 @@ function canHeroReach(enemy: Enemy): boolean {
   return canReach(heroPosition, enemy.position, weaponReach(equipment), isOpen);
 }
 
+// Returns the tiles to walk through to stand next to a tile.
+function pathNextTo(tile: Point): Point[] {
+  return findPath(room, heroPosition, tile, heroObstacles(tile), isExplored).slice(0, -1);
+}
+
 // Returns the tiles to walk through to stand next to an enemy, or none when the weapon already
 // reaches it. The walk asks again on every step, so it stops as soon as the weapon reaches.
 function pathToAttack(enemy: Enemy): Point[] {
-  return canHeroReach(enemy)
-    ? []
-    : findPath(room, heroPosition, enemy.position, seenEnemyTiles(enemy), isExplored).slice(0, -1);
+  return canHeroReach(enemy) ? [] : pathNextTo(enemy.position);
+}
+
+// Returns the tiles to walk through to stand next to a chest, or none when the hero already does.
+function pathToChest(tile: Point): Point[] {
+  return isAdjacent(tile, heroPosition) ? [] : pathNextTo(tile);
 }
 
 function walk() {
@@ -1108,8 +1184,7 @@ function walk() {
 
   // The target may have moved out of view on its turn.
   if (attackTarget && !seenEnemies.has(attackTarget)) {
-    path = [];
-    attackTarget = null;
+    stopWalking();
   }
 
   // The target may have moved on its turn.
@@ -1122,8 +1197,11 @@ function walk() {
     isWalking = false;
     if (attackTarget && canHeroReach(attackTarget)) {
       playHeroAttack(attackTarget);
+    } else if (chestTarget && isAdjacent(chestTarget, heroPosition)) {
+      openChests(chestTarget);
     }
     attackTarget = null;
+    chestTarget = null;
     return;
   }
 
@@ -1131,9 +1209,8 @@ function walk() {
   // attacked, because the player meant to step there.
   const blocker = enemies.find(({ position }) => isSameTile(position, next));
   if (blocker) {
-    const isChosenTile = path.length === 0 && !attackTarget;
-    path = [];
-    attackTarget = null;
+    const isChosenTile = path.length === 0 && !attackTarget && !chestTarget;
+    stopWalking();
     isWalking = false;
     if (isChosenTile && !seenEnemies.has(blocker)) {
       playHeroAttack(blocker);
@@ -1146,7 +1223,7 @@ function walk() {
   const hasArrived = path.length === 0;
   placeHero(next);
   // As in Shattered Pixel Dungeon, items are only picked up on the tile the player chose.
-  const hasPickedUp = hasArrived && !attackTarget && pickUpItems(next);
+  const hasPickedUp = hasArrived && !attackTarget && !chestTarget && pickUpItems(next);
 
   if (hasArrived && isWalkingToStairs && !hasPickedUp && canGoDownStairs()) {
     goDownStairs();
@@ -1265,12 +1342,15 @@ function pressTileAt(position: Point, isMouse: boolean) {
   // A click on the stairs goes down on arrival, but a click on an item lying there is for the item.
   isWalkingToStairs = !clicked && isStairs && itemsAt(target).length === 0;
 
+  stopWalking();
   if (clicked) {
     path = pathToAttack(clicked);
     attackTarget = clicked;
+  } else if (isExplored(target) && hasChest(target)) {
+    path = pathToChest(target);
+    chestTarget = target;
   } else {
-    path = findPath(room, heroPosition, target, seenEnemyTiles(), isExplored);
-    attackTarget = null;
+    path = findPath(room, heroPosition, target, heroObstacles(), isExplored);
   }
 
   if (!isWalking) {
@@ -1418,6 +1498,7 @@ canvasElement.addEventListener('pointerleave', () => {
 function stopWalking() {
   path = [];
   attackTarget = null;
+  chestTarget = null;
 }
 
 // Takes an item out of the bag before an action with it, and ends the panel and any walk.
@@ -1614,6 +1695,7 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   heroLevel = 1;
   heroExperience = 0;
   heroStrength = STARTING_STRENGTH;
+  heroGold = 0;
   heroStatuses = {};
   hasActedOnce = false;
   potionLore = createPotionLore(createRandom(runSeed));

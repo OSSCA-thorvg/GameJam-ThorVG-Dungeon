@@ -25,9 +25,9 @@ export const POTIONS = (Object.keys(ITEMS) as ItemName[]).filter(
 );
 
 // Floors in a stage, as in a chapter of Shattered Pixel Dungeon. The last one is a boss floor, and
-// no potions lie there, as on the boss floors of Shattered Pixel Dungeon.
+// no items lie there, as on the boss floors of Shattered Pixel Dungeon.
 export const FLOORS_PER_STAGE = 5;
-const POTION_FLOORS_PER_STAGE = FLOORS_PER_STAGE - 1;
+export const ITEM_FLOORS_PER_STAGE = FLOORS_PER_STAGE - 1;
 // Placeholder value.
 const RANDOM_POTIONS_PER_STAGE = 4;
 
@@ -65,18 +65,17 @@ function randomPotion(random: Random): RandomPotionName {
 // half the time, as Dungeon.posNeeded() of Shattered Pixel Dungeon places strength potions.
 const pickTwoFloors = (random: Random) => [random() < 0.5 ? 0 : 1, random() < 0.5 ? 2 : 3];
 
-// Decides the potions lying on each floor of a stage: 2 strength potions, 2 healing potions, and
-// some random others, each of those on a different floor before the boss floor.
+// Decides the potions lying on each floor of a stage before its boss floor: 2 strength potions,
+// 2 healing potions, and some random others, each of those on a different floor.
 export function planStagePotions(random: Random): PotionName[][] {
-  const floors = Array.from({ length: FLOORS_PER_STAGE }, (): PotionName[] => []);
+  const floors = Array.from({ length: ITEM_FLOORS_PER_STAGE }, (): PotionName[] => []);
   for (const index of pickTwoFloors(random)) {
     floors[index].push('strength-potion');
   }
   for (const index of pickTwoFloors(random)) {
     floors[index].push('healing-potion');
   }
-  const potionFloors = [...Array(POTION_FLOORS_PER_STAGE).keys()];
-  const randomFloors = shuffle(random, potionFloors).slice(0, RANDOM_POTIONS_PER_STAGE);
+  const randomFloors = shuffle(random, [...floors.keys()]).slice(0, RANDOM_POTIONS_PER_STAGE);
   for (const index of randomFloors) {
     floors[index].push(randomPotion(random));
   }
