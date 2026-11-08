@@ -10,6 +10,9 @@ export type StatusName =
   | 'frozen'
   | 'burning';
 
+// The effects that work against the character they are on.
+export const HARMFUL_STATUSES: readonly StatusName[] = ['paralyzed', 'frozen', 'burning'];
+
 // The turns left of each effect on a character.
 export type Statuses = Partial<Record<StatusName, number>>;
 

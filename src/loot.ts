@@ -1,4 +1,5 @@
 import type { ItemName } from './items';
+import { ITEM_FLOORS_PER_STAGE } from './potions';
 import { randomInt, type Random } from './random';
 
 // Something lying on a tile that the hero can pick up. Gold goes to the hero's purse, not the bag.
@@ -14,6 +15,9 @@ export const GOLD_PILES_PER_FLOOR = 1;
 // RegularLevel.createItems() of Shattered Pixel Dungeon puts 5 of every 20 items in chests when no
 // mimics take the place of any.
 const CHEST_CHANCE = 5 / 20;
+
+// Placeholder value. How often a stage has a mimic. It never has more than one.
+const MIMIC_CHANCE_PER_STAGE = 1 / 2;
 
 export const GOLD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <ellipse cx="7.500" cy="18.300" rx="4.600" ry="2.200" fill="#a87a22"/>
@@ -43,6 +47,30 @@ export const CHEST_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
   <path fill="#3a2a1a" d="M11.600 10.600H12.400V12.600H11.600Z"/>
 </svg>`;
 
+export const MIMIC_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#2a1410" d="M3 14H21L20.500 7H3.500Z"/>
+  <ellipse cx="12" cy="13" rx="4" ry="1.600" fill="#c4455a"/>
+  <path fill="#8a5a2c" d="M3 14H21V21H3Z"/>
+  <path fill="#9aa0aa" d="M5.500 14H7.500V21H5.500Z"/>
+  <path fill="#9aa0aa" d="M16.500 14H18.500V21H16.500Z"/>
+  <path fill="#a86d36" d="M3.500 7L4.500 2.500Q5.500 1 8 1H16Q18.500 1 19.500 2.500L20.500 7Z"/>
+  <path fill="#9aa0aa" d="M5.800 1.600H7.700L7.300 7H5.200Z"/>
+  <path fill="#9aa0aa" d="M16.300 1.600H18.200L18.800 7H16.700Z"/>
+  <path fill="#f2efe6" d="M4 14L5.500 11.300L7 14Z"/>
+  <path fill="#f2efe6" d="M7.500 14L9 11.300L10.500 14Z"/>
+  <path fill="#f2efe6" d="M10.500 14L12 11.300L13.500 14Z"/>
+  <path fill="#f2efe6" d="M13.500 14L15 11.300L16.500 14Z"/>
+  <path fill="#f2efe6" d="M17 14L18.500 11.300L20 14Z"/>
+  <path fill="#f2efe6" d="M5.200 7L6.700 9.500L8.200 7Z"/>
+  <path fill="#f2efe6" d="M8.500 7L10 9.500L11.500 7Z"/>
+  <path fill="#f2efe6" d="M12.500 7L14 9.500L15.500 7Z"/>
+  <path fill="#f2efe6" d="M15.800 7L17.300 9.500L18.800 7Z"/>
+  <circle cx="9.500" cy="4.300" r="1.300" fill="#f5d040"/>
+  <circle cx="14.500" cy="4.300" r="1.300" fill="#f5d040"/>
+  <circle cx="9.500" cy="4.300" r="0.550" fill="#2a1410"/>
+  <circle cx="14.500" cy="4.300" r="0.550" fill="#2a1410"/>
+</svg>`;
+
 // Same as Gold.random() of Shattered Pixel Dungeon.
 export function rollGold(random: Random, floor: number): number {
   return randomInt(random, 30 + floor * 10, 60 + floor * 20);
@@ -51,4 +79,9 @@ export function rollGold(random: Random, floor: number): number {
 // Puts some of the loot in chests, each piece on its own.
 export function hideInChests(random: Random, loot: Loot[]): GroundThing[] {
   return loot.map((contents) => (random() < CHEST_CHANCE ? { kind: 'chest', contents } : contents));
+}
+
+// Picks the floor of a stage, counted from 0, that has the stage's mimic, or null for none.
+export function pickMimicFloor(random: Random): number | null {
+  return random() < MIMIC_CHANCE_PER_STAGE ? Math.floor(random() * ITEM_FLOORS_PER_STAGE) : null;
 }

@@ -1,6 +1,7 @@
 import type { Scene } from '@thorvg/webcanvas';
 import { distancesFrom, findPath } from './path';
 import type { Random } from './random';
+import type { Loot } from './loot';
 import type { HealthBar } from './render';
 import { isAdjacent, isWalkable, type Point, type Room } from './room';
 import type { Statuses } from './status';
@@ -25,6 +26,10 @@ export interface EnemyStats {
   actions: number;
   // The experience the hero gets for defeating it.
   experience: number;
+}
+
+// An enemy that appears at random on the floors.
+interface EnemyKindStats extends EnemyStats {
   // The first floor it appears on.
   firstFloor: number;
   // How often it appears, against the other kinds that can appear on a floor.
@@ -35,7 +40,7 @@ export interface EnemyStats {
 // starting sword, about 2, 3 and 4.5, and how many hits each needs to defeat a hero with 20 HP in
 // cloth armor, about 13, 8 and 8. The strong enemy lands its 8 hits in 4 turns, as it acts twice.
 // The weak one has the accuracy and evasion of a rat in Shattered Pixel Dungeon.
-export const ENEMY_KINDS: Record<EnemyKind, EnemyStats> = {
+export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
   weak: {
     name: 'small dummy',
     maxHp: 11,
@@ -70,6 +75,20 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyStats> = {
     weight: 1,
   },
 };
+
+// Mimic.adjustStats(), attackSkill() and damageRoll() of Shattered Pixel Dungeon, whose level is
+// the floor. A mimic gives no experience there either.
+export function mimicStats(floor: number): EnemyStats {
+  return {
+    name: 'mimic',
+    maxHp: (1 + floor) * 6,
+    damage: [1 + floor, 2 + 2 * floor],
+    accuracy: 6 + floor,
+    evasion: 2 + Math.floor(floor / 2),
+    actions: 1,
+    experience: 0,
+  };
+}
 
 // Picks a kind of enemy that can appear on the floor, by weight.
 export function pickEnemyKind(random: Random, floor: number): EnemyKind {
@@ -127,14 +146,14 @@ export interface EnemyContext {
 export type EnemyBehavior = (enemy: Enemy, context: EnemyContext) => EnemyAction;
 
 export interface Enemy {
-  kind: EnemyKind;
   stats: EnemyStats;
   position: Point;
   hp: number;
   // A sleeping enemy stays where it is. A wandering enemy walks to random places. A hunting one
   // goes after the hero, or after where it last saw the hero, as the Sleeping, Wandering and
-  // Hunting states of Shattered Pixel Dungeon.
-  state: 'sleeping' | 'wandering' | 'hunting';
+  // Hunting states of Shattered Pixel Dungeon. A disguised one, a mimic, passes for a chest and
+  // does nothing until it is found out.
+  state: 'disguised' | 'sleeping' | 'wandering' | 'hunting';
   // Where the enemy is going.
   target: Point | null;
   // Where the enemy last saw the hero, and the way the hero was moving then.
@@ -152,6 +171,8 @@ export interface Enemy {
   // Shown over the enemy while it sleeps.
   sleepMark: Scene;
   behavior: EnemyBehavior;
+  // Left where the enemy dies.
+  loot: Loot | null;
 }
 
 const isSameTile = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
@@ -215,6 +236,10 @@ export function alertEnemy(enemy: Enemy, hero: Point): void {
 export const chaser: EnemyBehavior = (enemy, { room, hero, canSeeHero, occupied }) => {
   const blocked = [...occupied, hero];
 
+  if (enemy.state === 'disguised') {
+    return { type: 'wait' };
+  }
+
   // A sleeping enemy only wakes when it sees the hero close by. Waking up takes its turn.
   if (enemy.state === 'sleeping') {
     const distance = Math.max(
@@ -270,19 +295,19 @@ export const chaser: EnemyBehavior = (enemy, { room, hero, canSeeHero, occupied 
 };
 
 export function createEnemy(
-  kind: EnemyKind,
+  stats: EnemyStats,
   position: Point,
   isAsleep: boolean,
   paint: Scene,
   healthBar: HealthBar,
   sleepMark: Scene,
   behavior: EnemyBehavior,
+  loot: Loot | null = null,
 ): Enemy {
   return {
-    kind,
-    stats: ENEMY_KINDS[kind],
+    stats,
     position,
-    hp: ENEMY_KINDS[kind].maxHp,
+    hp: stats.maxHp,
     state: isAsleep ? 'sleeping' : 'wandering',
     target: null,
     lastSeen: null,
@@ -294,6 +319,7 @@ export function createEnemy(
     healthBar,
     sleepMark,
     behavior,
+    loot,
   };
 }
 

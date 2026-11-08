@@ -17,7 +17,9 @@ import {
   healEnemy,
   HERO_ACCURACY,
   HERO_EVASION,
+  ENEMY_KINDS,
   HERO_MAX_HP,
+  mimicStats,
   pickEnemyKind,
   rollHit,
   type Enemy,
@@ -56,6 +58,8 @@ import {
   GOLD_ICON,
   GOLD_PILES_PER_FLOOR,
   hideInChests,
+  MIMIC_ICON,
+  pickMimicFloor,
   rollGold,
   type GroundThing,
   type Loot,
@@ -87,6 +91,7 @@ import {
 import { isAdjacent, isWalkable, type Point } from './room';
 import {
   addStatus,
+  HARMFUL_STATUSES,
   hasStatus,
   isHelpless,
   STATUS_LABELS,
@@ -217,23 +222,45 @@ let floor = 1;
 let killCount = 0;
 let turnCount = 0;
 
-// The loot lying on the current floor, none of it in chests yet. Each floor plans its stage's
-// potions again from the same seed, so the floors of a stage agree on the plan. Those seeds are
-// below the run seed, which the floors' seeds are above.
-function floorLoot(random: Random): Loot[] {
+// The loot lying on the current floor, none of it in chests yet, and whether the stage's mimic is
+// on this floor. Each floor plans its stage again from the same seed, so the floors of a stage
+// agree on the plan. Those seeds are below the run seed, which the floors' seeds are above.
+function floorContents(random: Random): { loot: Loot[]; hasMimic: boolean } {
   const index = (floor - 1) % FLOORS_PER_STAGE;
   if (index >= ITEM_FLOORS_PER_STAGE) {
-    return [];
+    return { loot: [], hasMimic: false };
   }
   const stage = Math.floor((floor - 1) / FLOORS_PER_STAGE);
-  const potions = planStagePotions(createRandom(runSeed - 1 - stage))[index];
-  return [
+  const stageRandom = createRandom(runSeed - 1 - stage);
+  const potions = planStagePotions(stageRandom)[index];
+  const hasMimic = pickMimicFloor(stageRandom) === index;
+  const loot = [
     ...potions.map((name): Loot => ({ kind: 'item', name })),
     ...Array.from({ length: GOLD_PILES_PER_FLOOR }, (): Loot => ({
       kind: 'gold',
       amount: rollGold(random, floor),
     })),
   ];
+  return { loot, hasMimic };
+}
+
+// A mimic in disguise, drawn as a chest on the floor is. It holds gold, one of the prizes
+// Mimic.generatePrize() of Shattered Pixel Dungeon picks from.
+function createMimic(position: Point, random: Random): Enemy {
+  const look = new TVG.Scene();
+  look.add(createItemPaint(TVG, CHEST_ICON));
+  const mimic = createEnemy(
+    mimicStats(floor),
+    position,
+    false,
+    look,
+    createEnemyHealthBar(TVG, renderCanvas),
+    createSleepMark(TVG),
+    chaser,
+    { kind: 'gold', amount: rollGold(random, floor) },
+  );
+  mimic.state = 'disguised';
+  return mimic;
 }
 
 function createLevel() {
@@ -248,7 +275,7 @@ function createLevel() {
   const enemies = room.monsters.map((position) => {
     const kind = pickEnemyKind(random, floor);
     return createEnemy(
-      kind,
+      ENEMY_KINDS[kind],
       position,
       random() < ASLEEP_CHANCE,
       createDummyEnemy(TVG, kind),
@@ -257,12 +284,14 @@ function createLevel() {
       chaser,
     );
   });
-  const loot = floorLoot(random);
-  const tiles = pickItemTiles(room, loot.length, random);
-  const floorItems = hideInChests(random, loot.slice(0, tiles.length)).map((thing, index) => ({
-    thing,
-    position: tiles[index],
-  }));
+  const { loot, hasMimic } = floorContents(random);
+  const tiles = pickItemTiles(room, loot.length + (hasMimic ? 1 : 0), random);
+  const things = hideInChests(random, loot.slice(0, tiles.length));
+  // The mimic takes a tile of its own, so it adds to the chests instead of replacing one.
+  if (hasMimic && tiles.length > loot.length) {
+    enemies.push(createMimic(tiles[loot.length], random));
+  }
+  const floorItems = things.map((thing, index) => ({ thing, position: tiles[index] }));
 
   const roomView = createRoomView(TVG, room);
   return {
@@ -419,7 +448,12 @@ function addHeroStatus(name: StatusName, turns: number) {
 }
 
 // The name shows only over an enemy in view, so it does not give away the others.
+// A harmful effect gives a disguised mimic away, as a negative buff does in Shattered Pixel
+// Dungeon.
 function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
+  if (HARMFUL_STATUSES.includes(name)) {
+    revealMimic(enemy);
+  }
   if (!hasStatus(enemy.statuses, name) && seenEnemies.has(enemy)) {
     showStatusText(enemy.position, name);
   }
@@ -560,7 +594,8 @@ function updateCursorTile() {
   if (tile && enemyAt(tile)) {
     return roomView.setCursorTile(tile, 'enemy');
   }
-  return roomView.setCursorTile(tile, tile && itemsAt(tile).length > 0 ? 'item' : 'floor');
+  const hasItem = tile && (itemsAt(tile).length > 0 || hasChest(tile));
+  return roomView.setCursorTile(tile, hasItem ? 'item' : 'floor');
 }
 
 function dropItem(name: ItemName, position: Point) {
@@ -585,8 +620,12 @@ function removeFromGround(item: (typeof groundItems)[number]) {
   groundItems.splice(groundItems.indexOf(item), 1);
 }
 
+// Closed chests, counting a disguised mimic, which passes for one.
 function chestTiles(): Point[] {
-  return groundItems.filter(({ thing }) => thing.kind === 'chest').map(({ position }) => position);
+  return [
+    ...groundItems.filter(({ thing }) => thing.kind === 'chest').map(({ position }) => position),
+    ...enemies.filter(({ state }) => state === 'disguised').map(({ position }) => position),
+  ];
 }
 
 function hasChest(tile: Point): boolean {
@@ -603,7 +642,38 @@ function openChests(tile: Point) {
     }
   }
   renderCanvas();
-  passTurn(() => {});
+  const mimic = disguisedMimicAt(tile);
+  if (!mimic) {
+    passTurn(() => {});
+    return;
+  }
+  // As Mimic.interact() of Shattered Pixel Dungeon, the mimic bites the hero who tries to open
+  // it, and that bite is its action for the turn.
+  revealMimic(mimic);
+  playEnemyAttack(mimic, () => passTurn(() => {}, mimic), { isAmbush: true });
+}
+
+function disguisedMimicAt(tile: Point): Enemy | undefined {
+  return enemies.find((enemy) => enemy.state === 'disguised' && isSameTile(enemy.position, tile));
+}
+
+// A disguised mimic shows what it is, as Mimic.stopHiding() of Shattered Pixel Dungeon. That
+// happens when the hero tries to open it, or when anything harms it. It hunts the hero who sees it.
+function revealMimic(enemy: Enemy) {
+  if (enemy.state !== 'disguised') {
+    return;
+  }
+  roomView.remove(enemy.paint);
+  enemy.paint = createCharacter(TVG, MIMIC_ICON);
+  enemy.state = 'wandering';
+  if (isInView(enemy.position)) {
+    alertEnemy(enemy, heroPosition);
+    enemy.hasSeenHero = true;
+    // Same as reveal of Mimic in Shattered Pixel Dungeon.
+    messageLog.add('That chest is a mimic!');
+  }
+  updateVision();
+  showEnemy(enemy);
 }
 
 // Returns whether anything was picked up. Chests stay until they are opened.
@@ -712,8 +782,12 @@ function updateVision() {
   }
 
   for (const enemy of enemies) {
-    // An invisible enemy is not seen, so the cursor and clicks treat its tile as empty.
-    const isSeen = isInView(enemy.position) && !hasStatus(enemy.statuses, 'invisible');
+    // An invisible enemy is not seen, so the cursor and clicks treat its tile as empty. A disguised
+    // mimic is seen as a chest.
+    const isSeen =
+      isInView(enemy.position) &&
+      !hasStatus(enemy.statuses, 'invisible') &&
+      enemy.state !== 'disguised';
     if (isSeen === seenEnemies.has(enemy)) {
       continue;
     }
@@ -769,6 +843,11 @@ function placeHero(tile: Point) {
 // Draws an enemy while it is in view, or while the hero senses it by telepathy.
 function showEnemy(enemy: Enemy) {
   const { x, y } = enemy.position;
+  // A disguised mimic stays drawn, as a chest on the floor does, so it never vanishes out of view.
+  if (enemy.state === 'disguised') {
+    roomView.place(enemy.paint, x, y);
+    return;
+  }
   tintCharacter(enemy.paint, tintOf(enemy.statuses));
   if (seenEnemies.has(enemy)) {
     enemy.paint.opacity(255);
@@ -817,10 +896,12 @@ function startLevel() {
   openDoors = new Set();
   for (const enemy of enemies) {
     enterDoor(enemy.position);
+    showEnemy(enemy);
   }
   for (const { thing, position } of floorItems) {
     dropThing(thing, position);
-  }  heroPosition = room.start;
+  }
+  heroPosition = room.start;
   placeHero(room.start);
   // The hero is drawn anew on each level, so the effects on them are shown again.
   updateHeroLook();
@@ -917,6 +998,7 @@ function damageHero(amount: number) {
 
 // The number is only shown for an enemy in view, so it does not give away the others.
 function hurtEnemy(enemy: Enemy, amount: number) {
+  revealMimic(enemy);
   damageEnemy(enemy, amount);
   if (seenEnemies.has(enemy)) {
     showDamage(amount, enemy.position, 'enemy');
@@ -935,14 +1017,19 @@ function killEnemy(enemy: Enemy) {
   enemies.splice(enemies.indexOf(enemy), 1);
   killCount++;
   seenEnemies.delete(enemy);
+  if (enemy.loot) {
+    dropThing(enemy.loot, enemy.position);
+  }
   gainExperience(enemy.stats.experience);
   updateVision();
 }
 
-// A paralyzed or frozen hero cannot evade.
-function playEnemyAttack(enemy: Enemy, onDone: () => void) {
+// A paralyzed or frozen hero cannot evade. An ambush always hits for the most damage, as a hidden
+// Mimic attacks in Shattered Pixel Dungeon.
+function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } = {}) {
   const attackerTile = enemy.position;
-  const isHit = isHelpless(heroStatuses) || rollHit(enemy.stats.accuracy, heroEvasion());
+  const isHit =
+    isAmbush || isHelpless(heroStatuses) || rollHit(enemy.stats.accuracy, heroEvasion());
   if (!seenEnemies.has(enemy)) {
     messageLog.add('Something unseen attacked you.');
   }
@@ -968,7 +1055,9 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
     onHit: () => {
       if (isHit) {
         // The armor takes away part of the hit, as in Char.attack() of Shattered Pixel Dungeon.
-        const damage = normalIntRange(Math.random, ...enemy.stats.damage);
+        const damage = isAmbush
+          ? enemy.stats.damage[1]
+          : normalIntRange(Math.random, ...enemy.stats.damage);
         damageHero(Math.max(0, damage - rollArmor(equipment, heroStrength)));
         showHeroStats();
       } else {
@@ -988,7 +1077,8 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
 }
 
 // Ends one action of the hero. A hasted hero takes two actions in each turn of the enemies.
-function passTurn(onDone: () => void) {
+// An enemy that already acted in this turn, like a mimic that bit the hero opening it, waits.
+function passTurn(onDone: () => void, hasActed?: Enemy) {
   if (hasStatus(heroStatuses, 'haste') && !hasActedOnce) {
     hasActedOnce = true;
     canvas.update().render();
@@ -996,7 +1086,7 @@ function passTurn(onDone: () => void) {
     return;
   }
   hasActedOnce = false;
-  runEnemyTurn(onDone);
+  runEnemyTurn(onDone, hasActed);
 }
 
 // Sight goes both ways, unless the hero is invisible.
@@ -1070,10 +1160,10 @@ function endTurn(onDone: () => void) {
 
 // Lets each enemy act once, one after another, then ends the turn.
 // Every action of the hero ends with this, so it also counts the hero's turns.
-function runEnemyTurn(onDone: () => void) {
+function runEnemyTurn(onDone: () => void, hasActed?: Enemy) {
   turnCount++;
   // An enemy that acts more than once does so in a row. Haste doubles that.
-  const waiting = enemies.flatMap((enemy) => {
+  const waiting = enemies.filter((enemy) => enemy !== hasActed).flatMap((enemy) => {
     const actions = enemy.stats.actions * (hasStatus(enemy.statuses, 'haste') ? 2 : 1);
     return Array<Enemy>(actions).fill(enemy);
   });
@@ -1644,6 +1734,12 @@ function describeTile(tile: Point): string[] {
   if (enemy) {
     return [describeEnemy(enemy)];
   }
+  if (disguisedMimicAt(tile)) {
+    // The chest's description and hidden_hint of Mimic in Shattered Pixel Dungeon.
+    return [
+      'A chest. Something about this chest feels off... Trying to open it might be a bad idea.',
+    ];
+  }
   const things = itemsAt(tile);
   if (things.length > 0) {
     return things.map(({ thing }) => describeThing(thing));
@@ -1652,6 +1748,7 @@ function describeTile(tile: Point): string[] {
 }
 
 const ENEMY_STATES: Record<Enemy['state'], string> = {
+  disguised: 'is pretending to be a chest',
   sleeping: 'is asleep',
   wandering: 'is wandering',
   hunting: 'is hunting you',
