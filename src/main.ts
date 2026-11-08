@@ -89,6 +89,7 @@ import {
   addStatus,
   hasStatus,
   isHelpless,
+  STATUS_LABELS,
   tickStatuses,
   tintOf,
   type StatusName,
@@ -158,6 +159,8 @@ document.querySelector('footer')!.hidden = false;
 
 const waitButton = document.querySelector<HTMLButtonElement>('#wait')!;
 waitButton.hidden = false;
+const examineButton = document.querySelector<HTMLButtonElement>('#examine')!;
+examineButton.hidden = false;
 
 const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
 const floorLabel = document.querySelector<HTMLElement>('#floor')!;
@@ -505,8 +508,8 @@ const inventoryPanel = createInventoryPanel({
 // set, a press on a tile picks the target instead of walking there.
 interface TargetRequest {
   prompt: string;
-  rule: PathRule;
-  onSelect(trajectory: Trajectory): void;
+  canPick(tile: Point): boolean;
+  onSelect(tile: Point): void;
 }
 
 let targeting: { request: TargetRequest; preview: Point | null } | null = null;
@@ -1292,7 +1295,7 @@ function traceTo(target: Point, rule: PathRule): Trajectory {
 }
 
 function canTarget(tile: Point | null): tile is Point {
-  return tile !== null && isInView(tile);
+  return tile !== null && targeting !== null && targeting.request.canPick(tile);
 }
 
 function requestTarget(request: TargetRequest) {
@@ -1335,9 +1338,8 @@ function pressTarget(tile: Point, isMouse: boolean) {
     return;
   }
   const { request } = targeting;
-  const trajectory = traceTo(tile, request.rule);
   cancelTargeting();
-  request.onSelect(trajectory);
+  request.onSelect(tile);
 }
 
 function pressTileAt(position: Point, isMouse: boolean) {
@@ -1599,8 +1601,9 @@ function throwItem(name: ItemName) {
   inventoryPanel.close();
   requestTarget({
     prompt: `Throw the ${potionLore.lookOf(name).displayName.toLowerCase()} where?`,
-    rule: THROWN,
-    onSelect({ end }) {
+    canPick: isInView,
+    onSelect(tile) {
+      const { end } = traceTo(tile, THROWN);
       if (!takeFromBag(name)) {
         return;
       }
@@ -1624,6 +1627,73 @@ function throwItem(name: ItemName) {
     },
   });
 }
+
+// Tells what is on a tile, in the order GameScene.examineCell() of Shattered Pixel Dungeon looks:
+// a character, then what lies there, then the tile itself. On the hero's own tile it skips the
+// hero, whom the HUD already shows. Examining takes no turn.
+function examine(tile: Point) {
+  for (const line of describeTile(tile)) {
+    messageLog.add(line);
+  }
+}
+
+function describeTile(tile: Point): string[] {
+  const enemy = enemyAt(tile);
+  if (enemy) {
+    return [describeEnemy(enemy)];
+  }
+  const things = itemsAt(tile);
+  if (things.length > 0) {
+    return things.map(({ thing }) => describeThing(thing));
+  }
+  return [describeTerrain(tile)];
+}
+
+const ENEMY_STATES: Record<Enemy['state'], string> = {
+  sleeping: 'is asleep',
+  wandering: 'is wandering',
+  hunting: 'is hunting you',
+};
+
+function describeEnemy(enemy: Enemy): string {
+  const effects = (Object.keys(STATUS_LABELS) as StatusName[])
+    .filter((name) => hasStatus(enemy.statuses, name))
+    .map((name) => STATUS_LABELS[name]);
+  const state = `The ${enemy.stats.name} ${ENEMY_STATES[enemy.state]}.`;
+  return effects.length > 0 ? `${state} Effects: ${effects.join(', ')}.` : state;
+}
+
+function describeThing(thing: GroundThing): string {
+  switch (thing.kind) {
+    case 'item': {
+      const look = potionLore.lookOf(thing.name);
+      return `${look.displayName}: ${look.description}`;
+    }
+    case 'gold':
+      return `${thing.amount} gold.`;
+    case 'chest':
+      return 'A chest. Open it from a tile next to it.';
+  }
+}
+
+function describeTerrain({ x, y }: Point): string {
+  switch (room.tiles[y][x]) {
+    case 'wall':
+      return 'A wall.';
+    case 'door':
+      return openDoors.has(y * room.width + x) ? 'An open door.' : 'A closed door.';
+    case 'stairs':
+      return 'Stairs down to the next floor.';
+    default:
+      return 'The floor.';
+  }
+}
+
+const EXAMINE_REQUEST: TargetRequest = {
+  prompt: 'Examine which tile?',
+  canPick: isExplored,
+  onSelect: examine,
+};
 
 // Equipping or taking off an item takes a turn, as in Shattered Pixel Dungeon.
 function changeEquipment(change: () => boolean) {
@@ -1688,6 +1758,20 @@ function playWaitEffect() {
     .querySelector('#wait-label')!
     .animate({ opacity: [1, 0, 0, 1], offset: [0, 0.15, 0.75, 1] }, timing);
 }
+
+// A second press while choosing a tile to examine stops choosing.
+examineButton.addEventListener('click', () => {
+  finishRunningEffects();
+  if (cannotAct()) {
+    return;
+  }
+  if (targeting?.request === EXAMINE_REQUEST) {
+    cancelTargeting();
+    return;
+  }
+  inventoryPanel.close();
+  requestTarget(EXAMINE_REQUEST);
+});
 
 waitButton.addEventListener('click', () => {
   finishRunningEffects();
