@@ -24,6 +24,8 @@ import {
 } from './enemy';
 import { createHazardField, spreadArea } from './hazards';
 import { createInventoryPanel } from './inventoryPanel';
+import { loadSettings, saveSettings, uiScaleFor } from './settings';
+import { createSettingsPanel } from './settingsPanel';
 import { createStatusBar } from './statusBar';
 import {
   accuracyFactor,
@@ -175,6 +177,31 @@ const mapScene = new TVG.Scene();
 canvas.add(mapScene);
 const heroHealthBar = createHeroHealthBar(TVG, renderCanvas);
 canvas.add(heroHealthBar.scene);
+
+let settings = loadSettings();
+
+// The CSS zooms the HTML by the UI scale. The hero health bar is on the canvas, so it is scaled
+// here to stay under its text.
+function applySettings() {
+  const scale = uiScaleFor(settings, window.innerWidth);
+  document.documentElement.style.setProperty('--ui-scale', String(scale));
+  heroHealthBar.scene.scale(scale);
+}
+
+applySettings();
+const settingsPanel = createSettingsPanel({
+  getSettings: () => settings,
+  onOpen() {
+    stopWalking();
+    cancelTargeting();
+  },
+  onChange(next) {
+    settings = next;
+    saveSettings(settings);
+    applySettings();
+    renderCanvas();
+  },
+});
 
 // A "seed" URL parameter repeats the same maps, for testing.
 const fixedSeed = new URLSearchParams(location.search).get('seed');
@@ -832,6 +859,8 @@ messageLog.add('You entered an unknown dungeon.');
 
 window.addEventListener('resize', () => {
   canvas.resize(window.innerWidth, window.innerHeight);
+  applySettings();
+  settingsPanel.refresh();
   applyCamera();
   canvas.update().render();
 });

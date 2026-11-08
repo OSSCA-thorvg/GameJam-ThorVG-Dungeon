@@ -63,9 +63,11 @@ export function createStatusBar(element: HTMLElement, tooltip: HTMLElement): Sta
     tooltip.replaceChildren(title, description, turns);
     tooltip.hidden = false;
 
+    // The bounds are on the screen, but the tooltip's own position is zoomed by the UI scale.
     const bounds = item.getBoundingClientRect();
-    tooltip.style.left = `${bounds.left}px`;
-    tooltip.style.top = `${bounds.bottom + 6}px`;
+    const zoom = tooltip.currentCSSZoom;
+    tooltip.style.left = `${bounds.left / zoom}px`;
+    tooltip.style.top = `${bounds.bottom / zoom + 6}px`;
   };
 
   // A click anywhere else closes a pinned explanation.

@@ -16,6 +16,11 @@
         touch-action: none;
         display: block;
       }
+      /* The UI scale setting enlarges everything but the map, as display scaling enlarges a whole
+         screen. A zoomed element also zooms viewport units, so widths from them divide it out. */
+      body > :not(canvas) {
+        zoom: var(--ui-scale, 1);
+      }
       footer {
         position: fixed;
         right: 8px;
@@ -110,18 +115,40 @@
         position: fixed;
         left: 12px;
         bottom: 84px;
-        width: min(360px, calc(100vw - 24px));
+        width: min(360px, calc(100vw / var(--ui-scale, 1) - 24px));
         font: 15px/1.4 sans-serif;
         color: #e8e8ec;
         text-shadow: 0 1px 2px #000;
         pointer-events: none;
       }
-      #floor {
+      #top-right {
         position: fixed;
-        top: 10px;
+        top: 6px;
         right: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #floor {
         font: 16px sans-serif;
         color: #c8cad2;
+      }
+      #settings-button {
+        width: 36px;
+        height: 36px;
+        padding: 6px;
+        color: #c8cad2;
+        background: #2c2e36;
+        border: 1px solid #4a4d58;
+        border-radius: 6px;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      #settings-button svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
       }
       #wait {
         left: 12px;
@@ -156,7 +183,8 @@
         stroke-width: 1.6;
         stroke-linecap: round;
       }
-      #inventory {
+      #inventory,
+      #settings {
         position: fixed;
         inset: 0;
         display: flex;
@@ -164,11 +192,13 @@
         justify-content: center;
         background: rgb(0 0 0 / 50%);
       }
-      #inventory[hidden] {
+      #inventory[hidden],
+      #settings[hidden] {
         display: none;
       }
-      #inventory-panel {
-        width: min(340px, calc(100vw - 24px));
+      #inventory-panel,
+      #settings-panel {
+        width: min(340px, calc(100vw / var(--ui-scale, 1) - 24px));
         box-sizing: border-box;
         padding: 12px;
         font: 14px sans-serif;
@@ -177,14 +207,16 @@
         border: 1px solid #4a4d58;
         border-radius: 8px;
       }
-      #inventory-header {
+      #inventory-header,
+      #settings-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         margin-bottom: 10px;
         font-size: 16px;
       }
-      #inventory-close {
+      #inventory-close,
+      #settings-close {
         width: 36px;
         height: 36px;
         font-size: 20px;
@@ -192,6 +224,21 @@
         background: none;
         border: none;
         cursor: pointer;
+      }
+      #settings-panel label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 40px;
+      }
+      #settings-panel select {
+        min-height: 36px;
+        padding: 0 8px;
+        font: 14px sans-serif;
+        color: #e8e8ec;
+        background: #3a3d48;
+        border: 1px solid #5a5d68;
+        border-radius: 6px;
       }
       #equipment-slots {
         display: grid;
@@ -333,7 +380,17 @@
     <div id="status"></div>
     <div id="status-tooltip" hidden></div>
     <div id="log" aria-live="polite"></div>
-    <div id="floor"></div>
+    <div id="top-right">
+      <div id="floor"></div>
+      <button id="settings-button" aria-label="Settings" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill-rule="evenodd"
+            d="M10.071 4.236L10.276 1.642L13.724 1.642L13.929 4.236L16.126 5.146L18.105 3.457L20.543 5.895L18.854 7.874L19.764 10.071L22.358 10.276L22.358 13.724L19.764 13.929L18.854 16.126L20.543 18.105L18.105 20.543L16.126 18.854L13.929 19.764L13.724 22.358L10.276 22.358L10.071 19.764L7.874 18.854L5.895 20.543L3.457 18.105L5.146 16.126L4.236 13.929L1.642 13.724L1.642 10.276L4.236 10.071L5.146 7.874L3.457 5.895L5.895 3.457L7.874 5.146ZM15.500 12A3.500 3.500 0 1 0 8.500 12A3.500 3.500 0 1 0 15.500 12Z"
+          />
+        </svg>
+      </button>
+    </div>
     <button id="wait" hidden>
       <span id="wait-label">Wait</span>
       <svg id="wait-clock" viewBox="-12 -12 24 24" aria-hidden="true">
@@ -352,6 +409,18 @@
         <div id="equipment-slots"></div>
         <div id="inventory-slots"></div>
         <div id="inventory-details"></div>
+      </div>
+    </div>
+    <div id="settings" hidden>
+      <div id="settings-panel" role="dialog" aria-label="Settings">
+        <div id="settings-header">
+          Settings
+          <button id="settings-close" aria-label="Close">×</button>
+        </div>
+        <label>
+          UI scale
+          <select id="ui-scale"></select>
+        </label>
       </div>
     </div>
     <div id="target-prompt" hidden>
