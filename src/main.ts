@@ -26,13 +26,18 @@ import { createHazardField, spreadArea } from './hazards';
 import { createInventoryPanel } from './inventoryPanel';
 import { createStatusBar } from './statusBar';
 import {
+  accuracyFactor,
   addItem,
+  canSurpriseAttack,
   createStartingEquipment,
   equip,
+  evasionFactor,
   rollArmor,
   rollDamage,
   STARTING_STRENGTH,
+  tooHeavyMessage,
   unequip,
+  weaponReach,
   type Equipment,
   type EquipmentSlot,
   ITEMS,
@@ -43,7 +48,7 @@ import {
 } from './items';
 import { generateMap } from './mapgen';
 import { createMessageLog } from './messageLog';
-import { findPath } from './path';
+import { canReach, findPath } from './path';
 import { createPotionLore, randomPotion } from './potions';
 import { createRandom, normalIntRange, randomInt } from './random';
 import {
@@ -63,7 +68,7 @@ import {
   tintCharacter,
   type DamageTarget,
 } from './render';
-import { isAdjacent, isWalkable, type Point } from './room';
+import { isWalkable, type Point } from './room';
 import {
   addStatus,
   hasStatus,
@@ -347,8 +352,10 @@ function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
   showEnemy(enemy);
 }
 
-const heroAccuracy = () => HERO_ACCURACY + (heroLevel - 1) * LEVEL_UP_ACCURACY;
-const heroEvasion = () => HERO_EVASION + (heroLevel - 1) * LEVEL_UP_EVASION;
+const heroAccuracy = () =>
+  (HERO_ACCURACY + (heroLevel - 1) * LEVEL_UP_ACCURACY) * accuracyFactor(equipment, heroStrength);
+const heroEvasion = () =>
+  (HERO_EVASION + (heroLevel - 1) * LEVEL_UP_EVASION) * evasionFactor(equipment, heroStrength);
 const experienceToLevelUp = () => heroLevel * EXPERIENCE_PER_LEVEL;
 
 function levelUp() {
@@ -371,9 +378,7 @@ function gainExperience(amount: number) {
 
 function showHeroStats() {
   const experience = `XP ${heroExperience}/${experienceToLevelUp()}`;
-  // Strength shows once it differs from where it started.
-  const strength = heroStrength !== STARTING_STRENGTH ? ` · Str ${heroStrength}` : '';
-  statsLabel.textContent = `Lv ${heroLevel} · ${experience}${strength}`;
+  statsLabel.textContent = `Lv ${heroLevel} · ${experience} · Str ${heroStrength}`;
   statusBar.show(heroStatuses);
 }
 
@@ -408,7 +413,9 @@ const inventoryPanel = createInventoryPanel({
     const blockedReason = look.isKnown
       ? (ITEMS[name].blockedReason?.(createItemContext()) ?? null)
       : null;
-    return { ...look, blockedReason };
+    const tooHeavy = tooHeavyMessage(name, heroStrength);
+    const description = tooHeavy ? `${look.description} ${tooHeavy}` : look.description;
+    return { ...look, description, blockedReason };
   },
   onOpen() {
     stopWalking();
@@ -834,7 +841,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void) {
       if (isHit) {
         // The armor takes away part of the hit, as in Char.attack() of Shattered Pixel Dungeon.
         const damage = normalIntRange(Math.random, ...enemy.stats.damage);
-        damageHero(Math.max(0, damage - rollArmor(equipment)));
+        damageHero(Math.max(0, damage - rollArmor(equipment, heroStrength)));
         showHeroStats();
       } else {
         damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
@@ -999,7 +1006,7 @@ function runEnemyTurn(onDone: () => void) {
 function playHeroAttack(enemy: Enemy) {
   const attackerTile = heroPosition;
   // A surprised enemy cannot evade, and neither can a paralyzed or frozen one.
-  const isSurprise = !enemy.hasSeenHero;
+  const isSurprise = !enemy.hasSeenHero && canSurpriseAttack(equipment, heroStrength);
   const isHit =
     isSurprise || isHelpless(enemy.statuses) || rollHit(heroAccuracy(), enemy.stats.evasion);
   // Attacking ends invisibility.
@@ -1011,8 +1018,14 @@ function playHeroAttack(enemy: Enemy) {
     messageLog.add('You attacked an unseen enemy.');
   }
 
+  // An enemy farther away than the next tile gets the same lunge as one on the next tile.
+  const steps = Math.max(
+    Math.abs(enemy.position.x - attackerTile.x),
+    Math.abs(enemy.position.y - attackerTile.y),
+  );
+
   finishAttackEffect = playAttackEffect({
-    lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE),
+    lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE / steps),
     isMiss: !isHit,
     moveAttacker: (offset) => nudgeHero(attackerTile, offset),
     moveTarget: (offset) => nudgeEnemy(enemy, enemy.position, offset),
@@ -1030,7 +1043,7 @@ function playHeroAttack(enemy: Enemy) {
         if (isSurprise) {
           damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
         }
-        const damage = rollDamage(equipment, heroStrength);
+        const damage = rollDamage(equipment, heroStrength, isSurprise);
         attackEnemy(enemy, heroPosition, damage);
         roomView.remove(enemy.sleepMark);
         showDamage(damage, enemy.position, 'enemy');
@@ -1050,9 +1063,18 @@ function playHeroAttack(enemy: Enemy) {
   });
 }
 
-// Returns the tiles to walk through to stand next to an enemy.
+// Whether the hero's weapon reaches an enemy from where the hero stands. Walls, closed doors, and
+// other enemies in between block it.
+function canHeroReach(enemy: Enemy): boolean {
+  const isOpen = (tile: Point) =>
+    isOpenTile(tile) && !enemies.some(({ position }) => isSameTile(position, tile));
+  return canReach(heroPosition, enemy.position, weaponReach(equipment), isOpen);
+}
+
+// Returns the tiles to walk through to stand next to an enemy, or none when the weapon already
+// reaches it. The walk asks again on every step, so it stops as soon as the weapon reaches.
 function pathToAttack(enemy: Enemy): Point[] {
-  return isAdjacent(enemy.position, heroPosition)
+  return canHeroReach(enemy)
     ? []
     : findPath(room, heroPosition, enemy.position, seenEnemyTiles(enemy), isExplored).slice(0, -1);
 }
@@ -1076,7 +1098,7 @@ function walk() {
   const next = path.shift();
   if (!next) {
     isWalking = false;
-    if (attackTarget && isAdjacent(attackTarget.position, heroPosition)) {
+    if (attackTarget && canHeroReach(attackTarget)) {
       playHeroAttack(attackTarget);
     }
     attackTarget = null;

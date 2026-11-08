@@ -15,7 +15,17 @@ export type PotionName =
   | 'frost-potion'
   | 'poison-gas-potion'
   | 'paralysis-potion';
-export type ItemName = PotionName | 'worn-shortsword' | 'cloth-armor';
+export type ItemName =
+  | PotionName
+  | 'worn-shortsword'
+  | 'longsword'
+  | 'spear'
+  | 'dagger'
+  | 'zweihander'
+  | 'cloth-armor'
+  | 'leather-armor'
+  | 'chain-mail'
+  | 'plate-armor';
 
 // What kind of equipment an item is, which decides the slots it fits.
 export type EquipmentKind = 'weapon' | 'armor' | 'accessory';
@@ -64,6 +74,12 @@ export interface ItemDefinition {
   // The damage range of a weapon and the range of damage an armor blocks.
   damage?: [min: number, max: number];
   armor?: [min: number, max: number];
+  // The damage range of a weapon on a surprise attack, for weapons that roll it differently.
+  surpriseDamage?: [min: number, max: number];
+  // How many steps away a weapon hits. Without it, a weapon hits only the tiles next to the hero.
+  reach?: number;
+  // The strength needed to use a weapon or armor without a penalty.
+  strength?: number;
   // Set for potions, which break where they land when thrown. A helpful one only splashes there.
   // A harmful one has its effect there, and drinking it breaks it at the hero's feet.
   potion?: 'helpful' | 'harmful';
@@ -100,6 +116,83 @@ const RING_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <circle cx="12" cy="14" r="6" fill="none" stroke="#c8ccd4" stroke-width="2"/>
   <path fill="#c8ccd4" d="M10 5H14L15 7.500H9Z"/>
 </svg>`;
+const LONGSWORD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#c8ccd4" d="M6.272 15.889L8.111 17.728L21.051 4.788L22.253 1.747L19.212 2.949Z"/>
+  <path fill="#a3a8b2" d="M7.863 15.642L8.358 16.137L19.672 4.823L19.177 4.328Z"/>
+  <path fill="#8a6a3c" d="M4.010 13.626L10.374 19.990L9.313 21.051L2.949 14.687Z"/>
+  <path fill="#6b4a2a" d="M5.495 17.233L6.767 18.505L3.727 21.546L2.454 20.273Z"/>
+  <circle cx="2.383" cy="21.617" r="1.400" fill="#8a6a3c"/>
+</svg>`;
+const SPEAR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#8a6a3c" d="M17.091 5.777L18.223 6.909L1.959 23.172L0.828 22.041Z"/>
+  <path fill="#6b4a2a" d="M1.393 21.192L2.808 22.607L1.676 23.738L0.262 22.324Z"/>
+  <path fill="#a3a8b2" d="M18.010 4.151L19.849 5.990L18.293 7.545L16.455 5.707Z"/>
+  <path fill="#c8ccd4" d="M23.667 0.333L22.677 4.575L19.849 5.990L18.010 4.151L19.425 1.323Z"/>
+  <path fill="#a3a8b2" d="M22.960 1.040L21.086 3.409L19.212 4.788L20.591 2.914Z"/>
+</svg>`;
+const DAGGER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#c8ccd4" d="M8.677 12.919L11.081 15.323L15.394 10.444L18.010 5.990L13.556 8.606Z"/>
+  <path fill="#a3a8b2" d="M10.374 13.202L10.798 13.626L16.455 7.969L16.031 7.545Z"/>
+  <path fill="#8a6a3c" d="M7.899 12.141L11.859 16.101L10.939 17.020L6.980 13.061Z"/>
+  <path fill="#6b4a2a" d="M8.358 14.440L9.560 15.642L7.368 17.834L6.166 16.632Z"/>
+  <circle cx="6.131" cy="17.869" r="1.200" fill="#8a6a3c"/>
+</svg>`;
+const ZWEIHANDER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#c8ccd4" d="M9.030 12.141L11.859 14.970L22.748 4.080L23.738 0.262L19.920 1.252Z"/>
+  <path fill="#c8ccd4" d="M9.525 12.636L11.364 14.475L8.677 17.162L6.838 15.323Z"/>
+  <path fill="#c8ccd4" d="M8.677 13.485L8.111 11.222L9.525 12.636Z"/>
+  <path fill="#c8ccd4" d="M10.515 15.323L12.778 15.889L11.364 14.475Z"/>
+  <path fill="#a3a8b2" d="M10.833 12.530L11.470 13.167L21.157 3.479L20.521 2.843Z"/>
+  <path fill="#c9a440" d="M3.444 11.364L3.727 12.495L11.505 20.273L12.636 20.556L10.939 22.253L10.656 21.122L2.878 13.344L1.747 13.061Z"/>
+  <path fill="#7c3030" d="M6.060 16.525L7.475 17.940L2.949 22.465L1.535 21.051Z"/>
+  <path fill="#6b4a2a" d="M4.646 17.940L6.060 19.354L5.636 19.778L4.222 18.364Z"/>
+  <path fill="#6b4a2a" d="M3.232 19.354L4.646 20.768L4.222 21.192L2.808 19.778Z"/>
+  <circle cx="1.676" cy="22.324" r="1.400" fill="#c9a440"/>
+</svg>`;
+const LEATHER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#9a6a3c" d="M7 4L10 4L12 7L14 4L17 4L19 8L18 11L18 21L6 21L6 11L5 8Z"/>
+  <path fill="#7a5030" d="M5 8L7 4L9.500 4L8.500 9L6 10Z"/>
+  <path fill="#7a5030" d="M19 8L17 4L14.500 4L15.500 9L18 10Z"/>
+  <path fill="#7a5030" d="M11.600 7L12.400 7L12.400 15L11.600 15Z"/>
+  <path fill="#5c3b22" d="M6 15L18 15L18 17L6 17Z"/>
+  <path fill="#c9a440" d="M11 14.600L13 14.600L13 17.400L11 17.400Z"/>
+</svg>`;
+const CHAIN_MAIL_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#8e949e" d="M8 3L12 5L16 3L21 8L18 11L17 10L17 21L7 21L7 10L6 11L3 8Z"/>
+  <path fill="#6f757f" d="M10 4L12 5L14 4L13 7L11 7Z"/>
+  <circle cx="10" cy="8" r="0.550" fill="#6f757f"/>
+  <circle cx="12" cy="8" r="0.550" fill="#6f757f"/>
+  <circle cx="14" cy="8" r="0.550" fill="#6f757f"/>
+  <circle cx="9" cy="10" r="0.550" fill="#6f757f"/>
+  <circle cx="11" cy="10" r="0.550" fill="#6f757f"/>
+  <circle cx="13" cy="10" r="0.550" fill="#6f757f"/>
+  <circle cx="15" cy="10" r="0.550" fill="#6f757f"/>
+  <circle cx="10" cy="12" r="0.550" fill="#6f757f"/>
+  <circle cx="12" cy="12" r="0.550" fill="#6f757f"/>
+  <circle cx="14" cy="12" r="0.550" fill="#6f757f"/>
+  <circle cx="9" cy="14" r="0.550" fill="#6f757f"/>
+  <circle cx="11" cy="14" r="0.550" fill="#6f757f"/>
+  <circle cx="13" cy="14" r="0.550" fill="#6f757f"/>
+  <circle cx="15" cy="14" r="0.550" fill="#6f757f"/>
+  <circle cx="10" cy="16" r="0.550" fill="#6f757f"/>
+  <circle cx="12" cy="16" r="0.550" fill="#6f757f"/>
+  <circle cx="14" cy="16" r="0.550" fill="#6f757f"/>
+  <circle cx="9" cy="18" r="0.550" fill="#6f757f"/>
+  <circle cx="11" cy="18" r="0.550" fill="#6f757f"/>
+  <circle cx="13" cy="18" r="0.550" fill="#6f757f"/>
+  <circle cx="15" cy="18" r="0.550" fill="#6f757f"/>
+  <path fill="#6f757f" d="M7 19.600L17 19.600L17 21L7 21Z"/>
+</svg>`;
+const PLATE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#c3cad4" d="M8 4L16 4L17.500 9L16.500 15L14.500 17L9.500 17L7.500 15L6.500 9Z"/>
+  <path fill="#aab2be" d="M12 4L16 4L17.500 9L16.500 15L14.500 17L12 17Z"/>
+  <path fill="#e3e7ed" d="M11.600 5L12.400 5L12.400 16.500L11.600 16.500Z"/>
+  <path fill="#8c95a2" d="M3 9L4 5.500L9 4L8 10L3.500 11Z"/>
+  <path fill="#8c95a2" d="M21 9L20 5.500L15 4L16 10L20.500 11Z"/>
+  <path fill="#9aa3b0" d="M9 3L15 3L16 4L8 4Z"/>
+  <path fill="#9aa3b0" d="M8.500 17.400L15.500 17.400L15.500 19L8.500 19Z"/>
+  <path fill="#8a93a0" d="M9 19.400L15 19.400L15 21L9 21Z"/>
+</svg>`;
 
 // What an empty slot of each kind shows.
 export const EQUIPMENT_ICONS: Record<EquipmentKind, string> = {
@@ -133,6 +226,13 @@ const FROZEN_TURNS = 6;
 // fewer tiles to spread over, so it reaches farther and lasts about 3 times as long.
 const POISON_GAS_AMOUNT = 300;
 const PARALYSIS_GAS_AMOUNT = 200;
+
+// Same as the spear in Shattered Pixel Dungeon.
+const SPEAR_REACH = 2;
+
+// STRReq() of Shattered Pixel Dungeon at +0: 8 plus twice the tier, rounded for armor that sits
+// between tiers.
+const strengthForTier = (tier: number) => 8 + Math.round(tier * 2);
 
 const potion = (
   kind: 'helpful' | 'harmful',
@@ -225,7 +325,52 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     equipKind: 'weapon',
     // Same as the worn shortsword in Shattered Pixel Dungeon.
     damage: [1, 10],
+    strength: strengthForTier(1),
     icon: SWORD_ICON,
+  },
+  longsword: {
+    displayName: 'Longsword',
+    description: 'A long blade that hits a little harder than a shortsword.',
+    equipKind: 'weapon',
+    // MeleeWeapon.min() and max() of Shattered Pixel Dungeon at tier 2, one tier above the worn
+    // shortsword.
+    damage: [2, 15],
+    strength: strengthForTier(2),
+    icon: LONGSWORD_ICON,
+  },
+  spear: {
+    displayName: 'Spear',
+    description: `A long spear that hits enemies up to ${SPEAR_REACH} tiles away.`,
+    equipKind: 'weapon',
+    // The spear in Shattered Pixel Dungeon deals 2-20 and takes 1.5 turns to attack. An attack here
+    // takes one turn, so the damage is divided by 1.5 to keep the same damage per turn.
+    damage: [1, 13],
+    reach: SPEAR_REACH,
+    // The spear is a tier 2 weapon in Shattered Pixel Dungeon.
+    strength: strengthForTier(2),
+    icon: SPEAR_ICON,
+  },
+  dagger: {
+    displayName: 'Dagger',
+    description: 'A short blade that hits much harder in a surprise attack.',
+    equipKind: 'weapon',
+    // Same as the dagger in Shattered Pixel Dungeon, which rolls a surprise attack from 75% of the
+    // way to its maximum.
+    damage: [1, 8],
+    surpriseDamage: [6, 8],
+    strength: strengthForTier(1),
+    icon: DAGGER_ICON,
+  },
+  zweihander: {
+    displayName: 'Zweihänder',
+    description: 'A huge two-handed sword. Few adventurers ever find one.',
+    equipKind: 'weapon',
+    // MeleeWeapon.min() and max() of Shattered Pixel Dungeon at tier 3, the tier of plate armor
+    // here. Its strength is what 2 strength potions every 5 floors give by floor 10, as in
+    // Dungeon.posNeeded() of Shattered Pixel Dungeon.
+    damage: [3, 20],
+    strength: strengthForTier(3),
+    icon: ZWEIHANDER_ICON,
   },
   'cloth-armor': {
     displayName: 'Cloth armor',
@@ -233,7 +378,37 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     equipKind: 'armor',
     // Same as cloth armor in Shattered Pixel Dungeon.
     armor: [0, 2],
+    strength: strengthForTier(1),
     icon: TUNIC_ICON,
+  },
+  'leather-armor': {
+    displayName: 'Leather armor',
+    description: 'Hardened leather that turns aside light blows.',
+    equipKind: 'armor',
+    // Armor.DRMax() of Shattered Pixel Dungeon a third of the way from cloth armor (tier 1) to
+    // plate armor (tier 3 here), rounded.
+    armor: [0, 3],
+    strength: strengthForTier(5 / 3),
+    icon: LEATHER_ICON,
+  },
+  'chain-mail': {
+    displayName: 'Chain mail',
+    description: 'A shirt of linked iron rings.',
+    equipKind: 'armor',
+    // Armor.DRMax() of Shattered Pixel Dungeon two thirds of the way from cloth armor (tier 1) to
+    // plate armor (tier 3 here), rounded.
+    armor: [0, 5],
+    strength: strengthForTier(7 / 3),
+    icon: CHAIN_MAIL_ICON,
+  },
+  'plate-armor': {
+    displayName: 'Plate armor',
+    description: 'Heavy steel plates that stop most blows.',
+    equipKind: 'armor',
+    // Same as mail armor in Shattered Pixel Dungeon, a tier 3 armor.
+    armor: [0, 6],
+    strength: strengthForTier(3),
+    icon: PLATE_ICON,
   },
 };
 
@@ -248,16 +423,66 @@ const DAMAGE_PER_STRENGTH = 0.025;
 
 // Rolls the damage of an attack with the equipped weapon, scaled by strength. The result is rounded
 // up or down at random, so that every point of strength raises the average damage a little.
-export function rollDamage(equipment: Equipment, strength: number): number {
-  const [min, max] = (equipment.weapon && ITEMS[equipment.weapon].damage) ?? UNARMED_DAMAGE;
+export function rollDamage(equipment: Equipment, strength: number, isSurprise: boolean): number {
+  const weapon = equipment.weapon ? ITEMS[equipment.weapon] : undefined;
+  const [min, max] =
+    (isSurprise ? weapon?.surpriseDamage : undefined) ?? weapon?.damage ?? UNARMED_DAMAGE;
   const scale = 1 + (strength - STARTING_STRENGTH) * DAMAGE_PER_STRENGTH;
   return roundRandomly(Math.random, normalIntRange(Math.random, min, max) * scale);
 }
 
+// How many steps away the hero hits with the equipped weapon, or with bare hands.
+export function weaponReach(equipment: Equipment): number {
+  return (equipment.weapon && ITEMS[equipment.weapon].reach) ?? 1;
+}
+
+// Same as Weapon.accuracyFactor() and Armor.evasionFactor() of Shattered Pixel Dungeon. Each point
+// of strength the hero lacks for the weapon or armor divides accuracy or evasion by this.
+const MISSING_STRENGTH_DIVISOR = 1.5;
+// Same as Hero.drRoll() of Shattered Pixel Dungeon. Each point of strength the hero lacks for the
+// armor takes this much off what it blocks.
+const ARMOR_PER_MISSING_STRENGTH = 2;
+
+// Shattered Pixel Dungeon also slows attacks and steps with gear that is too heavy, but nothing
+// here takes longer than a turn.
+const TOO_HEAVY_MESSAGES: Partial<Record<EquipmentKind, string>> = {
+  weapon: 'You are not strong enough for this weapon. You miss more and cannot surprise enemies.',
+  armor: 'You are not strong enough for this armor. You evade less, and it blocks less.',
+};
+
+function missingStrength(name: ItemName | null, strength: number): number {
+  const required = (name && ITEMS[name].strength) ?? 0;
+  return Math.max(0, required - strength);
+}
+
+// The warning shown with equipment that is too heavy for the hero, or null when it is not.
+export function tooHeavyMessage(name: ItemName, strength: number): string | null {
+  const kind = ITEMS[name].equipKind;
+  return kind && missingStrength(name, strength) > 0 ? (TOO_HEAVY_MESSAGES[kind] ?? null) : null;
+}
+
+export function accuracyFactor(equipment: Equipment, strength: number): number {
+  return MISSING_STRENGTH_DIVISOR ** -missingStrength(equipment.weapon, strength);
+}
+
+export function evasionFactor(equipment: Equipment, strength: number): number {
+  return MISSING_STRENGTH_DIVISOR ** -missingStrength(equipment.armor, strength);
+}
+
+// A weapon too heavy for the hero cannot make surprise attacks, as Hero.canSurpriseAttack() of
+// Shattered Pixel Dungeon.
+export function canSurpriseAttack(equipment: Equipment, strength: number): boolean {
+  return missingStrength(equipment.weapon, strength) === 0;
+}
+
 // Rolls how much of a hit the equipped armor blocks, as Hero.drRoll() of Shattered Pixel Dungeon.
-export function rollArmor(equipment: Equipment): number {
+export function rollArmor(equipment: Equipment, strength: number): number {
   const armor = equipment.armor && ITEMS[equipment.armor].armor;
-  return armor ? normalIntRange(Math.random, armor[0], armor[1]) : 0;
+  if (!armor) {
+    return 0;
+  }
+  const penalty = ARMOR_PER_MISSING_STRENGTH * missingStrength(equipment.armor, strength);
+  return Math.max(0, normalIntRange(Math.random, armor[0], armor[1]) - penalty);
 }
 
 // Moves an item from the bag into a free slot of its kind, or into the first one when all of them

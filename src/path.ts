@@ -59,6 +59,36 @@ export function findPath(
   return path;
 }
 
+// Whether an attack from `from` hits `to`, as KindOfWeapon.canReach() of Shattered Pixel Dungeon.
+// It takes at most `reach` steps, and every tile stepped on between the two must pass isOpen.
+export function canReach(
+  from: Point,
+  to: Point,
+  reach: number,
+  isOpen: (tile: Point) => boolean,
+): boolean {
+  const seen = new Set([`${to.x},${to.y}`]);
+  let layer = [to];
+  for (let steps = 1; steps <= reach; steps++) {
+    const nextLayer: Point[] = [];
+    for (const current of layer) {
+      for (const step of STEPS) {
+        const neighbor = { x: current.x + step.x, y: current.y + step.y };
+        if (neighbor.x === from.x && neighbor.y === from.y) {
+          return true;
+        }
+        const key = `${neighbor.x},${neighbor.y}`;
+        if (!seen.has(key) && isOpen(neighbor)) {
+          seen.add(key);
+          nextLayer.push(neighbor);
+        }
+      }
+    }
+    layer = nextLayer;
+  }
+  return false;
+}
+
 // Returns the fewest doors on a walk to every tile, indexed as counts[y][x].
 // Unreachable tiles are at -1.
 export function doorCountsFrom(room: Room, from: Point): number[][] {

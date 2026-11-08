@@ -89,6 +89,7 @@ export function createInventoryPanel({
     const stats = [
       item.damage && `Damage: ${item.damage[0]}-${item.damage[1]}`,
       item.armor && `Armor: ${item.armor[0]}-${item.armor[1]}`,
+      item.strength !== undefined ? `Strength: ${item.strength}` : undefined,
     ].filter((line) => line !== undefined);
     const statLines = stats.map((line) => {
       const element = document.createElement('p');
