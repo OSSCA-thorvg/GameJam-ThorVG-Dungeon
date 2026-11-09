@@ -1433,9 +1433,21 @@ function pressTarget(tile: Point, isMouse: boolean) {
   request.onSelect(tile);
 }
 
+// Whether the hero still has somewhere to go. isWalking alone also covers the pause after the last
+// step, when a press should already count as a new order.
+function isOnTheWay() {
+  return isWalking && (path.length > 0 || attackTarget !== null || chestTarget !== null);
+}
+
 function pressTileAt(position: Point, isMouse: boolean) {
   finishRunningEffects();
   if (cannotAct()) {
+    return;
+  }
+
+  // A press anywhere stops a walk and does nothing else, even off the map.
+  if (isOnTheWay()) {
+    stopWalking();
     return;
   }
 
