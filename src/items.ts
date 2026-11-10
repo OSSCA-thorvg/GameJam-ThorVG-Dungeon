@@ -30,7 +30,8 @@ export type ItemName =
   | 'ration'
   | 'travel-ration'
   | 'raw-meat'
-  | 'cooked-meat';
+  | 'cooked-meat'
+  | 'iron-key';
 
 // What kind of equipment an item is, which decides the slots it fits.
 export type EquipmentKind = 'weapon' | 'armor' | 'accessory';
@@ -221,6 +222,12 @@ const meatIcon = (meat: string, light: string) =>
   <path fill="#ece4d0" d="M4.500 15.500L8.500 19.500L6.800 21.200Q6 22.500 4.800 21.600Q4 22.600 2.900 21.600Q1.600 20.400 2.800 19.400Q1.800 18.200 3.200 17.200Z"/>
   <path fill="${meat}" d="M7 17C5 13 7 6 13 4C18 2.500 22 6 20.500 11C19 17 12 19.500 7 17Z"/>
   <path fill="${light}" d="M11 7C13.500 5.500 17 5.500 18 8C16 7.500 13 8 11 7Z"/>
+</svg>`;
+const IRON_KEY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#9aa0aa" fill-rule="evenodd" d="M8 3A5 5 0 1 1 8 13A5 5 0 1 1 8 3ZM8 6A2 2 0 1 0 8 10A2 2 0 1 0 8 6Z"/>
+  <path fill="#9aa0aa" d="M11.500 10.500L21 20L19.500 21.500L10 12Z"/>
+  <path fill="#9aa0aa" d="M16 15.500L18.500 13L19.500 14L17 16.500Z"/>
+  <path fill="#9aa0aa" d="M18.500 18L21 15.500L22 16.500L19.500 19Z"/>
 </svg>`;
 const RAW_MEAT_ICON = meatIcon('#c94a4a', '#e88080');
 const COOKED_MEAT_ICON = meatIcon('#8a4b22', '#b8743c');
@@ -510,6 +517,11 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     description: 'Meat cooked through by fire. It is safe to eat.',
     icon: COOKED_MEAT_ICON,
   }),
+  'iron-key': {
+    displayName: 'Iron key',
+    description: 'A heavy old key. Click a locked door while carrying it to unlock the door.',
+    icon: IRON_KEY_ICON,
+  },
 };
 
 // Same as fighting unarmed in Shattered Pixel Dungeon with the starting 10 strength.

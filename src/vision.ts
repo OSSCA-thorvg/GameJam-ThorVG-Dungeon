@@ -31,12 +31,12 @@ interface Segment {
   to: Point;
 }
 
-// Walls and closed doors block the view.
+// Walls, closed doors, and locked doors block the view.
 function blocksView(room: Room, openDoors: Point[], x: number, y: number): boolean {
   const tile = room.tiles[y]?.[x] ?? 'void';
   return tile === 'door'
     ? !openDoors.some((other) => other.x === x && other.y === y)
-    : tile === 'wall' || tile === 'void';
+    : tile === 'wall' || tile === 'void' || tile === 'locked-door';
 }
 
 // Whether a line passes through the inside of a tile. Touching a corner does not count.

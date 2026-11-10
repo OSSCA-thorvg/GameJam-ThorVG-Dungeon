@@ -35,6 +35,9 @@ export interface RoomView {
   setOpenDoors(tiles: Point[]): void;
   // Draws a door that burned down as a charred doorway. The room must already have floor there.
   burnDoor(tile: Point): void;
+  // Draws a locked door that was unlocked as a closed door. The room must already have a door
+  // there.
+  unlockDoor(tile: Point): void;
   // Hides everything that was never lit, and darkens everything outside the light.
   setLight(light: Light): void;
   // Moves a paint onto a tile and into that tile's draw layer.
@@ -137,6 +140,14 @@ const BURNT_DOORWAY: Color = [62, 54, 50];
 const CLOSED_DOOR_TOP: Color = [168, 118, 70];
 const CLOSED_DOOR_LEFT: Color = [120, 82, 46];
 const CLOSED_DOOR_RIGHT: Color = [96, 64, 36];
+// A locked door looks like a closed door with a padlock standing on top of it. Placeholder colors
+// and sizes of the padlock, in screen pixels at zoom 1.
+const LOCK_BODY: Color = [226, 184, 70];
+const LOCK_SHACKLE: Color = [200, 206, 216];
+const LOCK_KEYHOLE: Color = [70, 50, 20];
+const LOCK_BODY_WIDTH = 14;
+const LOCK_BODY_HEIGHT = 11;
+const LOCK_SHACKLE_WIDTH = 2.5;
 const STAIRS_STEPS: Color[] = [
   [62, 65, 74],
   [44, 46, 54],
@@ -293,7 +304,8 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   const walls: Wall[] = [];
   // Every wall's outline on the screen, whether it was seen or not.
   const wallArea = new TVG.Shape();
-  const doors: (Wall & { area: Shape; floor: Shape })[] = [];
+  // The padlock of a locked door is among its faces too, so it fades and hides with the door.
+  const doors: (Wall & { area: Shape; floor: Shape; lock: Shape[] })[] = [];
   let openDoors = new Set<number>();
   const tileKey = ({ x, y }: Point) => y * room.width + x;
   const cutLayers = new Map<number, { scene: Scene; heroHole: Shape; cursorHole: Shape }>();
@@ -309,6 +321,39 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   const tileCenter = (x: number, y: number): Point => {
     const screen = mapToScreen(x, y);
     return { x: screen.x + offsetX, y: screen.y + offsetY };
+  };
+
+  // A padlock that faces the screen, its body centered on a point such as the top of a door.
+  const addPadlock = (layer: Scene, at: Point): Shape[] => {
+    const bodyTop = at.y - LOCK_BODY_HEIGHT / 2;
+    const shackleHalf = LOCK_BODY_WIDTH / 4;
+    const shackle = new TVG.Shape();
+    shackle.moveTo(at.x - shackleHalf, bodyTop);
+    shackle.lineTo(at.x - shackleHalf, bodyTop - 3);
+    shackle.cubicTo(
+      at.x - shackleHalf,
+      bodyTop - 8,
+      at.x + shackleHalf,
+      bodyTop - 8,
+      at.x + shackleHalf,
+      bodyTop - 3,
+    );
+    shackle.lineTo(at.x + shackleHalf, bodyTop);
+    shackle.stroke({ width: LOCK_SHACKLE_WIDTH, color: LOCK_SHACKLE });
+    const body = new TVG.Shape();
+    body.appendRect(at.x - LOCK_BODY_WIDTH / 2, bodyTop, LOCK_BODY_WIDTH, LOCK_BODY_HEIGHT, {
+      rx: 2,
+      ry: 2,
+    });
+    body.fill(...LOCK_BODY);
+    const keyhole = new TVG.Shape();
+    keyhole.appendCircle(at.x, bodyTop + LOCK_BODY_HEIGHT * 0.45, 1.6);
+    keyhole.fill(...LOCK_KEYHOLE);
+    const shapes = [shackle, body, keyhole];
+    for (const shape of shapes) {
+      layer.add(shape);
+    }
+    return shapes;
   };
 
   for (let y = 0; y < room.height; y++) {
@@ -351,17 +396,19 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
         case 'sign':
           addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
           break;
-        case 'door': {
+        case 'door':
+        case 'locked-door': {
           const floor = addPolygon([top, right, bottom, left], DOOR);
           const faces = [
             addPolygon([left, bottom, lift(bottom), lift(left)], CLOSED_DOOR_LEFT),
             addPolygon([right, bottom, lift(bottom), lift(right)], CLOSED_DOOR_RIGHT),
             addPolygon([lift(top), lift(right), lift(bottom), lift(left)], CLOSED_DOOR_TOP),
           ];
+          const lock = room.tiles[y][x] === 'locked-door' ? addPadlock(layer, lift(center)) : [];
           const area = new TVG.Shape();
           appendLightOutline(area, [lift(top), lift(right), right, bottom, left, lift(left)]);
           area.fill(255, 255, 255);
-          doors.push({ tile: { x, y }, center, faces, area, floor });
+          doors.push({ tile: { x, y }, center, faces: [...faces, ...lock], area, floor, lock });
           break;
         }
         case 'wall':
@@ -490,7 +537,11 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
 
   const isSolid = (x: number, y: number) => {
     const tile = room.tiles[y]?.[x];
-    return tile === 'wall' || (tile === 'door' && !openDoors.has(tileKey({ x, y })));
+    return (
+      tile === 'wall' ||
+      tile === 'locked-door' ||
+      (tile === 'door' && !openDoors.has(tileKey({ x, y })))
+    );
   };
   const isCovered = ({ x, y }: Point) =>
     isSolid(x + 1, y) || isSolid(x, y + 1) || isSolid(x + 1, y + 1);
@@ -586,6 +637,18 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       door.floor.fill(...BURNT_DOORWAY);
       updateCuts();
     },
+    unlockDoor(tile) {
+      const door = doors.find((door) => door.tile.x === tile.x && door.tile.y === tile.y);
+      if (!door) {
+        return;
+      }
+      for (const shape of door.lock) {
+        layers[layerOf(tile)].remove(shape);
+      }
+      door.faces = door.faces.filter((face) => !door.lock.includes(face));
+      door.lock = [];
+      updateCuts();
+    },
     setLight(light) {
       const remember = (key: string, shape: Shape, outline: Point[]) => {
         if (!rememberedOutlines.has(key)) {
@@ -609,13 +672,13 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       // The outline stops at walls and doors, so the ones in view are added whole.
       for (const { x, y } of light.tiles) {
         const tile = room.tiles[y][x];
-        if (tile === 'wall' || tile === 'door') {
+        if (tile === 'wall' || tile === 'door' || tile === 'locked-door') {
           const center = tileCenter(x, y);
           const top = { x: center.x, y: center.y - TILE_HEIGHT / 2 };
           const right = { x: center.x + TILE_WIDTH / 2, y: center.y };
           const bottom = { x: center.x, y: center.y + TILE_HEIGHT / 2 };
           const left = { x: center.x - TILE_WIDTH / 2, y: center.y };
-          if (tile === 'door') {
+          if (tile === 'door' || tile === 'locked-door') {
             remember(`floor ${x},${y}`, floorLight.remembered, [top, right, bottom, left]);
           }
           if (tile === 'door' && openDoors.has(tileKey({ x, y }))) {
@@ -659,10 +722,14 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       coveredHeroTile = isCovered(tile) ? tile : null;
       updateCuts();
     },
-    // The outline shows on the tiles the hero can walk on, and on fixtures, which the hero uses.
+    // The outline shows on the tiles the hero can walk on, and on fixtures and locked doors, which
+    // the hero uses.
     setCursorTile(tile, target) {
       const isPointable =
-        tile && (isWalkable(room, tile.x, tile.y) || isFixture(room, tile.x, tile.y));
+        tile &&
+        (isWalkable(room, tile.x, tile.y) ||
+          isFixture(room, tile.x, tile.y) ||
+          room.tiles[tile.y][tile.x] === 'locked-door');
       const next = isPointable ? tile : null;
       if (next?.x === cursorTile?.x && next?.y === cursorTile?.y && target === cursorTarget) {
         return false;

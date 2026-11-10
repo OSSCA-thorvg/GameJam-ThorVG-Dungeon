@@ -8,23 +8,27 @@ export interface Sign {
   text: string;
 }
 
-// The yard at the entrance of the dungeon, where the first run starts. The hero's starting gear lies
-// on the ground there, and signs explain how to play.
+// The yard at the entrance of the dungeon, where the first run starts. The hero's starting gear and
+// the key to the locked entrance lie on the ground there, and signs explain how to play.
 export interface Surface {
   map: GeneratedMap;
   items: { name: ItemName; position: Point }[];
   signs: Sign[];
 }
 
-// What the signs say, in the order they appear in the template, row by row.
-const SIGN_TEXTS = [
-  'You heard the rumors: a dungeon whose depths hold great riches, and from which few come back. ' +
-    'So here you are at its entrance. Click a tile to walk there.',
-  'Your gear lies on the ground. Walk onto an item to pick it up, then open the Bag to put on ' +
+// What each sign says, by the letter that marks it in the template.
+const SIGN_TEXTS: Record<string, string> = {
+  a:
+    'You heard the rumors: a dungeon whose depths hold great riches, and from which few come ' +
+    'back. So here you are at its entrance. Click a tile to walk there.',
+  b:
+    'Your gear lies on the ground. Walk onto an item to pick it up, then open the Bag to put on ' +
     'the weapon and the armor. Save the food for when you get hungry.',
-  'These stairs lead down into the dungeon. Click them to go down. Below, click an enemy to ' +
-    'attack it. Examine tells you what something is, and Wait lets a turn pass.',
-];
+  c:
+    'The way into the dungeon lies behind this locked door. Find the key, click the door to ' +
+    'unlock it, step into the doorway, and take the stairs down. Below, click an enemy to attack ' +
+    'it. Examine tells you what something is, and Wait lets a turn pass.',
+};
 
 export const SIGN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <path fill="#6b4a2a" d="M11 11H13V22H11Z"/>
@@ -54,39 +58,42 @@ export function markSurfaceFinished(): void {
   }
 }
 
-// The letters in the template that mark where the starting gear lies.
-function gearGlyphs(): Record<string, ItemName> {
+// The letters in the template that mark where the starting gear and the key to the dungeon lie.
+function itemGlyphs(): Record<string, ItemName> {
   const { weapon, armor } = createStartingEquipment();
-  return { W: weapon!, A: armor!, F: createStartingInventory()[0].name };
+  return { W: weapon!, A: armor!, F: createStartingInventory()[0].name, K: 'iron-key' };
 }
 
+// Items and signs are taken out of the template, leaving a floor under each item and a sign tile
+// under each sign.
 export function createSurface(): Surface {
-  const glyphs = gearGlyphs();
+  const glyphs = itemGlyphs();
   const items: Surface['items'] = [];
+  const signs: Sign[] = [];
   const text = surfaceTemplate
     .split(/\r?\n/)
     .map((row, y) =>
       [...row]
         .map((glyph, x) => {
           const name = glyphs[glyph];
-          if (!name) {
-            return glyph;
+          if (name) {
+            items.push({ name, position: { x, y } });
+            return '.';
           }
-          items.push({ name, position: { x, y } });
-          return '.';
+          if (glyph in SIGN_TEXTS) {
+            signs.push({ position: { x, y }, text: SIGN_TEXTS[glyph] });
+            return 's';
+          }
+          return glyph;
         })
         .join(''),
     )
     .join('\n');
 
   const room = parseRoom(text);
-  const signs: Sign[] = [];
   let stairs: Point | undefined;
   room.tiles.forEach((row, y) =>
     row.forEach((tile, x) => {
-      if (tile === 'sign') {
-        signs.push({ position: { x, y }, text: SIGN_TEXTS[signs.length] });
-      }
       if (tile === 'stairs') {
         stairs = { x, y };
       }

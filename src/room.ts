@@ -1,4 +1,13 @@
-export type Tile = 'void' | 'wall' | 'floor' | 'door' | 'stairs' | 'campfire' | 'sign';
+// A locked door blocks the way and the view until a key unlocks it into a door.
+export type Tile =
+  | 'void'
+  | 'wall'
+  | 'floor'
+  | 'door'
+  | 'locked-door'
+  | 'stairs'
+  | 'campfire'
+  | 'sign';
 
 // Fixtures are things that stand on a floor, like a campfire or a sign. Nothing can step on them,
 // they do not block the view, and the hero uses them from a tile next to them.
@@ -32,6 +41,7 @@ const GLYPHS = new Map<string, Tile>([
   ['&', 'campfire'],
   ['s', 'sign'],
   ['>', 'stairs'],
+  ['L', 'locked-door'],
 ]);
 
 export function parseRoom(text: string): Room {

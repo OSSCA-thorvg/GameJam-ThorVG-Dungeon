@@ -673,8 +673,27 @@ function updateCursorTile() {
     return roomView.setCursorTile(tile, 'enemy');
   }
   const hasItem =
-    tile && (itemsAt(tile).length > 0 || hasChest(tile) || isFixture(room, tile.x, tile.y));
+    tile && (itemsAt(tile).length > 0 || hasChest(tile) || isUsedFromBeside(tile));
   return roomView.setCursorTile(tile, hasItem ? 'item' : 'floor');
+}
+
+// What the hero uses from a tile next to it without stepping on it: a fixture or a locked door.
+function isUsedFromBeside({ x, y }: Point): boolean {
+  return isFixture(room, x, y) || room.tiles[y]?.[x] === 'locked-door';
+}
+
+// A locked door opens with an iron key, which stays in the lock. Unlocking takes a turn.
+function unlockDoorAt(tile: Point) {
+  if (!inventory.some(({ name }) => name === 'iron-key')) {
+    messageLog.add('The door is locked. You need a key to open it.');
+    return;
+  }
+  removeItem(inventory, 'iron-key');
+  inventoryPanel.refresh();
+  room.tiles[tile.y][tile.x] = 'door';
+  roomView.unlockDoor(tile);
+  messageLog.add('You unlocked the door with the iron key.');
+  passTurn(() => {});
 }
 
 function isCampfire({ x, y }: Point): boolean {
@@ -1490,13 +1509,14 @@ function pathToAttack(enemy: Enemy): Point[] {
   return canHeroReach(enemy) ? [] : pathNextTo(enemy.position);
 }
 
-// Returns the tiles to walk through to stand next to a chest or the campfire, or none when the hero
-// already does. Nothing can step on the campfire, so the walk goes to the nearest tile beside it.
+// Returns the tiles to walk through to stand next to a chest, a fixture, or a locked door, or none
+// when the hero already does. Nothing can step on a fixture or a locked door, so the walk goes to
+// the nearest tile beside it.
 function pathToUse(tile: Point): Point[] {
   if (isAdjacent(tile, heroPosition)) {
     return [];
   }
-  if (!isFixture(room, tile.x, tile.y)) {
+  if (isWalkable(room, tile.x, tile.y)) {
     return pathNextTo(tile);
   }
   let best: Point[] = [];
@@ -1536,6 +1556,8 @@ function walk() {
       const sign = signAt(useTarget);
       if (sign) {
         readSign(sign);
+      } else if (room.tiles[useTarget.y][useTarget.x] === 'locked-door') {
+        unlockDoorAt(useTarget);
       } else if (isCampfire(useTarget)) {
         openCampfire();
       } else {
@@ -1595,6 +1617,7 @@ function traceTo(target: Point, rule: PathRule): Trajectory {
       return (
         tile === 'wall' ||
         tile === 'void' ||
+        tile === 'locked-door' ||
         isFixture(room, x, y) ||
         (tile === 'door' && !openDoors.has(y * room.width + x))
       );
@@ -1706,7 +1729,7 @@ function pressTileAt(position: Point, isMouse: boolean) {
   if (clicked) {
     path = pathToAttack(clicked);
     attackTarget = clicked;
-  } else if (isExplored(target) && (hasChest(target) || isFixture(room, target.x, target.y))) {
+  } else if (isExplored(target) && (hasChest(target) || isUsedFromBeside(target))) {
     path = pathToUse(target);
     useTarget = target;
   } else {
@@ -2013,6 +2036,8 @@ function describeTerrain({ x, y }: Point): string {
       return 'A wall.';
     case 'door':
       return openDoors.has(y * room.width + x) ? 'An open door.' : 'A closed door.';
+    case 'locked-door':
+      return 'A locked door. A key would open it.';
     case 'stairs':
       return 'Stairs down to the next floor.';
     case 'campfire':
