@@ -124,11 +124,11 @@ const HEALTH_TRAIL_HOLD_MS = 300;
 const HEALTH_TRAIL_SHRINK_MS = 250;
 
 // Placeholder values for the size of a damage number's digits.
-const DIGIT_SCALE = 0.5;
+const DIGIT_SCALE = 0.75;
 const DIGIT_WIDTH = 10 * DIGIT_SCALE;
 const DIGIT_HEIGHT = 16 * DIGIT_SCALE;
 const DIGIT_GAP = 2;
-const DIGIT_STROKE_WIDTH = 1.25;
+const DIGIT_STROKE_WIDTH = 2.5;
 
 // The height one number takes up, with a gap to the next number.
 export const DAMAGE_NUMBER_HEIGHT = DIGIT_HEIGHT + DIGIT_STROKE_WIDTH + DIGIT_GAP;
