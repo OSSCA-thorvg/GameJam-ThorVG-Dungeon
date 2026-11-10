@@ -60,6 +60,7 @@ import {
   hideInChests,
   MIMIC_ICON,
   pickMimicFloor,
+  rollEquipment,
   rollGold,
   type GroundThing,
   type Loot,
@@ -235,7 +236,7 @@ function floorContents(random: Random): { loot: Loot[]; hasMimic: boolean } {
   const potions = planStagePotions(stageRandom)[index];
   const hasMimic = pickMimicFloor(stageRandom) === index;
   const loot = [
-    ...potions.map((name): Loot => ({ kind: 'item', name })),
+    ...[...potions, ...rollEquipment(random, stage)].map((name): Loot => ({ kind: 'item', name })),
     ...Array.from({ length: GOLD_PILES_PER_FLOOR }, (): Loot => ({
       kind: 'gold',
       amount: rollGold(random, floor),

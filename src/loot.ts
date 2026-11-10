@@ -1,6 +1,6 @@
 import type { ItemName } from './items';
 import { ITEM_FLOORS_PER_STAGE } from './potions';
-import { randomInt, type Random } from './random';
+import { pick, randomInt, type Random } from './random';
 
 // Something lying on a tile that the hero can pick up. Gold goes to the hero's purse, not the bag.
 export type Loot = { kind: 'item'; name: ItemName } | { kind: 'gold'; amount: number };
@@ -18,6 +18,33 @@ const CHEST_CHANCE = 5 / 20;
 
 // Placeholder value. How often a stage has a mimic. It never has more than one.
 const MIMIC_CHANCE_PER_STAGE = 1 / 2;
+
+// Generator of Shattered Pixel Dungeon has 4 weapons and 3 armors in every 70 items, which comes
+// to these chances on a floor of 3.5 items.
+const WEAPON_CHANCE_PER_FLOOR = (3.5 * 4) / 70;
+const ARMOR_CHANCE_PER_FLOOR = (3.5 * 3) / 70;
+
+// Same as the chance of a tier 5 weapon, and of plate armor, on floors 5 to 9 of Shattered Pixel
+// Dungeon (floorSetTierProbs of Generator).
+const RARE_EQUIPMENT_CHANCE = 0.05;
+
+// The weapons or armors that can lie on the floors of a stage. The rare one comes up with
+// RARE_EQUIPMENT_CHANCE, and the common ones share the rest evenly, as the weapons of a tier do in
+// Generator of Shattered Pixel Dungeon.
+interface EquipmentPool {
+  common: ItemName[];
+  rare?: ItemName;
+}
+
+// One pool for each stage. Stages past the last use the last pool.
+const STAGE_WEAPONS: EquipmentPool[] = [
+  { common: ['dagger', 'spear', 'longsword'] },
+  { common: ['dagger', 'spear', 'longsword'], rare: 'zweihander' },
+];
+const STAGE_ARMORS: EquipmentPool[] = [
+  { common: ['leather-armor'] },
+  { common: ['leather-armor', 'chain-mail'], rare: 'plate-armor' },
+];
 
 export const GOLD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <ellipse cx="7.500" cy="18.300" rx="4.600" ry="2.200" fill="#a87a22"/>
@@ -74,6 +101,24 @@ export const MIMIC_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 // Same as Gold.random() of Shattered Pixel Dungeon.
 export function rollGold(random: Random, floor: number): number {
   return randomInt(random, 30 + floor * 10, 60 + floor * 20);
+}
+
+function pickEquipment(random: Random, pools: EquipmentPool[], stage: number): ItemName {
+  const { common, rare } = pools[Math.min(stage, pools.length - 1)];
+  return rare && random() < RARE_EQUIPMENT_CHANCE ? rare : pick(random, common);
+}
+
+// Rolls the weapon and the armor lying on a floor of a stage, counted from 0. A floor can have
+// neither, one, or both.
+export function rollEquipment(random: Random, stage: number): ItemName[] {
+  const items: ItemName[] = [];
+  if (random() < WEAPON_CHANCE_PER_FLOOR) {
+    items.push(pickEquipment(random, STAGE_WEAPONS, stage));
+  }
+  if (random() < ARMOR_CHANCE_PER_FLOOR) {
+    items.push(pickEquipment(random, STAGE_ARMORS, stage));
+  }
+  return items;
 }
 
 // Puts some of the loot in chests, each piece on its own.
