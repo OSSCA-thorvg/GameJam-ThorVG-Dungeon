@@ -41,6 +41,9 @@ export interface RoomView {
   // Shows the column of light over the stairs, which stands out from anywhere, even in darkness.
   // Call it once the stairs were seen.
   revealStairs(): void;
+  // Draws steps going up on a tile's floor, where the hero came down from the floor above. The
+  // steps cannot be used.
+  markEntrance(tile: Point): void;
   // Hides everything that was never lit, and darkens everything outside the light.
   setLight(light: Light): void;
   // Moves a paint onto a tile and into that tile's draw layer.
@@ -167,6 +170,20 @@ const STAIRS_NOSINGS: Color[] = [
 ];
 const STAIRS_STEP_DEPTH = 4;
 const STAIRS_NOSING = 0.1;
+// Placeholder colors and size of the steps going up where the hero came down, nearest step first.
+// Each step stands higher than the one before it by the height, in screen pixels at zoom 1.
+const ENTRANCE_TREADS: Color[] = [
+  [112, 116, 126],
+  [124, 128, 138],
+  [138, 142, 152],
+];
+const ENTRANCE_RISERS: Color[] = [
+  [64, 67, 76],
+  [72, 75, 84],
+  [80, 83, 92],
+];
+const ENTRANCE_SIDE: Color = [50, 53, 62];
+const ENTRANCE_STEP_HEIGHT = 4;
 // Placeholder look of the column of light over the stairs, which rises from the whole tile and
 // fades out toward its top, in screen pixels at zoom 1. It is lighter over the tile itself, so
 // the steps still show, and strongest just above the floor.
@@ -751,6 +768,47 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       door.faces = door.faces.filter((face) => !door.lock.includes(face));
       door.lock = [];
       updateCuts();
+    },
+    markEntrance({ x, y }) {
+      const center = tileCenter(x, y);
+      const top = { x: center.x, y: center.y - TILE_HEIGHT / 2 };
+      const right = { x: center.x + TILE_WIDTH / 2, y: center.y };
+      const left = { x: center.x - TILE_WIDTH / 2, y: center.y };
+      // The same tile coordinates as the steps going down, raised by a height.
+      const at = (u: number, v: number, height: number) => ({
+        x: top.x + (right.x - top.x) * u + (left.x - top.x) * v,
+        y: top.y + (right.y - top.y) * u + (left.y - top.y) * v - height,
+      });
+      const add = (points: Point[], color: Color) => {
+        const shape = new TVG.Shape();
+        shape.moveTo(points[0].x, points[0].y);
+        for (const point of points.slice(1)) {
+          shape.lineTo(point.x, point.y);
+        }
+        shape.close().fill(...color);
+        floorLayers[x + y].add(shape);
+      };
+      const count = ENTRANCE_TREADS.length;
+      // The nearest step first, so that each higher step is drawn over the ones before it.
+      for (let step = 0; step < count; step++) {
+        const near = 1 - step / count;
+        const far = 1 - (step + 1) / count;
+        const low = step * ENTRANCE_STEP_HEIGHT;
+        const high = (step + 1) * ENTRANCE_STEP_HEIGHT;
+        // The side facing right goes down to the floor, so the step does not seem to float.
+        add(
+          [at(1, far, 0), at(1, near, 0), at(1, near, high), at(1, far, high)],
+          ENTRANCE_SIDE,
+        );
+        add(
+          [at(0, near, low), at(1, near, low), at(1, near, high), at(0, near, high)],
+          ENTRANCE_RISERS[step],
+        );
+        add(
+          [at(0, far, high), at(1, far, high), at(1, near, high), at(0, near, high)],
+          ENTRANCE_TREADS[step],
+        );
+      }
     },
     revealStairs() {
       for (const { beacon } of stairsBeacons) {

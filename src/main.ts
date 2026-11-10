@@ -1028,6 +1028,10 @@ function startLevel() {
       }
     }),
   );
+  // The hero arrives by steps from the floor above, except on the surface.
+  if (floor > 0) {
+    roomView.markEntrance(room.start);
+  }
   heroPosition = room.start;
   placeHero(room.start);
   // The hero is drawn anew on each level, so the effects on them are shown again.
@@ -2048,7 +2052,9 @@ function describeTerrain({ x, y }: Point): string {
     case 'sign':
       return `A sign. It reads: "${signAt({ x, y })?.text ?? ''}"`;
     default:
-      return 'The floor.';
+      return floor > 0 && isSameTile({ x, y }, room.start)
+        ? 'The stairs you came down. There is no way back up.'
+        : 'The floor.';
   }
 }
 
