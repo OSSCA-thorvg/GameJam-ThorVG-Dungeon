@@ -875,6 +875,9 @@ function lookAround(openDoors: Point[]) {
     inView[y][x] = true;
     explored[y][x] = true;
   }
+  if (isExplored(room.stairs)) {
+    roomView.revealStairs();
+  }
 
   roomView.setOpenDoors(openDoors);
   roomView.setLight({

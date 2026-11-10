@@ -38,6 +38,9 @@ export interface RoomView {
   // Draws a locked door that was unlocked as a closed door. The room must already have a door
   // there.
   unlockDoor(tile: Point): void;
+  // Shows the column of light over the stairs, which stands out from anywhere, even in darkness.
+  // Call it once the stairs were seen.
+  revealStairs(): void;
   // Hides everything that was never lit, and darkens everything outside the light.
   setLight(light: Light): void;
   // Moves a paint onto a tile and into that tile's draw layer.
@@ -148,11 +151,32 @@ const LOCK_KEYHOLE: Color = [70, 50, 20];
 const LOCK_BODY_WIDTH = 14;
 const LOCK_BODY_HEIGHT = 11;
 const LOCK_SHACKLE_WIDTH = 2.5;
-const STAIRS_STEPS: Color[] = [
-  [62, 65, 74],
-  [44, 46, 54],
-  [26, 27, 33],
+// Placeholder colors and sizes of the stairs: an opening in the floor with steps going down away
+// from the front of the tile, nearest step first. Each step lies lower by the depth, in screen
+// pixels at zoom 1, and its front edge is lit as a lighter strip, as a fraction of the tile.
+const STAIRS_OPENING: Color = [14, 15, 19];
+const STAIRS_TREADS: Color[] = [
+  [132, 136, 146],
+  [100, 104, 114],
+  [72, 75, 84],
 ];
+const STAIRS_NOSINGS: Color[] = [
+  [190, 194, 204],
+  [150, 154, 164],
+  [110, 114, 123],
+];
+const STAIRS_STEP_DEPTH = 4;
+const STAIRS_NOSING = 0.1;
+// Placeholder look of the column of light over the stairs, which rises from the whole tile and
+// fades out toward its top, in screen pixels at zoom 1. It is lighter over the tile itself, so
+// the steps still show, and strongest just above the floor.
+const STAIRS_BEAM_COLOR: Color = [150, 205, 255];
+const STAIRS_BEAM_FOOT_ALPHA = 110;
+const STAIRS_BEAM_PEAK_ALPHA = 200;
+// How far up the column it is strongest, as a fraction of its height.
+const STAIRS_BEAM_PEAK = 0.25;
+const STAIRS_BEAM_HEIGHT = 96;
+const STAIRS_BEAM_BLUR = 3;
 const WALL_TOP: Color = [130, 134, 144];
 const WALL_LEFT: Color = [70, 74, 84];
 const WALL_RIGHT: Color = [50, 54, 64];
@@ -295,6 +319,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
 
   const overlay = new TVG.Scene();
   scene.add(overlay);
+  // Above the darkness, so the stairs show from anywhere once they were seen. Each is masked by the
+  // walls in front of its stairs after all walls are known.
+  const stairsBeacons: { tile: Point; beacon: Scene }[] = [];
 
   const cursorOutline = appendTileDiamond(new TVG.Shape());
   cursorOutline.stroke({ width: CURSOR_OUTLINE_WIDTH, color: CURSOR_OUTLINES.floor });
@@ -377,19 +404,70 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       const bottom = { x: center.x, y: center.y + TILE_HEIGHT / 2 };
       const left = { x: center.x - TILE_WIDTH / 2, y: center.y };
 
-      // Shrinks the tile's diamond toward its center.
-      const inset = (scale: number) =>
-        [top, right, bottom, left].map((point) => ({
-          x: center.x + (point.x - center.x) * scale,
-          y: center.y + (point.y - center.y) * scale,
-        }));
-
       switch (room.tiles[y][x]) {
         case 'void':
           break;
-        case 'stairs':
-          STAIRS_STEPS.forEach((color, step) => addPolygon(inset(1 - step * 0.28), color));
+        case 'stairs': {
+          // A point on the tile, from the top corner along x by u and along y by v, lowered by a
+          // depth.
+          const at = (u: number, v: number, depth: number) => ({
+            x: top.x + (right.x - top.x) * u + (left.x - top.x) * v,
+            y: top.y + (right.y - top.y) * u + (left.y - top.y) * v + depth,
+          });
+          const opening = new TVG.Scene();
+          const addToOpening = (points: Point[], color: Color) => {
+            const shape = new TVG.Shape();
+            shape.moveTo(points[0].x, points[0].y);
+            for (const point of points.slice(1)) {
+              shape.lineTo(point.x, point.y);
+            }
+            shape.close().fill(...color);
+            opening.add(shape);
+          };
+          addToOpening([top, right, bottom, left], STAIRS_OPENING);
+          // The far steps first, so the nearer ones are drawn over them.
+          for (let step = STAIRS_TREADS.length - 1; step >= 0; step--) {
+            const near = 1 - step / STAIRS_TREADS.length;
+            const far = 1 - (step + 1) / STAIRS_TREADS.length;
+            const depth = (step + 1) * STAIRS_STEP_DEPTH;
+            const tread = [at(0, far, depth), at(1, far, depth), at(1, near, depth)];
+            addToOpening([...tread, at(0, near, depth)], STAIRS_TREADS[step]);
+            const edge = near - STAIRS_NOSING;
+            addToOpening(
+              [at(0, edge, depth), at(1, edge, depth), at(1, near, depth), at(0, near, depth)],
+              STAIRS_NOSINGS[step],
+            );
+          }
+          const outline = new TVG.Shape();
+          outline.moveTo(top.x, top.y).lineTo(right.x, right.y).lineTo(bottom.x, bottom.y);
+          outline.lineTo(left.x, left.y).close().fill(255, 255, 255);
+          opening.mask(outline, TVG.MaskMethod.Alpha);
+          layer.add(opening);
+
+          // The column stands on the tile's diamond, so its foot is the near half of the diamond
+          // and its sides go straight up from the left and right corners.
+          const beamGradient = new TVG.LinearGradient(
+            center.x,
+            bottom.y,
+            center.x,
+            bottom.y - STAIRS_BEAM_HEIGHT,
+          );
+          beamGradient.addStop(0, [...STAIRS_BEAM_COLOR, STAIRS_BEAM_FOOT_ALPHA]);
+          beamGradient.addStop(STAIRS_BEAM_PEAK, [...STAIRS_BEAM_COLOR, STAIRS_BEAM_PEAK_ALPHA]);
+          beamGradient.addStop(1, [...STAIRS_BEAM_COLOR, 0]);
+          beamGradient.build();
+          const beam = new TVG.Shape();
+          beam.moveTo(left.x, left.y).lineTo(bottom.x, bottom.y).lineTo(right.x, right.y);
+          beam.lineTo(right.x, bottom.y - STAIRS_BEAM_HEIGHT);
+          beam.lineTo(left.x, bottom.y - STAIRS_BEAM_HEIGHT);
+          beam.close().fill(beamGradient);
+          const beacon = new TVG.Scene();
+          beacon.add(beam);
+          beacon.gaussianBlur(STAIRS_BEAM_BLUR);
+          beacon.visible(false);
+          stairsBeacons.push({ tile: { x, y }, beacon });
           break;
+        }
         // A fixture itself is placed on its floor like an item.
         case 'floor':
         case 'campfire':
@@ -425,6 +503,31 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
           break;
       }
     }
+  }
+
+  // The walls drawn after the stairs stand in front of them, so they hide the light over the stairs
+  // where they overlap it.
+  for (const { tile, beacon } of stairsBeacons) {
+    // Not appendLightOutline, which doubles the height for the light map.
+    const frontWalls = new TVG.Shape();
+    for (const wall of walls.filter((wall) => layerOf(wall.tile) > layerOf(tile))) {
+      const { x, y } = wall.center;
+      const top = { x, y: y - TILE_HEIGHT / 2 };
+      const right = { x: x + TILE_WIDTH / 2, y };
+      const bottom = { x, y: y + TILE_HEIGHT / 2 };
+      const left = { x: x - TILE_WIDTH / 2, y };
+      const outline = [lift(top), lift(right), right, bottom, left, lift(left)];
+      frontWalls.moveTo(outline[0].x, outline[0].y);
+      for (const point of outline.slice(1)) {
+        frontWalls.lineTo(point.x, point.y);
+      }
+      frontWalls.close();
+    }
+    frontWalls.fill(255, 255, 255);
+    const masked = new TVG.Scene();
+    masked.add(beacon);
+    masked.mask(frontWalls, TVG.MaskMethod.InvAlpha);
+    overlay.add(masked);
   }
 
   // Added after the tiles of each layer, so what lies on the floor is drawn under the characters.
@@ -648,6 +751,11 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       door.faces = door.faces.filter((face) => !door.lock.includes(face));
       door.lock = [];
       updateCuts();
+    },
+    revealStairs() {
+      for (const { beacon } of stairsBeacons) {
+        beacon.visible(true);
+      }
     },
     setLight(light) {
       const remember = (key: string, shape: Shape, outline: Point[]) => {
