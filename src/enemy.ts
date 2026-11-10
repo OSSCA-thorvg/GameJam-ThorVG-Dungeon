@@ -44,7 +44,8 @@ interface EnemyKindStats extends EnemyStats {
 
 // Placeholder values, worked out from how many hits the hero needs to defeat each enemy with the
 // starting sword, about 2, 3 and 4.5, and how many hits each needs to defeat a hero with 20 HP in
-// cloth armor, about 13, 8 and 8. The strong enemy lands its 8 hits in 4 turns, as it acts twice.
+// cloth armor, about 13, 8 and 13. The strong enemy lands its 13 hits in 6.5 turns, as it acts
+// twice.
 // The weak one has the accuracy and evasion of a rat in Shattered Pixel Dungeon.
 export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
   weak: {
@@ -74,7 +75,7 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
   strong: {
     name: 'big dummy',
     maxHp: 25,
-    damage: [2, 5],
+    damage: [1, 4],
     accuracy: 12,
     evasion: 6,
     actions: 2,
