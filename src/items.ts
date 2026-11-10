@@ -1,3 +1,4 @@
+import { HUNGRY, STARVING } from './hunger';
 import { normalIntRange, roundRandomly } from './random';
 import type { GasKind } from './render';
 import type { Point } from './room';
@@ -25,7 +26,11 @@ export type ItemName =
   | 'cloth-armor'
   | 'leather-armor'
   | 'chain-mail'
-  | 'plate-armor';
+  | 'plate-armor'
+  | 'ration'
+  | 'travel-ration'
+  | 'raw-meat'
+  | 'cooked-meat';
 
 // What kind of equipment an item is, which decides the slots it fits.
 export type EquipmentKind = 'weapon' | 'armor' | 'accessory';
@@ -54,6 +59,8 @@ export interface ItemContext {
   addStatus(name: StatusName, turns: number): void;
   gainStrength(): void;
   gainLevel(): void;
+  satisfyHunger(amount: number): void;
+  log(message: string): void;
   // The tiles within some steps of a tile, going around walls and closed doors.
   areaAround(tile: Point, steps: number): Point[];
   setFire(tiles: Point[], turns: number): void;
@@ -90,8 +97,11 @@ export interface ItemDefinition {
   blockedReason?(context: ItemContext): string | null;
   use?(context: ItemContext): void;
   shatter?(context: ItemContext, tile: Point): void;
-  // The log line when the hero drinks it.
-  drinkMessage?: string;
+  // The log line when the hero drinks or eats it.
+  useMessage?: string;
+  // Set for items that fire can burn in the bag of a burning hero. A burned one turns into this
+  // item, as raw meat cooks, or burns up when it is null.
+  burnsInto?: ItemName | null;
   // What a helpful potion does to an enemy it hits. Without it, nothing happens.
   enemyEffect?: EnemyEffect;
 }
@@ -193,6 +203,27 @@ const PLATE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <path fill="#9aa3b0" d="M8.500 17.400L15.500 17.400L15.500 19L8.500 19Z"/>
   <path fill="#8a93a0" d="M9 19.400L15 19.400L15 21L9 21Z"/>
 </svg>`;
+const RATION_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#9a5f2c" d="M2 15Q2 7 12 7Q22 7 22 15Q22 19 19 19H5Q2 19 2 15Z"/>
+  <path fill="#c88a45" d="M3.500 14Q3.500 8.500 12 8.500Q20.500 8.500 20.500 14Q20.500 16 18.500 16H5.500Q3.500 16 3.500 14Z"/>
+  <path fill="#9a5f2c" d="M7 10.500L8.300 10L10 14L8.700 14.400Z"/>
+  <path fill="#9a5f2c" d="M11.300 10L12.700 9.800L14.200 13.900L12.800 14.200Z"/>
+  <path fill="#9a5f2c" d="M15.600 10.300L17 10.400L18.200 13.800L16.800 14Z"/>
+</svg>`;
+const TRAVEL_RATION_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#c9b48a" d="M5 9H19L20 19Q20 21 18 21H6Q4 21 4 19Z"/>
+  <path fill="#a8936a" d="M5 9H19L19.200 11.500H4.800Z"/>
+  <path fill="#7a4e26" d="M4.500 14H19.500L19.600 15.500H4.400Z"/>
+  <path fill="#7a4e26" d="M10.500 9L11 4.500Q12 3 13 4.500L13.500 9Z"/>
+</svg>`;
+const meatIcon = (meat: string, light: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#ece4d0" d="M4.500 15.500L8.500 19.500L6.800 21.200Q6 22.500 4.800 21.600Q4 22.600 2.900 21.600Q1.600 20.400 2.800 19.400Q1.800 18.200 3.200 17.200Z"/>
+  <path fill="${meat}" d="M7 17C5 13 7 6 13 4C18 2.500 22 6 20.500 11C19 17 12 19.500 7 17Z"/>
+  <path fill="${light}" d="M11 7C13.500 5.500 17 5.500 18 8C16 7.500 13 8 11 7Z"/>
+</svg>`;
+const RAW_MEAT_ICON = meatIcon('#c94a4a', '#e88080');
+const COOKED_MEAT_ICON = meatIcon('#8a4b22', '#b8743c');
 
 // What an empty slot of each kind shows.
 export const EQUIPMENT_ICONS: Record<EquipmentKind, string> = {
@@ -205,6 +236,11 @@ export const EQUIPMENT_ICONS: Record<EquipmentKind, string> = {
 // with a worn shortsword.
 export function createStartingEquipment(): Equipment {
   return { weapon: 'worn-shortsword', armor: 'cloth-armor', accessory1: null, accessory2: null };
+}
+
+// Every hero starts with a ration in Shattered Pixel Dungeon too.
+export function createStartingInventory(): ItemStack[] {
+  return [{ name: 'ration', count: 1 }];
 }
 
 // Same as the default capacity of a Bag in Shattered Pixel Dungeon.
@@ -239,13 +275,40 @@ const potion = (
   definition: Omit<ItemDefinition, 'potion' | 'useLabel'>,
 ): ItemDefinition => ({ ...definition, potion: kind, useLabel: 'Drink' });
 
+// How much hunger each food takes away. The ration fills as the pasty of Shattered Pixel Dungeon,
+// the travel ration as its ration, and raw meat as its mystery meat.
+const RATION_FOOD = STARVING;
+const TRAVEL_RATION_FOOD = HUNGRY;
+const RAW_MEAT_FOOD = HUNGRY / 2;
+// Placeholder value. Cooked meat fills a third more than raw meat.
+const COOKED_MEAT_FOOD = (RAW_MEAT_FOOD * 4) / 3;
+// How likely raw meat is to poison the hero.
+const FOOD_POISONING_CHANCE = 0.6;
+// Same as the poison from mystery meat in Shattered Pixel Dungeon, a fifth of the max HP.
+const FOOD_POISONING_FRACTION = 1 / 5;
+
+const food = (
+  amount: number,
+  definition: Omit<ItemDefinition, 'useLabel' | 'use' | 'useMessage'>,
+  afterEating?: (context: ItemContext) => void,
+): ItemDefinition => ({
+  ...definition,
+  description: `${definition.description} Keeps hunger away for ${amount} turns.`,
+  useLabel: 'Eat',
+  useMessage: `You ate the ${definition.displayName.toLowerCase()}.`,
+  use(context) {
+    context.satisfyHunger(amount);
+    afterEating?.(context);
+  },
+});
+
 export const ITEMS: Record<ItemName, ItemDefinition> = {
   'healing-potion': potion('helpful', {
     displayName: 'Healing potion',
     description: `Restores ${HEALING_POTION_HP} HP.`,
     blockedReason: ({ hp, maxHp }) => (hp >= maxHp ? 'Your HP is already full.' : null),
     use: ({ heal }) => heal(HEALING_POTION_HP),
-    drinkMessage: 'Your wounds healed!',
+    useMessage: 'Your wounds healed!',
     enemyEffect: {
       heal: HEALING_POTION_HP,
       message: (name) => `The ${name}'s wounds healed!`,
@@ -255,19 +318,19 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     displayName: 'Strength potion',
     description: 'Raises your strength by 1, which makes all your attacks a little stronger.',
     use: ({ gainStrength }) => gainStrength(),
-    drinkMessage: 'Your strength rose by 1!',
+    useMessage: 'Your strength rose by 1!',
   }),
   'experience-potion': potion('helpful', {
     displayName: 'Experience potion',
     description: 'Raises your level by one.',
     use: ({ gainLevel }) => gainLevel(),
-    drinkMessage: 'Your level rose by 1!',
+    useMessage: 'Your level rose by 1!',
   }),
   'haste-potion': potion('helpful', {
     displayName: 'Haste potion',
     description: `You act twice for every turn of the enemies, for ${HASTE_TURNS} turns.`,
     use: ({ addStatus }) => addStatus('haste', HASTE_TURNS),
-    drinkMessage: 'Your body suddenly felt light!',
+    useMessage: 'Your body suddenly felt light!',
     enemyEffect: {
       status: { name: 'haste', turns: HASTE_TURNS },
       message: (name) => `The ${name} suddenly started moving fast!`,
@@ -277,7 +340,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     displayName: 'Invisibility potion',
     description: `Enemies cannot see you for ${INVISIBLE_TURNS} turns, or until you attack.`,
     use: ({ addStatus }) => addStatus('invisible', INVISIBLE_TURNS),
-    drinkMessage: 'Your body suddenly turned invisible!',
+    useMessage: 'Your body suddenly turned invisible!',
     enemyEffect: {
       status: { name: 'invisible', turns: INVISIBLE_TURNS },
       message: (name) => `The ${name} suddenly turned invisible!`,
@@ -287,7 +350,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     displayName: 'Levitation potion',
     description: `You float for ${LEVITATION_TURNS} turns, above any fire on the floor.`,
     use: ({ addStatus }) => addStatus('levitating', LEVITATION_TURNS),
-    drinkMessage: 'Your body floated up into the air!',
+    useMessage: 'Your body floated up into the air!',
     enemyEffect: {
       status: { name: 'levitating', turns: LEVITATION_TURNS },
       message: (name) => `The ${name} floated up into the air!`,
@@ -297,7 +360,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     displayName: 'Telepathy potion',
     description: `You sense every enemy on the floor for ${TELEPATHY_TURNS} turns.`,
     use: ({ addStatus }) => addStatus('telepathy', TELEPATHY_TURNS),
-    drinkMessage: 'You can see into the minds of your enemies!',
+    useMessage: 'You can see into the minds of your enemies!',
   }),
   'fire-potion': potion('harmful', {
     displayName: 'Fire potion',
@@ -410,6 +473,38 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     strength: strengthForTier(3),
     icon: PLATE_ICON,
   },
+  ration: food(RATION_FOOD, {
+    displayName: 'Ration',
+    description: 'A full meal of bread and dried meat.',
+    icon: RATION_ICON,
+  }),
+  'travel-ration': food(TRAVEL_RATION_FOOD, {
+    displayName: 'Travel ration',
+    description: 'A small bundle of food, made to be carried. It fills you less than a ration.',
+    icon: TRAVEL_RATION_ICON,
+  }),
+  'raw-meat': food(
+    RAW_MEAT_FOOD,
+    {
+      displayName: 'Raw meat',
+      description:
+        'Meat from a defeated enemy. Eating it raw may make you sick. ' +
+        'Fire cooks it, even in your bag.',
+      icon: RAW_MEAT_ICON,
+      burnsInto: 'cooked-meat',
+    },
+    ({ maxHp, addStatus, log }) => {
+      if (Math.random() < FOOD_POISONING_CHANCE) {
+        addStatus('poisoned', Math.round(maxHp * FOOD_POISONING_FRACTION));
+        log('Your stomach churns. The meat was bad!');
+      }
+    },
+  ),
+  'cooked-meat': food(COOKED_MEAT_FOOD, {
+    displayName: 'Cooked meat',
+    description: 'Meat cooked through by fire. It is safe to eat.',
+    icon: COOKED_MEAT_ICON,
+  }),
 };
 
 // Same as fighting unarmed in Shattered Pixel Dungeon with the starting 10 strength.

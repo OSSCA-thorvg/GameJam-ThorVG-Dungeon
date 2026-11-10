@@ -26,7 +26,13 @@ export interface EnemyStats {
   actions: number;
   // The experience the hero gets for defeating it.
   experience: number;
+  // How likely it is to leave raw meat when it dies. Without it, it has no meat.
+  meatChance?: number;
 }
+
+// Same as the crab of Shattered Pixel Dungeon, which leaves mystery meat a sixth of the time. The
+// dummies have it for now, standing in for enemies with flesh such as rats.
+const MEAT_CHANCE = 1 / 6;
 
 // An enemy that appears at random on the floors.
 interface EnemyKindStats extends EnemyStats {
@@ -51,6 +57,7 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
     experience: 1,
     firstFloor: 1,
     weight: 3,
+    meatChance: MEAT_CHANCE,
   },
   medium: {
     name: 'dummy',
@@ -62,6 +69,7 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
     experience: 2,
     firstFloor: 2,
     weight: 2,
+    meatChance: MEAT_CHANCE,
   },
   strong: {
     name: 'big dummy',
@@ -73,6 +81,7 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
     experience: 4,
     firstFloor: 3,
     weight: 1,
+    meatChance: MEAT_CHANCE,
   },
 };
 

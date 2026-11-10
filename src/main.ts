@@ -25,6 +25,7 @@ import {
   type Enemy,
 } from './enemy';
 import { createHazardField, spreadArea } from './hazards';
+import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
 import { loadSettings, saveSettings, uiScaleFor } from './settings';
 import { createSettingsPanel } from './settingsPanel';
@@ -34,6 +35,7 @@ import {
   addItem,
   canSurpriseAttack,
   createStartingEquipment,
+  createStartingInventory,
   equip,
   evasionFactor,
   rollArmor,
@@ -55,6 +57,7 @@ import { createMessageLog } from './messageLog';
 import { canReach, findPath } from './path';
 import {
   CHEST_ICON,
+  FOOD_PER_FLOOR,
   GOLD_ICON,
   GOLD_PILES_PER_FLOOR,
   hideInChests,
@@ -71,7 +74,7 @@ import {
   ITEM_FLOORS_PER_STAGE,
   planStagePotions,
 } from './potions';
-import { createRandom, normalIntRange, randomInt, type Random } from './random';
+import { createRandom, normalIntRange, pick, randomInt, type Random } from './random';
 import {
   createCharacter,
   createDamageNumber,
@@ -95,6 +98,7 @@ import {
   HARMFUL_STATUSES,
   hasStatus,
   isHelpless,
+  poisonDamage,
   STATUS_LABELS,
   tickStatuses,
   tintOf,
@@ -140,6 +144,8 @@ const BURNING_TURNS = 4;
 const BURN_DAMAGE: [min: number, max: number] = [1, 3];
 const POISON_DAMAGE: [min: number, max: number] = [1, 3];
 const PARALYZED_TURNS = 2;
+// Placeholder value. How likely fire is to burn the item it reaches in a burning hero's bag.
+const BAG_BURN_CHANCE = 0.5;
 // Placeholder value. How long each turn takes while the hero cannot act.
 const HELPLESS_TURN_MS = 300;
 // Placeholder values. How high a levitating hero floats, and how see-through an invisible
@@ -235,8 +241,13 @@ function floorContents(random: Random): { loot: Loot[]; hasMimic: boolean } {
   const stageRandom = createRandom(runSeed - 1 - stage);
   const potions = planStagePotions(stageRandom)[index];
   const hasMimic = pickMimicFloor(stageRandom) === index;
+  const items: ItemName[] = [
+    ...potions,
+    ...Array<ItemName>(FOOD_PER_FLOOR).fill('travel-ration'),
+    ...rollEquipment(random, stage),
+  ];
   const loot = [
-    ...[...potions, ...rollEquipment(random, stage)].map((name): Loot => ({ kind: 'item', name })),
+    ...items.map((name): Loot => ({ kind: 'item', name })),
     ...Array.from({ length: GOLD_PILES_PER_FLOOR }, (): Loot => ({
       kind: 'gold',
       amount: rollGold(random, floor),
@@ -322,6 +333,7 @@ let heroExperience = 0;
 let heroStrength = STARTING_STRENGTH;
 let heroGold = 0;
 let heroStatuses: Statuses = {};
+let heroHunger = createHunger();
 // Whether a hasted hero already took the first of their two actions in this turn.
 let hasActedOnce = false;
 let potionLore = createPotionLore(createRandom(runSeed));
@@ -346,7 +358,7 @@ let cameraFrame = 0;
 let mousePosition: Point | null = null;
 let cameraDrag: { pointerId: number; start: Point; last: Point; isDragging: boolean } | null = null;
 const activePointers = new Map<number, Point>();
-let inventory: ItemStack[] = [];
+let inventory: ItemStack[] = createStartingInventory();
 let equipment: Equipment = createStartingEquipment();
 let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
 
@@ -364,6 +376,11 @@ function createItemContext(): ItemContext {
       showHeroStats();
     },
     gainLevel: levelUp,
+    satisfyHunger(amount) {
+      satisfyHunger(heroHunger, amount);
+      showHeroStats();
+    },
+    log: (message) => messageLog.add(message),
     // Fire and frost also reach a closed door, without going through it.
     areaAround: (tile, steps) => spreadArea(tile, steps, isOpenTile, isFlammableTile),
     // Fire catches whoever stands in it at once.
@@ -490,7 +507,7 @@ function gainExperience(amount: number) {
 function showHeroStats() {
   const experience = `XP ${heroExperience}/${experienceToLevelUp()}`;
   statsLabel.textContent = `Lv ${heroLevel} · ${experience} · Str ${heroStrength} · ${heroGold}G`;
-  statusBar.show(heroStatuses);
+  statusBar.show(heroStatuses, heroHunger);
 }
 
 // A levitating character floats above its tile.
@@ -1020,6 +1037,9 @@ function killEnemy(enemy: Enemy) {
   if (enemy.loot) {
     dropThing(enemy.loot, enemy.position);
   }
+  if (Math.random() < (enemy.stats.meatChance ?? 0)) {
+    dropItem('raw-meat', enemy.position);
+  }
   gainExperience(enemy.stats.experience);
   updateVision();
 }
@@ -1095,7 +1115,7 @@ function canEnemySeeHero(enemy: Enemy) {
 }
 
 // Fire sets alight whoever stands in it, poison gas hurts, and paralyzing gas paralyzes. Then
-// burning hurts.
+// burning hurts, and fire cooks raw meat.
 function applyHazards() {
   const isOnFire = (tile: Point) => hazards.kindsAt(tile).includes('fire');
   setAlight([heroPosition, ...enemies.map(({ position }) => position)].filter(isOnFire));
@@ -1109,7 +1129,9 @@ function applyHazards() {
   }
   if (hasStatus(heroStatuses, 'burning')) {
     damageHero(normalIntRange(Math.random, ...BURN_DAMAGE));
+    burnItemInBag();
   }
+  cookMeatOnFloor(isOnFire);
 
   for (const enemy of enemies) {
     const enemyHazards = hazards.kindsAt(enemy.position);
@@ -1125,8 +1147,63 @@ function applyHazards() {
   }
 }
 
-// The end of a turn, after every enemy acted. Effects wear off and gas spreads, then fire and gas
-// do their harm, and then fire burns down.
+// Each turn the hero burns, the fire reaches one random kind of item in the bag that can burn, as
+// in Burning.act() of Shattered Pixel Dungeon, and may burn one of them. What a burned item turns
+// into drops at the hero's feet when the bag has no room for it.
+function burnItemInBag() {
+  const burnable = inventory.filter(({ name }) => ITEMS[name].burnsInto !== undefined);
+  if (burnable.length === 0 || Math.random() >= BAG_BURN_CHANCE) {
+    return;
+  }
+  const { name } = pick(Math.random, burnable);
+  const into = ITEMS[name].burnsInto;
+  const nameOf = (item: ItemName) => potionLore.lookOf(item).displayName.toLowerCase();
+  removeItem(inventory, name);
+  if (into) {
+    if (!addItem(inventory, into)) {
+      dropItem(into, heroPosition);
+    }
+    messageLog.add(`The flames turned your ${nameOf(name)} into ${nameOf(into)}.`);
+  } else {
+    messageLog.add(`The flames burned up your ${nameOf(name)}.`);
+  }
+  inventoryPanel.refresh();
+}
+
+// Fire cooks raw meat lying in it, as Heap.burn() of Shattered Pixel Dungeon.
+function cookMeatOnFloor(isOnFire: (tile: Point) => boolean) {
+  const cooked = groundItems.filter(
+    ({ thing, position }) =>
+      thing.kind === 'item' && thing.name === 'raw-meat' && isOnFire(position),
+  );
+  for (const item of cooked) {
+    removeFromGround(item);
+    dropItem('cooked-meat', item.position);
+  }
+  if (cooked.some(({ position }) => isInView(position))) {
+    messageLog.add('The fire cooked the raw meat on the floor.');
+  }
+}
+
+// Hunger grows by a turn. Starving hurts, and starting to starve stops a walk.
+function feelHunger() {
+  const before = hungerState(heroHunger);
+  const damage = tickHunger(heroHunger, heroMaxHp);
+  const after = hungerState(heroHunger);
+  if (after !== before && after === 'hungry') {
+    messageLog.add('You are getting hungry.');
+  }
+  if (after !== before && after === 'starving') {
+    messageLog.add('You are starving! You will keep losing HP until you eat.');
+    stopWalking();
+  }
+  if (damage > 0) {
+    damageHero(damage);
+  }
+}
+
+// The end of a turn, after every enemy acted. Poison hurts, effects wear off and gas spreads, then
+// fire and gas do their harm, and then fire burns down. Last, the hero gets hungrier.
 // While the hero cannot act, the next turn follows by itself.
 function endTurn(onDone: () => void) {
   if (isGameOver) {
@@ -1135,6 +1212,11 @@ function endTurn(onDone: () => void) {
     return;
   }
 
+  // Poison hurts by the turns it has left, so it hurts before it wears off.
+  const poison = poisonDamage(heroStatuses);
+  if (poison > 0) {
+    damageHero(poison);
+  }
   tickStatuses(heroStatuses);
   for (const enemy of enemies) {
     tickStatuses(enemy.statuses);
@@ -1145,6 +1227,7 @@ function endTurn(onDone: () => void) {
   for (const enemy of enemies.filter(({ hp }) => hp === 0)) {
     killEnemy(enemy);
   }
+  feelHunger();
   updateHeroLook();
   if (heroHp === 0) {
     endGame();
@@ -1829,12 +1912,12 @@ function unequipItem(slot: EquipmentSlot) {
 // Drinking a potion tells the player what it is. A harmful one breaks at the hero's feet.
 function useItem(name: ItemName) {
   finishRunningEffects();
-  const { use, shatter, drinkMessage } = ITEMS[name];
+  const { use, shatter, useMessage } = ITEMS[name];
   if (cannotAct() || (!use && !shatter)) {
     return;
   }
-  if (drinkMessage) {
-    messageLog.add(drinkMessage);
+  if (useMessage) {
+    messageLog.add(useMessage);
   }
 
   stopWalking();
@@ -1922,11 +2005,12 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   heroStrength = STARTING_STRENGTH;
   heroGold = 0;
   heroStatuses = {};
+  heroHunger = createHunger();
   hasActedOnce = false;
   potionLore = createPotionLore(createRandom(runSeed));
   killCount = 0;
   turnCount = 0;
-  inventory = [];
+  inventory = createStartingInventory();
   equipment = createStartingEquipment();
   inventoryPanel.refresh();
   replaceLevel();

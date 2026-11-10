@@ -182,6 +182,7 @@ export const STATUS_COLORS: Record<StatusName, Color> = {
   paralyzed: [245, 220, 70],
   frozen: [150, 215, 255],
   burning: [255, 140, 40],
+  poisoned: [140, 200, 70],
 };
 // Placeholder colors, laid over a character with the alpha at the end.
 const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {

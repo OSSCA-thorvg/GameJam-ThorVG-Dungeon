@@ -8,10 +8,16 @@ export type StatusName =
   | 'telepathy'
   | 'paralyzed'
   | 'frozen'
-  | 'burning';
+  | 'burning'
+  | 'poisoned';
 
 // The effects that work against the character they are on.
-export const HARMFUL_STATUSES: readonly StatusName[] = ['paralyzed', 'frozen', 'burning'];
+export const HARMFUL_STATUSES: readonly StatusName[] = [
+  'paralyzed',
+  'frozen',
+  'burning',
+  'poisoned',
+];
 
 // The turns left of each effect on a character.
 export type Statuses = Partial<Record<StatusName, number>>;
@@ -25,6 +31,7 @@ export const STATUS_LABELS: Record<StatusName, string> = {
   paralyzed: 'Paralyzed',
   frozen: 'Frozen',
   burning: 'Burning',
+  poisoned: 'Poisoned',
 };
 
 // What each effect does to the hero, shown when the player points at its icon.
@@ -36,7 +43,15 @@ export const STATUS_DESCRIPTIONS: Record<StatusName, string> = {
   paralyzed: 'You cannot act or dodge.',
   frozen: 'You cannot act or dodge. Any damage breaks the ice.',
   burning: 'Fire hurts you at the end of every turn.',
+  poisoned: 'Poison hurts you at the end of every turn, less as it wears off.',
 };
+
+// As Poison.act() of Shattered Pixel Dungeon, poison with some turns left deals a third of them
+// plus 1 in a turn.
+export function poisonDamage(statuses: Statuses): number {
+  const turns = statuses.poisoned ?? 0;
+  return turns > 0 ? Math.floor(turns / 3) + 1 : 0;
+}
 
 export function hasStatus(statuses: Statuses, name: StatusName): boolean {
   return (statuses[name] ?? 0) > 0;

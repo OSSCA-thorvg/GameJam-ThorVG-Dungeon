@@ -1,3 +1,10 @@
+import {
+  describeHunger,
+  HUNGER_LABELS,
+  hungerState,
+  type Hunger,
+  type HungerState,
+} from './hunger';
 import { STATUS_COLORS } from './render';
 import {
   hasStatus,
@@ -7,8 +14,14 @@ import {
   type Statuses,
 } from './status';
 
+type Color = [r: number, g: number, b: number];
+type ShownHunger = Exclude<HungerState, 'fed'>;
+
+const FORK_AND_KNIFE =
+  '<path class="line" d="M1 0.5V3.5Q1 5 2.5 5Q4 5 4 3.5V0.5M2.5 0.5V9.5M7.5 9.5V0.5Q9 2 9 5.5H7.5"/>';
+
 // Each icon is drawn in a 10 by 10 box, filled or with lines.
-const ICONS: Record<StatusName, string> = {
+const ICONS: Record<StatusName | ShownHunger, string> = {
   // Two arrowheads pointing forward.
   haste: '<path class="line" d="M1.5 1.5L5 5L1.5 8.5M5 1.5L8.5 5L5 8.5"/>',
   // A circle crossed out.
@@ -27,40 +40,66 @@ const ICONS: Record<StatusName, string> = {
   burning:
     '<path class="fill" d="M5 0C6.5 2.5 9 4 9 6.5C9 8.7 7.2 10 5 10C2.8 10 1 8.7 1 6.5' +
     'C1 4.5 2.5 3.5 3 2C3.8 3.2 4 4 4.5 4.5C4.8 3 4.8 1.5 5 0Z"/>',
+  // A drop.
+  poisoned:
+    '<path class="fill" d="M5 0.5C6.8 3.5 8.5 5 8.5 6.8C8.5 8.7 6.9 10 5 10C3.1 10 1.5 8.7 1.5 6.8' +
+    'C1.5 5 3.2 3.5 5 0.5Z"/>',
+  hungry: FORK_AND_KNIFE,
+  starving: FORK_AND_KNIFE,
 };
 
-// The hero's effects as a row of icons with the turns left, below the health bar. Pointing at
-// an icon, or tapping it, explains the effect.
+// Placeholder colors of the hunger icons.
+const HUNGER_COLORS: Record<ShownHunger, Color> = {
+  hungry: [235, 190, 70],
+  starving: [230, 80, 60],
+};
+
+// An icon on the bar: an effect with the turns it has left, or the hero's hunger, which has none.
+interface Entry {
+  name: StatusName | ShownHunger;
+  label: string;
+  description: string;
+  color: Color;
+  turns: number | null;
+}
+
+// The hero's hunger and effects as a row of icons, below the health bar. An effect shows the turns
+// it has left. Pointing at an icon, or tapping it, explains it.
 export interface StatusBar {
-  show(statuses: Statuses): void;
+  show(statuses: Statuses, hunger: Hunger): void;
 }
 
 export function createStatusBar(element: HTMLElement, tooltip: HTMLElement): StatusBar {
-  let statuses: Statuses = {};
-  // The effect being explained, and whether a click keeps it open after the pointer leaves.
-  let explained: StatusName | null = null;
+  let entries: Entry[] = [];
+  // The icon being explained, and whether a click keeps it open after the pointer leaves.
+  let explained: Entry['name'] | null = null;
   let isPinned = false;
 
-  const itemOf = (name: StatusName) =>
+  const itemOf = (name: Entry['name']) =>
     element.querySelector<HTMLElement>(`[data-status="${name}"]`);
 
-  const explain = (name: StatusName | null) => {
-    explained = name;
-    const item = name && itemOf(name);
-    if (!name || !item) {
+  const explain = (name: Entry['name'] | null) => {
+    const entry = entries.find((candidate) => candidate.name === name);
+    const item = entry && itemOf(entry.name);
+    if (!entry || !item) {
       explained = null;
       isPinned = false;
       tooltip.hidden = true;
       return;
     }
+    explained = entry.name;
     const title = document.createElement('strong');
-    title.textContent = STATUS_LABELS[name];
+    title.textContent = entry.label;
     title.style.color = item.style.color;
     const description = document.createElement('p');
-    description.textContent = STATUS_DESCRIPTIONS[name];
-    const turns = document.createElement('p');
-    turns.textContent = `${statuses[name]} turns left`;
-    tooltip.replaceChildren(title, description, turns);
+    description.textContent = entry.description;
+    const lines = [title, description];
+    if (entry.turns !== null) {
+      const turns = document.createElement('p');
+      turns.textContent = `${entry.turns} turns left`;
+      lines.push(turns);
+    }
+    tooltip.replaceChildren(...lines);
     tooltip.hidden = false;
 
     // The bounds are on the screen, but the tooltip's own position is zoomed by the UI scale.
@@ -78,22 +117,45 @@ export function createStatusBar(element: HTMLElement, tooltip: HTMLElement): Sta
   });
 
   return {
-    show(next) {
-      statuses = next;
-      const names = (Object.keys(STATUS_LABELS) as StatusName[]).filter((name) =>
-        hasStatus(statuses, name),
-      );
+    show(statuses, hunger) {
+      const effects = (Object.keys(STATUS_LABELS) as StatusName[])
+        .filter((name) => hasStatus(statuses, name))
+        .map(
+          (name): Entry => ({
+            name,
+            label: STATUS_LABELS[name],
+            description: STATUS_DESCRIPTIONS[name],
+            color: STATUS_COLORS[name],
+            turns: statuses[name] ?? 0,
+          }),
+        );
+      const state = hungerState(hunger);
+      entries =
+        state === 'fed'
+          ? effects
+          : [
+              {
+                name: state,
+                label: HUNGER_LABELS[state],
+                description: describeHunger(hunger),
+                color: HUNGER_COLORS[state],
+                turns: null,
+              },
+              ...effects,
+            ];
+
       element.replaceChildren(
-        ...names.map((name) => {
-          const [r, g, b] = STATUS_COLORS[name];
+        ...entries.map(({ name, label, color: [r, g, b], turns }) => {
           const item = document.createElement('button');
           item.className = 'status-effect';
           item.dataset.status = name;
-          item.setAttribute('aria-label', `${STATUS_LABELS[name]}, ${statuses[name]} turns`);
+          item.setAttribute('aria-label', turns === null ? label : `${label}, ${turns} turns`);
           const svg = `<svg viewBox="-1 -1 12 12" aria-hidden="true">${ICONS[name]}</svg>`;
           item.innerHTML = svg;
           item.style.color = `rgb(${r} ${g} ${b})`;
-          item.append(String(statuses[name]));
+          if (turns !== null) {
+            item.append(String(turns));
+          }
 
           item.addEventListener('pointerenter', (event) => {
             if (event.pointerType === 'mouse' && !isPinned) {
@@ -113,7 +175,7 @@ export function createStatusBar(element: HTMLElement, tooltip: HTMLElement): Sta
           return item;
         }),
       );
-      // The explanation follows the turns left, and closes when its effect ends.
+      // The explanation follows the turns left, and closes when its icon goes away.
       explain(explained);
     },
   };

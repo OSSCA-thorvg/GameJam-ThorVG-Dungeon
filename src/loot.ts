@@ -12,6 +12,10 @@ export type GroundThing = Loot | { kind: 'chest'; contents: Loot };
 // 35 items are gold.
 export const GOLD_PILES_PER_FLOOR = 1;
 
+// Same as Level.create() of Shattered Pixel Dungeon, which puts one food on every floor but the
+// boss floors.
+export const FOOD_PER_FLOOR = 1;
+
 // RegularLevel.createItems() of Shattered Pixel Dungeon puts 5 of every 20 items in chests when no
 // mimics take the place of any.
 const CHEST_CHANCE = 5 / 20;
