@@ -1750,16 +1750,10 @@ function walk() {
   passTurn(() => setTimeout(walk, STEP_INTERVAL_MS));
 }
 
-// A paralyzed or frozen hero cannot act until the turns pass by themselves.
+// A paralyzed or frozen hero cannot act until the turns pass by themselves. While an attack or a
+// throw plays, input waits, so every hit can be seen before the next action.
 function cannotAct() {
-  return isGameOver || isHelpless(heroStatuses);
-}
-
-// A new input ends the running effects, so they never delay play.
-function finishRunningEffects() {
-  while (finishAttackEffect) {
-    finishAttackEffect();
-  }
+  return isGameOver || isHelpless(heroStatuses) || finishAttackEffect !== null;
 }
 
 // A closed door stops what flies through it. With `landsOnDoor`, what is thrown at the door itself
@@ -1837,7 +1831,6 @@ function isOnTheWay() {
 }
 
 function pressTileAt(position: Point, isMouse: boolean) {
-  finishRunningEffects();
   if (cannotAct()) {
     return;
   }
@@ -2042,7 +2035,6 @@ function stopWalking() {
 
 // Takes an item out of the bag before an action with it, and ends the panel and any walk.
 function takeFromBag(name: ItemName): boolean {
-  finishRunningEffects();
   if (cannotAct()) {
     return false;
   }
@@ -2249,7 +2241,6 @@ function spendCampfireTurns(
   onTurn: () => boolean,
   onDone: () => void,
 ) {
-  finishRunningEffects();
   if (cannotAct()) {
     return;
   }
@@ -2328,7 +2319,6 @@ function cookMeat() {
 
 // Equipping or taking off an item takes a turn, as in Shattered Pixel Dungeon.
 function changeEquipment(change: () => boolean) {
-  finishRunningEffects();
   if (cannotAct()) {
     return;
   }
@@ -2350,7 +2340,6 @@ function unequipItem(slot: EquipmentSlot) {
 
 // Drinking a potion tells the player what it is. A harmful one breaks at the hero's feet.
 function useItem(name: ItemName) {
-  finishRunningEffects();
   const { use, shatter, useMessage } = ITEMS[name];
   if (cannotAct() || (!use && !shatter)) {
     return;
@@ -2392,7 +2381,6 @@ function playWaitEffect() {
 
 // A second press while choosing a tile to examine stops choosing.
 examineButton.addEventListener('click', () => {
-  finishRunningEffects();
   if (cannotAct()) {
     return;
   }
@@ -2409,7 +2397,6 @@ examineButton.addEventListener('click', () => {
 });
 
 waitButton.addEventListener('click', () => {
-  finishRunningEffects();
   if (cannotAct()) {
     return;
   }
