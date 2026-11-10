@@ -9,7 +9,8 @@ export type StatusName =
   | 'paralyzed'
   | 'frozen'
   | 'burning'
-  | 'poisoned';
+  | 'poisoned'
+  | 'stunned';
 
 // The effects that work against the character they are on.
 export const HARMFUL_STATUSES: readonly StatusName[] = [
@@ -17,6 +18,7 @@ export const HARMFUL_STATUSES: readonly StatusName[] = [
   'frozen',
   'burning',
   'poisoned',
+  'stunned',
 ];
 
 // The turns left of each effect on a character.
@@ -32,6 +34,7 @@ export const STATUS_LABELS: Record<StatusName, string> = {
   frozen: 'Frozen',
   burning: 'Burning',
   poisoned: 'Poisoned',
+  stunned: 'Stunned',
 };
 
 // What each effect does to the hero, shown when the player points at its icon.
@@ -44,6 +47,7 @@ export const STATUS_DESCRIPTIONS: Record<StatusName, string> = {
   frozen: 'You cannot act or dodge. Any damage breaks the ice.',
   burning: 'Fire hurts you at the end of every turn.',
   poisoned: 'Poison hurts you at the end of every turn, less as it wears off.',
+  stunned: 'You cannot act or dodge, dazed from a crash.',
 };
 
 // As Poison.act() of Shattered Pixel Dungeon, poison with some turns left deals a third of them
@@ -82,11 +86,15 @@ export function tickStatuses(statuses: Statuses): void {
 
 // A paralyzed or frozen character cannot act, and cannot evade.
 export function isHelpless(statuses: Statuses): boolean {
-  return hasStatus(statuses, 'paralyzed') || hasStatus(statuses, 'frozen');
+  return (['paralyzed', 'frozen', 'stunned'] as const).some((name) => hasStatus(statuses, name));
 }
 
 // The color a character is tinted with, from the effect that matters most to the player.
 export function tintOf(statuses: Statuses): CharacterTint | null {
   const order: CharacterTint[] = ['frozen', 'paralyzed', 'burning'];
+  // A stunned character is tinted like a paralyzed one, as it is as helpless.
+  if (hasStatus(statuses, 'stunned') && !hasStatus(statuses, 'frozen')) {
+    return 'paralyzed';
+  }
   return order.find((name) => hasStatus(statuses, name)) ?? null;
 }

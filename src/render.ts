@@ -235,6 +235,7 @@ export const STATUS_COLORS: Record<StatusName, Color> = {
   frozen: [150, 215, 255],
   burning: [255, 140, 40],
   poisoned: [140, 200, 70],
+  stunned: [255, 190, 60],
 };
 // Placeholder colors, laid over a character with the alpha at the end.
 const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {
@@ -960,6 +961,30 @@ export function createItemPaint(TVG: ThorVGNamespace, svg: string): Paint {
 
 // A placeholder enemy with its feet on the scene's local origin.
 // It is a Scene because scene effects, such as the hit flash, only apply to scenes.
+// Placeholder look of the giant centipede: a low, round body segment, and a head with eyes that is
+// a little bigger.
+const CENTIPEDE_BODY: Color = [150, 70, 40];
+const CENTIPEDE_HEAD: Color = [185, 60, 40];
+const CENTIPEDE_EYE: Color = [250, 230, 90];
+
+export function createCentipedePart(TVG: ThorVGNamespace, isHead: boolean): Scene {
+  const size = CHARACTER_SIZE * (isHead ? 1.15 : 1);
+  const scene = new TVG.Scene();
+  const body = new TVG.Shape();
+  body.appendCircle(0, -size * 0.3, size * 0.38, size * 0.3);
+  body.fill(...(isHead ? CENTIPEDE_HEAD : CENTIPEDE_BODY));
+  scene.add(body);
+  if (isHead) {
+    for (const side of [-1, 1]) {
+      const eye = new TVG.Shape();
+      eye.appendCircle(side * size * 0.17, -size * 0.38, size * 0.07);
+      eye.fill(...CENTIPEDE_EYE);
+      scene.add(eye);
+    }
+  }
+  return scene;
+}
+
 export function createDummyEnemy(TVG: ThorVGNamespace, kind: EnemyKind): Scene {
   const { color, scale } = ENEMY_LOOKS[kind];
   const size = CHARACTER_SIZE * scale;
@@ -1251,6 +1276,11 @@ function createSpeechBubble(TVG: ThorVGNamespace, text: string, color: Color): S
 }
 
 // The mark shown over an enemy that just noticed the hero.
+// Shown over the hero when something has marked them as the target of an attack.
+export function createTargetedText(TVG: ThorVGNamespace): Shape {
+  return createFloatingText(TVG, 'TARGETED', [255, 70, 60]);
+}
+
 export function createNoticeMark(TVG: ThorVGNamespace): Scene {
   return createSpeechBubble(TVG, '!', NOTICE_MARK_COLOR);
 }

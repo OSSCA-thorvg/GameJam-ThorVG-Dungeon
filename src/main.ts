@@ -9,8 +9,15 @@ import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory'
 import {
   alertEnemy,
   ASLEEP_CHANCE,
+  attachBody,
   attackEnemy,
+  bodySegment,
+  centipede,
+  CHARGE_DAMAGE,
+  CHARGE_STUN_TURNS,
+  centipedeStats,
   chaser,
+  createCentipedeState,
   createEnemy,
   damageEnemy,
   disturbEnemy,
@@ -22,8 +29,11 @@ import {
   mimicStats,
   pickEnemyKind,
   rollHit,
+  wholeOf,
   type Enemy,
 } from './enemy';
+import { createBossFloor } from './bossFloor';
+import { showLaneWarning, type LaneWarning } from './laneWarning';
 import {
   CAMPFIRE_ICON,
   COOK_TURNS,
@@ -92,6 +102,8 @@ import {
   createSleepMark,
   createStatusText,
   createSurpriseMark,
+  createCentipedePart,
+  createTargetedText,
   createDummyEnemy,
   createEnemyHealthBar,
   createItemPaint,
@@ -307,7 +319,35 @@ function createMimic(position: Point, random: Random): Enemy {
   return mimic;
 }
 
+// The giant centipede, from its head tile to its tail tile. It drops the key to the way down.
+function createCentipede(tiles: Point[]): Enemy[] {
+  const part = (tile: Point, isHead: boolean) =>
+    createEnemy(
+      centipedeStats,
+      tile,
+      false,
+      createCentipedePart(TVG, isHead),
+      createEnemyHealthBar(TVG, renderCanvas),
+      createSleepMark(TVG),
+      isHead ? centipede : bodySegment,
+      isHead ? { kind: 'item', name: 'iron-key' } : null,
+    );
+  const [headTile, ...bodyTiles] = tiles;
+  const head = part(headTile, true);
+  const body = bodyTiles.map((tile) => part(tile, false));
+  attachBody(head, body);
+  // It always knows where the hero is, so it hunts from the start.
+  head.centipede = createCentipedeState();
+  head.state = 'hunting';
+  return [head, ...body];
+}
+
 function createLevel() {
+  if (floor === FLOORS_PER_STAGE) {
+    const { map, tiles } = createBossFloor();
+    return finishLevel(map, createCentipede(tiles), [], []);
+  }
+
   if (floor === 0) {
     const surface = createSurface();
     const floorItems = surface.items.map(({ name, position }) => ({
@@ -972,7 +1012,10 @@ function showEnemy(enemy: Enemy) {
     enemy.paint.opacity(255);
     roomView.place(enemy.paint, x, y);
     nudgeEnemy(enemy, enemy.position, { x: 0, y: 0 });
-    roomView.placeOverlay(enemy.healthBar.scene, x, y);
+    // A segment shows no health bar, because the head's bar is the health of the whole body.
+    if (!enemy.owner) {
+      roomView.placeOverlay(enemy.healthBar.scene, x, y);
+    }
   } else if (hasStatus(heroStatuses, 'telepathy')) {
     // Drawn above the darkness, so it shows through walls.
     enemy.paint.opacity(SENSED_ENEMY_OPACITY);
@@ -1069,6 +1112,7 @@ function goDownStairs() {
 }
 
 function replaceLevel() {
+  stopChargeWarning();
   damageNumbers.clear();
   mapScene.remove(roomView.scene);
   ({ room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems, signs } =
@@ -1094,6 +1138,90 @@ window.addEventListener('resize', () => {
 });
 
 const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas')!;
+
+// The line that a rearing centipede is about to charge down, while it is shown.
+let chargeWarning: LaneWarning | null = null;
+
+function stopChargeWarning() {
+  chargeWarning?.stop();
+  chargeWarning = null;
+}
+
+// The centipede marks the hero as its target and shows the line it will charge down. The hero has
+// this turn to leave that line.
+function startChargeWarning(lane: Point[], direction: Point) {
+  stopChargeWarning();
+  chargeWarning = showLaneWarning(TVG, roomView, lane, direction, renderCanvas);
+  damageNumbers.show(roomView, createTargetedText(TVG), heroPosition);
+  messageLog.add('The giant centipede rears up and targets you!');
+  stopWalking();
+}
+
+// Placeholder value. How long the centipede takes for each tile of its charge.
+const CHARGE_STEP_MS = 55;
+
+// Charges the centipede down a path, one tile after another, with its body trailing behind. At the
+// end it either hits the hero, who stood in the line, or crashes and is stunned, head and body.
+// A new input of the player finishes the charge at once.
+function playCharge(enemy: Enemy, path: Point[], hitsHero: boolean, onDone: () => void) {
+  const tiles = [...path];
+  let timer = 0;
+  let isDone = false;
+
+  const finish = () => {
+    if (isDone) {
+      return;
+    }
+    isDone = true;
+    clearTimeout(timer);
+    finishAttackEffect = null;
+    for (const tile of tiles.splice(0)) {
+      moveEnemy(enemy, tile);
+    }
+
+    if (hitsHero) {
+      messageLog.add('The giant centipede slams into you!');
+      const damage = normalIntRange(Math.random, ...CHARGE_DAMAGE);
+      damageHero(Math.max(0, damage - rollArmor(equipment, heroStrength)));
+      showHeroStats();
+      stopWalking();
+      if (heroHp === 0) {
+        endGame();
+      }
+    } else {
+      messageLog.add('The giant centipede crashes headfirst into the wall! It is stunned!');
+      addEnemyStatus(enemy, 'stunned', CHARGE_STUN_TURNS);
+      for (const segment of enemy.followers) {
+        addStatus(segment.statuses, 'stunned', CHARGE_STUN_TURNS);
+        showEnemy(segment);
+      }
+    }
+    canvas.update().render();
+    onDone();
+  };
+
+  const step = () => {
+    const tile = tiles.shift();
+    if (!tile) {
+      finish();
+      return;
+    }
+    moveEnemy(enemy, tile);
+    renderCanvas();
+    timer = window.setTimeout(step, CHARGE_STEP_MS);
+  };
+
+  finishAttackEffect = finish;
+  step();
+}
+
+// Moves an enemy to a tile. Its body follows, each segment into the tile the one before it left, so
+// the tail is the only place that is freed.
+function moveEnemy(enemy: Enemy, tile: Point) {
+  const trail = [enemy.position, ...enemy.followers.map(({ position }) => position)];
+  placeEnemy(enemy, tile);
+  enemy.followers.forEach((segment, index) => placeEnemy(segment, trail[index]));
+}
 
 function occupiedTiles(except?: Enemy): Point[] {
   return enemies.filter((enemy) => enemy !== except).map((enemy) => enemy.position);
@@ -1151,16 +1279,25 @@ function hurtEnemy(enemy: Enemy, amount: number) {
 
 // The log only tells of an enemy in view, so it does not give away the others. An invisible enemy in
 // view is named too, so the player learns what it was.
-function killEnemy(enemy: Enemy) {
-  if (isInView(enemy.position)) {
+function killEnemy(part: Enemy) {
+  // Defeating a segment defeats the whole enemy, and its other segments go with it. They all have
+  // the same health, so each one may be reported dead, but the enemy is only defeated once.
+  const enemy = wholeOf(part);
+  if (!enemies.includes(enemy)) {
+    return;
+  }
+  stopChargeWarning();
+  if ([enemy, ...enemy.followers].some(({ position }) => isInView(position))) {
     messageLog.add(`You defeated the ${enemy.stats.name}.`);
   }
-  roomView.remove(enemy.paint);
-  roomView.remove(enemy.healthBar.scene);
-  roomView.remove(enemy.sleepMark);
-  enemies.splice(enemies.indexOf(enemy), 1);
+  for (const piece of [enemy, ...enemy.followers]) {
+    roomView.remove(piece.paint);
+    roomView.remove(piece.healthBar.scene);
+    roomView.remove(piece.sleepMark);
+    enemies.splice(enemies.indexOf(piece), 1);
+    seenEnemies.delete(piece);
+  }
   killCount++;
-  seenEnemies.delete(enemy);
   if (enemy.loot) {
     dropThing(enemy.loot, enemy.position);
   }
@@ -1416,7 +1553,7 @@ function runEnemyTurn(onDone: () => void, hasActed?: Enemy) {
 
     switch (action.type) {
       case 'move':
-        placeEnemy(enemy, action.to);
+        moveEnemy(enemy, action.to);
         showNoticeMark();
         actNext();
         break;
@@ -1430,6 +1567,15 @@ function runEnemyTurn(onDone: () => void, hasActed?: Enemy) {
         showEnemy(enemy);
         showNoticeMark();
         actNext();
+        break;
+      case 'windup':
+        showEnemy(enemy);
+        startChargeWarning(action.lane, action.direction);
+        actNext();
+        break;
+      case 'charge':
+        stopChargeWarning();
+        playCharge(enemy, action.path, action.hitsHero, actNext);
         break;
     }
   };
@@ -2016,7 +2162,8 @@ const ENEMY_STATES: Record<Enemy['state'], string> = {
   hunting: 'is hunting you',
 };
 
-function describeEnemy(enemy: Enemy): string {
+function describeEnemy(part: Enemy): string {
+  const enemy = wholeOf(part);
   const effects = (Object.keys(STATUS_LABELS) as StatusName[])
     .filter((name) => hasStatus(enemy.statuses, name))
     .map((name) => STATUS_LABELS[name]);

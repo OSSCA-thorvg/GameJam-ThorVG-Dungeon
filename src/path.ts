@@ -21,7 +21,10 @@ export function findPath(
   to: Point,
   occupied: Point[],
   isKnown: (tile: Point) => boolean = () => true,
+  allowDiagonal = true,
 ): Point[] {
+  // The orthogonal steps are the first four.
+  const steps = allowDiagonal ? STEPS : STEPS.slice(0, 4);
   const canEnter = ({ x, y }: Point) =>
     isWalkable(room, x, y) &&
     isKnown({ x, y }) &&
@@ -37,7 +40,7 @@ export function findPath(
 
   for (let head = 0; head < queue.length && !nextTile.has(key(from)); head++) {
     const current = queue[head];
-    for (const step of STEPS) {
+    for (const step of steps) {
       const neighbor = { x: current.x + step.x, y: current.y + step.y };
       if (canEnter(neighbor) && !nextTile.has(key(neighbor))) {
         nextTile.set(key(neighbor), current);

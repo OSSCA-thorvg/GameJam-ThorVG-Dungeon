@@ -99,6 +99,19 @@ export function mimicStats(floor: number): EnemyStats {
   };
 }
 
+// Placeholder values for the boss of the first stage. It takes about 8 hits from the starting
+// sword, and its bite is far stronger than that of anything else on the floors. How long its body
+// is depends on the boss room's template.
+export const centipedeStats: EnemyStats = {
+  name: 'giant centipede',
+  maxHp: 90,
+  damage: [6, 12],
+  accuracy: 11,
+  evasion: 3,
+  actions: 1,
+  experience: 10,
+};
+
 // Picks a kind of enemy that can appear on the floor, by weight.
 export function pickEnemyKind(random: Random, floor: number): EnemyKind {
   const kinds = (Object.keys(ENEMY_KINDS) as EnemyKind[]).filter(
@@ -140,7 +153,14 @@ const SEARCH_STEPS = 6;
 // Placeholder value. How many random tiles a wandering enemy tries before it waits a turn.
 const WANDER_TRIES = 10;
 
-export type EnemyAction = { type: 'wait' } | { type: 'move'; to: Point } | { type: 'attack' };
+export type EnemyAction =
+  | { type: 'wait' }
+  | { type: 'move'; to: Point }
+  | { type: 'attack' }
+  // The giant centipede rears up to charge down a line of tiles, which the hero can see and leave.
+  | { type: 'windup'; lane: Point[]; direction: Point }
+  // It charges along the path. It hits the hero standing at the end of it, or else crashes.
+  | { type: 'charge'; path: Point[]; hitsHero: boolean };
 
 export interface EnemyContext {
   room: Room;
@@ -182,7 +202,34 @@ export interface Enemy {
   behavior: EnemyBehavior;
   // Left where the enemy dies.
   loot: Loot | null;
+  // For an enemy with a long body, such as the giant centipede: the segments that follow it, from
+  // the one behind its head to the tail. Each segment is an enemy of its own, so it blocks the way
+  // and can be pointed at, but it only repeats what happens to the enemy it belongs to.
+  followers: Enemy[];
+  // Set on a segment: the enemy whose body it is.
+  owner: Enemy | null;
+  // Set on the head of a giant centipede: what it is up to.
+  centipede: CentipedeState | null;
 }
+
+// The direction a rearing centipede charges in, until it charges, and the turns until it can rear
+// up again.
+export interface CentipedeState {
+  direction: Point | null;
+  cooldown: number;
+}
+
+export const createCentipedeState = (): CentipedeState => ({
+  direction: null,
+  cooldown: 0,
+});
+
+// Placeholder values for the charge of the giant centipede. It can charge again after this many of
+// its turns, its charge hurts this much, and the crash that ends a charge stuns it for this many
+// turns. Its bite is as strong, so meeting its head head-on is the thing to avoid.
+export const CHARGE_COOLDOWN = 8;
+export const CHARGE_DAMAGE: [min: number, max: number] = [9, 13];
+export const CHARGE_STUN_TURNS = 3;
 
 const isSameTile = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
 
@@ -229,7 +276,18 @@ function guessHeroTile(room: Room, lastSeen: Point, heading: Point): Point | nul
   return best;
 }
 
-export function alertEnemy(enemy: Enemy, hero: Point): void {
+// A body segment is part of the enemy it belongs to, so what happens to it happens to the whole.
+export const wholeOf = (enemy: Enemy): Enemy => enemy.owner ?? enemy;
+
+// Every segment shows the health of the whole enemy, so a hit on any of them can end it.
+function syncBody(whole: Enemy): void {
+  for (const segment of whole.followers) {
+    segment.hp = whole.hp;
+  }
+}
+
+export function alertEnemy(part: Enemy, hero: Point): void {
+  const enemy = wholeOf(part);
   if (enemy.lastSeen && !isSameTile(enemy.lastSeen, hero)) {
     enemy.heading = { x: hero.x - enemy.lastSeen.x, y: hero.y - enemy.lastSeen.y };
   }
@@ -303,6 +361,127 @@ export const chaser: EnemyBehavior = (enemy, { room, hero, canSeeHero, occupied 
   return action;
 };
 
+// The giant centipede only moves along these, so its body never has a gap the hero can squeeze
+// through, between two segments that touch only at a corner.
+const NEIGHBORS: Point[] = [
+  { x: -1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 0, y: -1 },
+  { x: 0, y: 1 },
+];
+
+// How many tiles can be reached from a tile without crossing a blocked one, counted up to a limit.
+function openArea(room: Room, from: Point, blocked: Point[], limit: number): number {
+  const key = ({ x, y }: Point) => y * room.width + x;
+  const seen = new Set([key(from)]);
+  const queue = [from];
+  for (let head = 0; head < queue.length && seen.size < limit; head++) {
+    for (const step of NEIGHBORS) {
+      const next = { x: queue[head].x + step.x, y: queue[head].y + step.y };
+      if (
+        isWalkable(room, next.x, next.y) &&
+        !seen.has(key(next)) &&
+        !blocked.some((tile) => isSameTile(tile, next))
+      ) {
+        seen.add(key(next));
+        queue.push(next);
+      }
+    }
+  }
+  return seen.size;
+}
+
+// The way from one tile to another, if they are on a line along a row or a column.
+function straightDirection(from: Point, to: Point): Point | null {
+  if (from.x === to.x && from.y !== to.y) {
+    return { x: 0, y: Math.sign(to.y - from.y) };
+  }
+  if (from.y === to.y && from.x !== to.x) {
+    return { x: Math.sign(to.x - from.x), y: 0 };
+  }
+  return null;
+}
+
+// The tiles in a line from a tile, in a direction, up to the first one that is not free.
+function freeLine(room: Room, from: Point, direction: Point, blocked: Point[]): Point[] {
+  const line: Point[] = [];
+  for (let tile = from; ; ) {
+    tile = { x: tile.x + direction.x, y: tile.y + direction.y };
+    if (!isWalkable(room, tile.x, tile.y) || blocked.some((other) => isSameTile(other, tile))) {
+      return line;
+    }
+    line.push(tile);
+  }
+}
+
+// The giant centipede always knows where the hero is. It moves one tile a turn along rows and
+// columns, and bites hard when the hero is next to its head. With the hero in a line along a row or a column
+// and nothing between them, it rears up for a turn, which fixes the direction and shows the line,
+// and then charges down that line. The hero can step out of the line. The charge ends in a hit on
+// whoever is in the way, or else in a crash, which leaves it stunned. After that it needs a while
+// before it can rear up again.
+//
+// It never steps where its body is, except onto its tail's tile, which the tail leaves as the head
+// moves. It also avoids steps into a pocket too small to hold its body, where it would trap itself,
+// and when its own body is in the way of the hero it uncoils toward the open.
+export const centipede: EnemyBehavior = (enemy, { room, hero, occupied }) => {
+  const brain = enemy.centipede!;
+  brain.cooldown = Math.max(0, brain.cooldown - 1);
+
+  const head = enemy.position;
+  const tail = enemy.followers[enemy.followers.length - 1]?.position;
+  const others = tail ? occupied.filter((tile) => !isSameTile(tile, tail)) : occupied;
+
+  if (brain.direction) {
+    const direction = brain.direction;
+    brain.direction = null;
+    brain.cooldown = CHARGE_COOLDOWN;
+    // The hero standing in the line stops the charge with a hit.
+    const line = freeLine(room, head, direction, others);
+    const heroIndex = line.findIndex((tile) => isSameTile(tile, hero));
+    const hitsHero = heroIndex >= 0;
+    return { type: 'charge', path: hitsHero ? line.slice(0, heroIndex) : line, hitsHero };
+  }
+
+  if (isAdjacent(head, hero)) {
+    return { type: 'attack' };
+  }
+
+  const direction = straightDirection(head, hero);
+  if (direction && brain.cooldown === 0) {
+    const lane = freeLine(room, head, direction, others);
+    if (lane.some((tile) => isSameTile(tile, hero))) {
+      brain.direction = direction;
+      return { type: 'windup', lane, direction };
+    }
+  }
+
+  const needed = enemy.followers.length + 2;
+  const blocked = [...others, hero, head];
+  const roomAt = (tile: Point) => openArea(room, tile, blocked, needed);
+  const [next] = findPath(room, head, hero, others, () => true, false);
+  if (next && roomAt(next) >= needed) {
+    return { type: 'move', to: next };
+  }
+
+  let best: { tile: Point; area: number; distance: number } | null = null;
+  for (const step of NEIGHBORS) {
+    const tile = { x: head.x + step.x, y: head.y + step.y };
+    if (!isWalkable(room, tile.x, tile.y) || blocked.some((other) => isSameTile(other, tile))) {
+      continue;
+    }
+    const area = roomAt(tile);
+    const distance = Math.abs(tile.x - hero.x) + Math.abs(tile.y - hero.y);
+    if (!best || area > best.area || (area === best.area && distance < best.distance)) {
+      best = { tile, area, distance };
+    }
+  }
+  return best ? { type: 'move', to: best.tile } : { type: 'wait' };
+};
+
+// A body segment never acts. It follows the head, which the game moves.
+export const bodySegment: EnemyBehavior = () => ({ type: 'wait' });
+
 export function createEnemy(
   stats: EnemyStats,
   position: Point,
@@ -329,27 +508,43 @@ export function createEnemy(
     sleepMark,
     behavior,
     loot,
+    followers: [],
+    owner: null,
+    centipede: null,
   };
 }
 
+// Joins segments to a head, so that they follow it and share its fate.
+export function attachBody(head: Enemy, segments: Enemy[]): void {
+  head.followers = segments;
+  for (const segment of segments) {
+    segment.owner = head;
+  }
+}
+
 // Anything that happens to a sleeping enemy wakes it, but it does not know where the hero is.
-export function disturbEnemy(enemy: Enemy): void {
+export function disturbEnemy(part: Enemy): void {
+  const enemy = wholeOf(part);
   if (enemy.state === 'sleeping') {
     enemy.state = 'wandering';
   }
 }
 
 // Damage breaks the ice of a frozen enemy.
-export function damageEnemy(enemy: Enemy, damage: number): void {
+export function damageEnemy(part: Enemy, damage: number): void {
+  const enemy = wholeOf(part);
   disturbEnemy(enemy);
   enemy.hp = Math.max(0, enemy.hp - damage);
+  syncBody(enemy);
   enemy.healthBar.show(enemy.hp / enemy.stats.maxHp);
   delete enemy.statuses.frozen;
 }
 
-export function healEnemy(enemy: Enemy, amount: number): void {
+export function healEnemy(part: Enemy, amount: number): void {
+  const enemy = wholeOf(part);
   disturbEnemy(enemy);
   enemy.hp = Math.min(enemy.stats.maxHp, enemy.hp + amount);
+  syncBody(enemy);
   enemy.healthBar.show(enemy.hp / enemy.stats.maxHp);
 }
 

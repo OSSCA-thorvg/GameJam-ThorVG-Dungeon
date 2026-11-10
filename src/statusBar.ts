@@ -44,6 +44,8 @@ const ICONS: Record<StatusName | ShownHunger, string> = {
   poisoned:
     '<path class="fill" d="M5 0.5C6.8 3.5 8.5 5 8.5 6.8C8.5 8.7 6.9 10 5 10C3.1 10 1.5 8.7 1.5 6.8' +
     'C1.5 5 3.2 3.5 5 0.5Z"/>',
+  // A circle with a cross in it.
+  stunned: '<circle class="line" cx="5" cy="5" r="4.2"/><path class="line" d="M3 3L7 7M7 3L3 7"/>',
   hungry: FORK_AND_KNIFE,
   starving: FORK_AND_KNIFE,
 };
