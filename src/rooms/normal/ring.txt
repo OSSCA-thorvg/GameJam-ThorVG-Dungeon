@@ -1,5 +1,5 @@
 xxxxxx+xxxxxx
-x...........x
+x....~~~....x
 x.xxxxxxxxx.x
 x.x       x.x
 x.xxxxxxxxx.x

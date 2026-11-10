@@ -3,6 +3,7 @@ export type Tile =
   | 'void'
   | 'wall'
   | 'floor'
+  | 'water'
   | 'door'
   | 'locked-door'
   | 'stairs'
@@ -38,6 +39,7 @@ const GLYPHS = new Map<string, Tile>([
   [' ', 'void'],
   ['x', 'wall'],
   ['.', 'floor'],
+  ['~', 'water'],
   ['+', 'door'],
   ['@', 'floor'],
   ['1', 'floor'],
@@ -83,7 +85,7 @@ export function isAdjacent(a: Point, b: Point): boolean {
 
 export function isWalkable(room: Room, x: number, y: number): boolean {
   const tile = room.tiles[y]?.[x];
-  return tile === 'floor' || tile === 'door' || tile === 'stairs';
+  return tile === 'floor' || tile === 'water' || tile === 'door' || tile === 'stairs';
 }
 
 export const DIRECTIONS: readonly Point[] = [

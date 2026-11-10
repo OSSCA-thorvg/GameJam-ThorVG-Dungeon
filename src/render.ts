@@ -139,6 +139,8 @@ export const DAMAGE_NUMBER_RISE = CHARACTER_SIZE;
 const DARKNESS: Color = [20, 21, 26];
 const FLOOR_LIGHT: Color = [96, 100, 110];
 const FLOOR_DARK: Color = [86, 90, 100];
+const WATER_LIGHT: Color = [66, 112, 150];
+const WATER_DARK: Color = [58, 100, 138];
 const DOOR: Color = [150, 104, 60];
 // Placeholder color of the floor left where a door burned down.
 const BURNT_DOORWAY: Color = [62, 54, 50];
@@ -491,6 +493,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
         case 'campfire':
         case 'sign':
           addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
+          break;
+        case 'water':
+          addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? WATER_LIGHT : WATER_DARK);
           break;
         case 'door':
         case 'locked-door': {

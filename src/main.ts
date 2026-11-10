@@ -480,9 +480,13 @@ function createItemContext(): ItemContext {
     log: (message) => messageLog.add(message),
     // Fire and frost also reach a closed door, without going through it.
     areaAround: (tile, steps) => spreadArea(tile, steps, isOpenTile, isFlammableTile),
-    // Fire catches whoever stands in it at once.
+    // Fire catches whoever stands in it at once, but does not burn on water, which puts out whoever
+    // it caught after one burn.
     setFire(tiles, turns) {
-      hazards.setFire(tiles, turns);
+      hazards.setFire(
+        tiles.filter(({ x, y }) => room.tiles[y][x] !== 'water'),
+        turns,
+      );
       setAlight(tiles);
     },
     // Paralyzing gas paralyzes whoever it lands on at once. Gas does the rest of its harm at the end
@@ -533,6 +537,11 @@ function burnUpTile(tile: Point) {
   updateVision();
 }
 
+// Shallow water wets a character standing in it, but not a levitating one.
+function isInWater(position: Point, statuses: Statuses): boolean {
+  return room.tiles[position.y][position.x] === 'water' && !hasStatus(statuses, 'levitating');
+}
+
 // Sets burning the characters on the tiles, except levitating ones.
 function setAlight(tiles: Point[]) {
   const isOn = (position: Point) => tiles.some((tile) => isSameTile(tile, position));
@@ -543,6 +552,26 @@ function setAlight(tiles: Point[]) {
     isOn(position) && !hasStatus(statuses, 'levitating');
   for (const enemy of enemies.filter(isBurnable)) {
     addEnemyStatus(enemy, 'burning', BURNING_TURNS);
+  }
+}
+
+// Water puts out a burning character that stands in it. It comes after the burn of the turn, so a
+// character that steps into water or is set alight there still takes that one burn.
+function putOutBurningInWater() {
+  if (heroHp > 0 && hasStatus(heroStatuses, 'burning') && isInWater(heroPosition, heroStatuses)) {
+    delete heroStatuses.burning;
+    messageLog.add('The water puts out the fire.');
+    updateHeroLook();
+  }
+  for (const enemy of enemies) {
+    if (
+      enemy.hp > 0 &&
+      hasStatus(enemy.statuses, 'burning') &&
+      isInWater(enemy.position, enemy.statuses)
+    ) {
+      delete enemy.statuses.burning;
+      showEnemy(enemy);
+    }
   }
 }
 
@@ -1409,6 +1438,7 @@ function applyHazards() {
       hurtEnemy(enemy, normalIntRange(Math.random, ...BURN_DAMAGE));
     }
   }
+  putOutBurningInWater();
 }
 
 // Turns one of an item in the bag into another item, which drops at the hero's feet when the bag
@@ -2193,6 +2223,8 @@ function describeTerrain({ x, y }: Point): string {
       return 'A campfire. From a tile next to it, you can rest or cook raw meat.';
     case 'sign':
       return `A sign. It reads: "${signAt({ x, y })?.text ?? ''}"`;
+    case 'water':
+      return 'Shallow water. It puts out the fire on whoever stands in it.';
     default:
       return floor > 0 && isSameTile({ x, y }, room.start)
         ? 'The stairs you came down. There is no way back up.'
