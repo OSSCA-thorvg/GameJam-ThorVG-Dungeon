@@ -1,0 +1,7 @@
+   xx+xx
+   x...x
+xxxx...xxxx
++....@....+
+xxxx...xxxx
+   x...x
+   xx+xx

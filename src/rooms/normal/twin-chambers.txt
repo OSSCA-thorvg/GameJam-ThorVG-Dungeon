@@ -1,0 +1,6 @@
+xxxxx   xxxxx
+x...x   x...x
++.1.xxxxx...+
+x.........1.x
+x...xxxxx...x
+xx+xx   xx+xx
