@@ -1762,17 +1762,20 @@ function finishRunningEffects() {
   }
 }
 
-function traceTo(target: Point, rule: PathRule): Trajectory {
+// A closed door stops what flies through it. With `landsOnDoor`, what is thrown at the door itself
+// falls on it, which opens it.
+function traceTo(target: Point, rule: PathRule, landsOnDoor = false): Trajectory {
   return traceLine(heroPosition, target, rule, {
     isBlocked({ x, y }) {
       const tile = room.tiles[y]?.[x] ?? 'void';
+      const isTarget = x === target.x && y === target.y;
       // A fixture stops what is thrown at it, so nothing lands in the campfire.
       return (
         tile === 'wall' ||
         tile === 'void' ||
         tile === 'locked-door' ||
         isFixture(room, x, y) ||
-        (tile === 'door' && !openDoors.has(y * room.width + x))
+        (tile === 'door' && !openDoors.has(y * room.width + x) && !(landsOnDoor && isTarget))
       );
     },
     hasCharacter: (tile) => enemies.some(({ position }) => isSameTile(position, tile)),
@@ -2105,7 +2108,7 @@ function throwItem(name: ItemName) {
     prompt: `Throw the ${potionLore.lookOf(name).displayName.toLowerCase()} where?`,
     canPick: isInView,
     onSelect(tile) {
-      const { end } = traceTo(tile, THROWN);
+      const { end } = traceTo(tile, THROWN, !ITEMS[name].potion);
       if (!takeFromBag(name)) {
         return;
       }
