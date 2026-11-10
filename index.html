@@ -192,7 +192,8 @@
         stroke-linecap: round;
       }
       #inventory,
-      #settings {
+      #settings,
+      #campfire {
         position: fixed;
         inset: 0;
         display: flex;
@@ -201,11 +202,13 @@
         background: rgb(0 0 0 / 50%);
       }
       #inventory[hidden],
-      #settings[hidden] {
+      #settings[hidden],
+      #campfire[hidden] {
         display: none;
       }
       #inventory-panel,
-      #settings-panel {
+      #settings-panel,
+      #campfire-panel {
         width: min(340px, calc(100vw / var(--ui-scale, 1) - 24px));
         box-sizing: border-box;
         padding: 12px;
@@ -216,7 +219,8 @@
         border-radius: 8px;
       }
       #inventory-header,
-      #settings-header {
+      #settings-header,
+      #campfire-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -224,7 +228,8 @@
         font-size: 16px;
       }
       #inventory-close,
-      #settings-close {
+      #settings-close,
+      #campfire-close {
         width: 36px;
         height: 36px;
         font-size: 20px;
@@ -247,6 +252,39 @@
         background: #3a3d48;
         border: 1px solid #5a5d68;
         border-radius: 6px;
+      }
+      #campfire-panel p {
+        margin: 0 0 10px;
+        color: #c8cad2;
+      }
+      #campfire-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .campfire-action {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        min-height: 44px;
+        padding: 8px 12px;
+        font: 14px sans-serif;
+        text-align: left;
+        color: #e8e8ec;
+        background: #3a3d48;
+        border: 1px solid #5a5d68;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .campfire-action span {
+        font-size: 13px;
+        color: #b8bac2;
+      }
+      .campfire-action:disabled,
+      .campfire-action:disabled span {
+        color: #7a7d86;
+        cursor: default;
       }
       #equipment-slots {
         display: grid;
@@ -432,6 +470,16 @@
           UI scale
           <select id="ui-scale"></select>
         </label>
+      </div>
+    </div>
+    <div id="campfire" hidden>
+      <div id="campfire-panel" role="dialog" aria-label="Campfire">
+        <div id="campfire-header">
+          Campfire
+          <button id="campfire-close" aria-label="Close">×</button>
+        </div>
+        <p>A warm fire crackles here. You can rest by it, or cook raw meat over it.</p>
+        <div id="campfire-actions"></div>
       </div>
     </div>
     <div id="target-prompt" hidden>

@@ -345,7 +345,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
         case 'stairs':
           STAIRS_STEPS.forEach((color, step) => addPolygon(inset(1 - step * 0.28), color));
           break;
+        // The campfire itself is placed on its floor like an item.
         case 'floor':
+        case 'campfire':
           addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
           break;
         case 'door': {
@@ -656,8 +658,11 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       coveredHeroTile = isCovered(tile) ? tile : null;
       updateCuts();
     },
+    // The outline shows on the tiles the hero can walk on, and on the campfire, which the hero uses.
     setCursorTile(tile, target) {
-      const next = tile && isWalkable(room, tile.x, tile.y) ? tile : null;
+      const isPointable =
+        tile && (isWalkable(room, tile.x, tile.y) || room.tiles[tile.y][tile.x] === 'campfire');
+      const next = isPointable ? tile : null;
       if (next?.x === cursorTile?.x && next?.y === cursorTile?.y && target === cursorTarget) {
         return false;
       }

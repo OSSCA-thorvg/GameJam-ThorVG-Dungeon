@@ -24,6 +24,14 @@ import {
   rollHit,
   type Enemy,
 } from './enemy';
+import {
+  CAMPFIRE_ICON,
+  COOK_TURNS,
+  pickCampfireFloor,
+  REST_HEAL_FRACTION,
+  REST_TURNS,
+} from './campfire';
+import { createCampfirePanel } from './campfirePanel';
 import { createHazardField, spreadArea } from './hazards';
 import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
@@ -105,7 +113,7 @@ import {
   type StatusName,
   type Statuses,
 } from './status';
-import { normalRooms, startRooms } from './roomSources';
+import { campfireRoom, normalRooms, startRooms } from './roomSources';
 import { playSplash } from './splash';
 import { computeVision, DEFAULT_VIEW_DISTANCE } from './vision';
 
@@ -229,20 +237,34 @@ let floor = 1;
 let killCount = 0;
 let turnCount = 0;
 
+// The current floor's stage, and its place in the stage, both counted from 0.
+const currentStage = () => Math.floor((floor - 1) / FLOORS_PER_STAGE);
+const floorInStage = () => (floor - 1) % FLOORS_PER_STAGE;
+
+// What the floors of a stage hold. Each floor plans its stage again from the same seed, so the
+// floors of a stage agree on the plan. Those seeds are below the run seed, which the floors' seeds
+// are above.
+function planStage(stage: number) {
+  const random = createRandom(runSeed - 1 - stage);
+  return {
+    potions: planStagePotions(random),
+    mimicFloor: pickMimicFloor(random),
+    campfireFloor: pickCampfireFloor(random),
+  };
+}
+
 // The loot lying on the current floor, none of it in chests yet, and whether the stage's mimic is
-// on this floor. Each floor plans its stage again from the same seed, so the floors of a stage
-// agree on the plan. Those seeds are below the run seed, which the floors' seeds are above.
+// on this floor.
 function floorContents(random: Random): { loot: Loot[]; hasMimic: boolean } {
-  const index = (floor - 1) % FLOORS_PER_STAGE;
+  const index = floorInStage();
   if (index >= ITEM_FLOORS_PER_STAGE) {
     return { loot: [], hasMimic: false };
   }
-  const stage = Math.floor((floor - 1) / FLOORS_PER_STAGE);
-  const stageRandom = createRandom(runSeed - 1 - stage);
-  const potions = planStagePotions(stageRandom)[index];
-  const hasMimic = pickMimicFloor(stageRandom) === index;
+  const stage = currentStage();
+  const plan = planStage(stage);
+  const hasMimic = plan.mimicFloor === index;
   const items: ItemName[] = [
-    ...potions,
+    ...plan.potions[index],
     ...Array<ItemName>(FOOD_PER_FLOOR).fill('travel-ration'),
     ...rollEquipment(random, stage),
   ];
@@ -277,9 +299,11 @@ function createMimic(position: Point, random: Random): Enemy {
 
 function createLevel() {
   const random = createRandom(runSeed + floor);
+  const hasCampfire = planStage(currentStage()).campfireFloor === floorInStage();
   const room = generateMap({
     startRooms,
     normalRooms,
+    specialRoom: hasCampfire ? campfireRoom : undefined,
     roomCount: randomInt(random, MIN_ROOMS, MAX_ROOMS),
     random,
   });
@@ -343,8 +367,10 @@ let heroViewDistance = DEFAULT_VIEW_DISTANCE;
 let visionState = '';
 let path: Point[] = [];
 let attackTarget: Enemy | null = null;
-// A closed chest the hero walks to, to open it from a tile next to it.
-let chestTarget: Point | null = null;
+// A closed chest or the campfire that the hero walks to, to use it from a tile next to it.
+let useTarget: Point | null = null;
+// What the hero is doing at the campfire for some turns, or null.
+let campfireTask: { verb: string } | null = null;
 // Whether the player clicked the stairs, as opposed to the walk merely ending on them.
 let isWalkingToStairs = false;
 let isWalking = false;
@@ -547,6 +573,7 @@ const inventoryPanel = createInventoryPanel({
   },
   onOpen() {
     stopWalking();
+    stopCampfireTask();
     cancelTargeting();
   },
   onUse: useItem,
@@ -555,6 +582,8 @@ const inventoryPanel = createInventoryPanel({
   onThrow: throwItem,
   onDrop: dropFromBag,
 });
+
+const campfirePanel = createCampfirePanel();
 
 // Choosing a tile for an action, like the CellSelector of Shattered Pixel Dungeon. While this is
 // set, a press on a tile picks the target instead of walking there.
@@ -612,8 +641,19 @@ function updateCursorTile() {
   if (tile && enemyAt(tile)) {
     return roomView.setCursorTile(tile, 'enemy');
   }
-  const hasItem = tile && (itemsAt(tile).length > 0 || hasChest(tile));
+  const hasItem = tile && (itemsAt(tile).length > 0 || hasChest(tile) || isCampfire(tile));
   return roomView.setCursorTile(tile, hasItem ? 'item' : 'floor');
+}
+
+function isCampfire({ x, y }: Point): boolean {
+  return room.tiles[y]?.[x] === 'campfire';
+}
+
+function isEnemyInCampfireRoom(): boolean {
+  return enemies.some(
+    ({ position, state }) =>
+      state !== 'disguised' && room.specialRoom.some((tile) => isSameTile(tile, position)),
+  );
 }
 
 function dropItem(name: ItemName, position: Point) {
@@ -918,6 +958,13 @@ function startLevel() {
   for (const { thing, position } of floorItems) {
     dropThing(thing, position);
   }
+  room.tiles.forEach((row, y) =>
+    row.forEach((tile, x) => {
+      if (tile === 'campfire') {
+        roomView.place(createItemPaint(TVG, CAMPFIRE_ICON), x, y);
+      }
+    }),
+  );
   heroPosition = room.start;
   placeHero(room.start);
   // The hero is drawn anew on each level, so the effects on them are shown again.
@@ -1147,9 +1194,18 @@ function applyHazards() {
   }
 }
 
+// Turns one of an item in the bag into another item, which drops at the hero's feet when the bag
+// has no room for it.
+function replaceInBag(name: ItemName, into: ItemName) {
+  removeItem(inventory, name);
+  if (!addItem(inventory, into)) {
+    dropItem(into, heroPosition);
+  }
+  inventoryPanel.refresh();
+}
+
 // Each turn the hero burns, the fire reaches one random kind of item in the bag that can burn, as
-// in Burning.act() of Shattered Pixel Dungeon, and may burn one of them. What a burned item turns
-// into drops at the hero's feet when the bag has no room for it.
+// in Burning.act() of Shattered Pixel Dungeon, and may burn one of them.
 function burnItemInBag() {
   const burnable = inventory.filter(({ name }) => ITEMS[name].burnsInto !== undefined);
   if (burnable.length === 0 || Math.random() >= BAG_BURN_CHANCE) {
@@ -1158,16 +1214,14 @@ function burnItemInBag() {
   const { name } = pick(Math.random, burnable);
   const into = ITEMS[name].burnsInto;
   const nameOf = (item: ItemName) => potionLore.lookOf(item).displayName.toLowerCase();
-  removeItem(inventory, name);
   if (into) {
-    if (!addItem(inventory, into)) {
-      dropItem(into, heroPosition);
-    }
+    replaceInBag(name, into);
     messageLog.add(`The flames turned your ${nameOf(name)} into ${nameOf(into)}.`);
   } else {
+    removeItem(inventory, name);
+    inventoryPanel.refresh();
     messageLog.add(`The flames burned up your ${nameOf(name)}.`);
   }
-  inventoryPanel.refresh();
 }
 
 // Fire cooks raw meat lying in it, as Heap.burn() of Shattered Pixel Dungeon.
@@ -1382,9 +1436,26 @@ function pathToAttack(enemy: Enemy): Point[] {
   return canHeroReach(enemy) ? [] : pathNextTo(enemy.position);
 }
 
-// Returns the tiles to walk through to stand next to a chest, or none when the hero already does.
-function pathToChest(tile: Point): Point[] {
-  return isAdjacent(tile, heroPosition) ? [] : pathNextTo(tile);
+// Returns the tiles to walk through to stand next to a chest or the campfire, or none when the hero
+// already does. Nothing can step on the campfire, so the walk goes to the nearest tile beside it.
+function pathToUse(tile: Point): Point[] {
+  if (isAdjacent(tile, heroPosition)) {
+    return [];
+  }
+  if (!isCampfire(tile)) {
+    return pathNextTo(tile);
+  }
+  let best: Point[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const beside = { x: tile.x + dx, y: tile.y + dy };
+      const candidate = findPath(room, heroPosition, beside, heroObstacles(), isExplored);
+      if (candidate.length > 0 && (best.length === 0 || candidate.length < best.length)) {
+        best = candidate;
+      }
+    }
+  }
+  return best;
 }
 
 function walk() {
@@ -1407,11 +1478,15 @@ function walk() {
     isWalking = false;
     if (attackTarget && canHeroReach(attackTarget)) {
       playHeroAttack(attackTarget);
-    } else if (chestTarget && isAdjacent(chestTarget, heroPosition)) {
-      openChests(chestTarget);
+    } else if (useTarget && isAdjacent(useTarget, heroPosition)) {
+      if (isCampfire(useTarget)) {
+        openCampfire();
+      } else {
+        openChests(useTarget);
+      }
     }
     attackTarget = null;
-    chestTarget = null;
+    useTarget = null;
     return;
   }
 
@@ -1419,7 +1494,7 @@ function walk() {
   // attacked, because the player meant to step there.
   const blocker = enemies.find(({ position }) => isSameTile(position, next));
   if (blocker) {
-    const isChosenTile = path.length === 0 && !attackTarget && !chestTarget;
+    const isChosenTile = path.length === 0 && !attackTarget && !useTarget;
     stopWalking();
     isWalking = false;
     if (isChosenTile && !seenEnemies.has(blocker)) {
@@ -1433,7 +1508,7 @@ function walk() {
   const hasArrived = path.length === 0;
   placeHero(next);
   // As in Shattered Pixel Dungeon, items are only picked up on the tile the player chose.
-  const hasPickedUp = hasArrived && !attackTarget && !chestTarget && pickUpItems(next);
+  const hasPickedUp = hasArrived && !attackTarget && !useTarget && pickUpItems(next);
 
   if (hasArrived && isWalkingToStairs && !hasPickedUp && canGoDownStairs()) {
     goDownStairs();
@@ -1459,9 +1534,11 @@ function traceTo(target: Point, rule: PathRule): Trajectory {
   return traceLine(heroPosition, target, rule, {
     isBlocked({ x, y }) {
       const tile = room.tiles[y]?.[x] ?? 'void';
+      // The campfire stops what is thrown at it, before it lands in the fire.
       return (
         tile === 'wall' ||
         tile === 'void' ||
+        tile === 'campfire' ||
         (tile === 'door' && !openDoors.has(y * room.width + x))
       );
     },
@@ -1520,7 +1597,7 @@ function pressTarget(tile: Point, isMouse: boolean) {
 // Whether the hero still has somewhere to go. isWalking alone also covers the pause after the last
 // step, when a press should already count as a new order.
 function isOnTheWay() {
-  return isWalking && (path.length > 0 || attackTarget !== null || chestTarget !== null);
+  return isWalking && (path.length > 0 || attackTarget !== null || useTarget !== null);
 }
 
 function pressTileAt(position: Point, isMouse: boolean) {
@@ -1529,9 +1606,14 @@ function pressTileAt(position: Point, isMouse: boolean) {
     return;
   }
 
-  // A press anywhere stops a walk and does nothing else, even off the map.
+  // A press anywhere stops a walk or a task at the campfire, and does nothing else, even off the
+  // map.
   if (isOnTheWay()) {
     stopWalking();
+    return;
+  }
+  if (campfireTask) {
+    stopCampfireTask();
     return;
   }
 
@@ -1567,9 +1649,9 @@ function pressTileAt(position: Point, isMouse: boolean) {
   if (clicked) {
     path = pathToAttack(clicked);
     attackTarget = clicked;
-  } else if (isExplored(target) && hasChest(target)) {
-    path = pathToChest(target);
-    chestTarget = target;
+  } else if (isExplored(target) && (hasChest(target) || isCampfire(target))) {
+    path = pathToUse(target);
+    useTarget = target;
   } else {
     path = findPath(room, heroPosition, target, heroObstacles(), isExplored);
   }
@@ -1719,7 +1801,7 @@ canvasElement.addEventListener('pointerleave', () => {
 function stopWalking() {
   path = [];
   attackTarget = null;
-  chestTarget = null;
+  useTarget = null;
 }
 
 // Takes an item out of the bag before an action with it, and ends the panel and any walk.
@@ -1876,6 +1958,8 @@ function describeTerrain({ x, y }: Point): string {
       return openDoors.has(y * room.width + x) ? 'An open door.' : 'A closed door.';
     case 'stairs':
       return 'Stairs down to the next floor.';
+    case 'campfire':
+      return 'A campfire. From a tile next to it, you can rest or cook raw meat.';
     default:
       return 'The floor.';
   }
@@ -1886,6 +1970,114 @@ const EXAMINE_REQUEST: TargetRequest = {
   canPick: isExplored,
   onSelect: examine,
 };
+
+// Opens the campfire's window. Opening it takes no turn.
+function openCampfire() {
+  const enemyNearby = isEnemyInCampfireRoom() ? 'Not while an enemy is in the room.' : null;
+  const rawMeat = inventory.find(({ name }) => name === 'raw-meat')?.count ?? 0;
+  const heal = Math.round(heroMaxHp * REST_HEAL_FRACTION);
+  const cookTime = COOK_TURNS === 1 ? 'one turn' : `${COOK_TURNS} turns`;
+  campfirePanel.open([
+    {
+      label: 'Rest',
+      detail: `Recover ${heal} HP over ${REST_TURNS} turns.`,
+      blockedReason: enemyNearby ?? (heroHp >= heroMaxHp ? 'Your HP is already full.' : null),
+      run: rest,
+    },
+    {
+      label: 'Cook raw meat',
+      detail: `Cook one piece in ${cookTime}. You have ${rawMeat}.`,
+      blockedReason: enemyNearby ?? (rawMeat === 0 ? 'You have no raw meat.' : null),
+      run: cookMeat,
+    },
+  ]);
+}
+
+// Spends some turns at the campfire, one after another. onTurn runs on each turn and returns
+// whether the task is already done. An enemy coming into the campfire room stops the task, and so
+// does any press of the player.
+function spendCampfireTurns(
+  verb: string,
+  turns: number,
+  onTurn: () => boolean,
+  onDone: () => void,
+) {
+  finishRunningEffects();
+  if (cannotAct()) {
+    return;
+  }
+  stopWalking();
+  const task = { verb };
+  campfireTask = task;
+  let turnsLeft = turns;
+  let isDone = false;
+  const next = () => {
+    if (campfireTask !== task || isGameOver) {
+      return;
+    }
+    if (isEnemyInCampfireRoom()) {
+      campfireTask = null;
+      messageLog.add(`An enemy came into the room! You stopped ${verb}.`);
+      return;
+    }
+    if (isDone || turnsLeft === 0) {
+      campfireTask = null;
+      onDone();
+      return;
+    }
+    turnsLeft--;
+    isDone = onTurn();
+    passTurn(() => setTimeout(next, STEP_INTERVAL_MS));
+  };
+  next();
+}
+
+function stopCampfireTask() {
+  if (campfireTask) {
+    messageLog.add(`You stopped ${campfireTask.verb}.`);
+    campfireTask = null;
+  }
+}
+
+// The healing is spread over the turns of the rest, so a rest cut short heals part of it. A rest
+// ends early once the HP is full.
+function rest() {
+  const total = Math.round(heroMaxHp * REST_HEAL_FRACTION);
+  let turn = 0;
+  messageLog.add('You sit down by the fire to rest.');
+  spendCampfireTurns(
+    'resting',
+    REST_TURNS,
+    () => {
+      turn++;
+      const amount =
+        Math.floor((total * turn) / REST_TURNS) - Math.floor((total * (turn - 1)) / REST_TURNS);
+      heroHp = Math.min(heroMaxHp, heroHp + amount);
+      showHeroHp();
+      return heroHp >= heroMaxHp;
+    },
+    () => {
+      messageLog.add('You feel rested.');
+      openCampfire();
+    },
+  );
+}
+
+// A piece of meat cooks only when its turns finish without a stop.
+function cookMeat() {
+  spendCampfireTurns(
+    'cooking',
+    COOK_TURNS,
+    () => false,
+    () => {
+      if (inventory.some(({ name }) => name === 'raw-meat')) {
+        replaceInBag('raw-meat', 'cooked-meat');
+        messageLog.add('The raw meat is cooked through.');
+      }
+      openCampfire();
+    },
+  );
+}
 
 // Equipping or taking off an item takes a turn, as in Shattered Pixel Dungeon.
 function changeEquipment(change: () => boolean) {
@@ -1957,6 +2149,10 @@ examineButton.addEventListener('click', () => {
   if (cannotAct()) {
     return;
   }
+  if (campfireTask) {
+    stopCampfireTask();
+    return;
+  }
   if (targeting?.request === EXAMINE_REQUEST) {
     cancelTargeting();
     return;
@@ -1977,9 +2173,13 @@ waitButton.addEventListener('click', () => {
     return;
   }
 
-  // While walking, the button stops the walk instead of spending another turn.
+  // While walking or busy at the campfire, the button stops that instead of spending another turn.
   if (isWalking) {
     stopWalking();
+    return;
+  }
+  if (campfireTask) {
+    stopCampfireTask();
     return;
   }
 
@@ -1996,6 +2196,8 @@ window.addEventListener('keydown', (event) => {
 
 document.querySelector('#restart')!.addEventListener('click', () => {
   cancelTargeting();
+  campfireTask = null;
+  campfirePanel.close();
   runSeed = newRunSeed();
   floor = 1;
   heroHp = HERO_MAX_HP;

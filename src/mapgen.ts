@@ -6,14 +6,22 @@ import type { RoomSource } from './roomgen';
 export interface GeneratedMap extends Room {
   start: Point;
   stairs: Point;
+  // The tiles inside the special room and its doorways, or none when the map has no special room.
+  specialRoom: Point[];
 }
 
 export interface MapOptions {
   startRooms: RoomSource[];
   normalRooms: RoomSource[];
+  // A room the map must have once. It is attached after half of the rooms, so it is usually a
+  // few rooms away from the start.
+  specialRoom?: RoomSource;
   roomCount: number;
   random: Random;
 }
+
+// Starts over after this many maps that had no place for the special room, and then gives up.
+const MAX_MAP_ATTEMPTS = 20;
 
 // Chosen by measuring loop counts on generated maps. Brogue CE passes 20 to addLoops(), but its
 // 79x29 map is larger and its distance does not count diagonal steps.
@@ -92,12 +100,24 @@ function findDoors(room: Room): Door[] {
 
 // Builds a map by attaching template rooms to each other, door to door.
 // Based on attachRooms() and addLoops() in Brogue CE, using templates for the room shapes.
-export function generateMap({
+export function generateMap(options: MapOptions): GeneratedMap {
+  for (let attempt = 0; attempt < MAX_MAP_ATTEMPTS; attempt++) {
+    const map = tryGenerateMap(options);
+    if (map) {
+      return map;
+    }
+  }
+  throw new Error('No map had a place for the special room');
+}
+
+// Returns null when the special room found no place.
+function tryGenerateMap({
   startRooms,
   normalRooms,
+  specialRoom,
   roomCount,
   random,
-}: MapOptions): GeneratedMap {
+}: MapOptions): GeneratedMap | null {
   const tiles = Array.from({ length: GRID_SIZE }, () => Array<Tile>(GRID_SIZE).fill('void'));
   const grid: Room = { width: GRID_SIZE, height: GRID_SIZE, tiles, monsters: [] };
   const openDoors = new Map<string, Door>();
@@ -170,13 +190,21 @@ export function generateMap({
 
   const gridMonsters: Point[] = [];
   let roomsBuilt = 1;
+  // Where the special room was put, or null while it still needs a place.
+  let specialTiles: Point[] | null = specialRoom ? null : [];
 
-  for (let attempt = 0; attempt < MAX_ATTACH_ATTEMPTS && roomsBuilt < roomCount; attempt++) {
+  for (
+    let attempt = 0;
+    attempt < MAX_ATTACH_ATTEMPTS && (roomsBuilt < roomCount || !specialTiles);
+    attempt++
+  ) {
     if (openDoors.size === 0) {
       break;
     }
     const door = pick(random, [...openDoors.values()]);
-    const room = randomVariant(pick(random, normalRooms)(random), random);
+    const isSpecial = !specialTiles && roomsBuilt >= Math.ceil(roomCount / 2);
+    const source = isSpecial && specialRoom ? specialRoom : pick(random, normalRooms);
+    const room = randomVariant(source(random), random);
 
     // The new room's door has to face the existing room's door.
     const facing = findDoors(room).filter(
@@ -194,11 +222,22 @@ export function generateMap({
 
     stamp(room, offset, joined);
     roomsBuilt++;
+    if (isSpecial) {
+      specialTiles = room.tiles.flatMap((row, y) =>
+        row.flatMap((tile, x) =>
+          tile === 'void' || tile === 'wall' ? [] : [{ x: x + offset.x, y: y + offset.y }],
+        ),
+      );
+    }
     for (const monster of room.monsters) {
       if (random() < MONSTER_CHANCE) {
         gridMonsters.push({ x: monster.x + offset.x, y: monster.y + offset.y });
       }
     }
+  }
+
+  if (!specialTiles) {
+    return null;
   }
 
   for (const { x, y } of openDoors.values()) {
@@ -207,7 +246,7 @@ export function generateMap({
 
   addLoops(grid, random);
 
-  return finishMap(grid, gridStart, gridMonsters, random);
+  return finishMap(grid, gridStart, gridMonsters, specialTiles, random);
 }
 
 // Joins two rooms with a door where they share a wall but are far apart on foot.
@@ -256,7 +295,13 @@ export function pickItemTiles(map: GeneratedMap, count: number, random: Random):
 }
 
 // Crops the map to its rooms and puts the stairs on a random floor tile away from the start.
-function finishMap(grid: Room, start: Point, monsters: Point[], random: Random): GeneratedMap {
+function finishMap(
+  grid: Room,
+  start: Point,
+  monsters: Point[],
+  specialRoom: Point[],
+  random: Random,
+): GeneratedMap {
   const doorCounts = doorCountsFrom(grid, start);
   const minDoors = Math.min(STAIRS_MIN_DOORS, Math.max(...doorCounts.flat()));
   const stairsTiles: Point[] = [];
@@ -293,5 +338,6 @@ function finishMap(grid: Room, start: Point, monsters: Point[], random: Random):
     start: crop(start),
     stairs: crop(stairs),
     monsters: monsters.map(crop),
+    specialRoom: specialRoom.map(crop),
   };
 }

@@ -1,4 +1,6 @@
-export type Tile = 'void' | 'wall' | 'floor' | 'door' | 'stairs';
+// A campfire stands on the floor of its room. Nothing can step on it, but it does not block the
+// view.
+export type Tile = 'void' | 'wall' | 'floor' | 'door' | 'stairs' | 'campfire';
 
 export interface Point {
   x: number;
@@ -21,6 +23,7 @@ const GLYPHS = new Map<string, Tile>([
   ['+', 'door'],
   ['@', 'floor'],
   ['1', 'floor'],
+  ['&', 'campfire'],
 ]);
 
 export function parseRoom(text: string): Room {
