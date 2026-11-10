@@ -240,14 +240,14 @@ function isConnected(room: Room): boolean {
 }
 
 // Each "?" becomes a wall or a floor, like "SUBST: ? = x." in DCSS map files.
-export function fromTemplate(text: string): RoomSource {
+export function fromTemplate(text: string, isCorridor = false): RoomSource {
   return (random) => {
     for (let attempt = 0; attempt < MAX_RANDOM_TILE_ATTEMPTS; attempt++) {
       const room = parseRoom(text.replace(/\?/g, () => (random() < 0.5 ? 'x' : '.')));
       if (isConnected(room)) {
-        return room;
+        return { ...room, isCorridor };
       }
     }
-    return parseRoom(text.replace(/\?/g, '.'));
+    return { ...parseRoom(text.replace(/\?/g, '.')), isCorridor };
   };
 }

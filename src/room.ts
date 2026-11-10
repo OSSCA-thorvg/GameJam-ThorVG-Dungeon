@@ -29,6 +29,9 @@ export interface Room {
   tiles: Tile[][];
   start?: Point;
   monsters: Point[];
+  // Set for a corridor, which only links rooms. Nothing but the hero and enemies passing through
+  // is put in a corridor: no items, chests, or stairs.
+  isCorridor?: boolean;
 }
 
 const GLYPHS = new Map<string, Tile>([

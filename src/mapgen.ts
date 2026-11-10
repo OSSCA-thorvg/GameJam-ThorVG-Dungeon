@@ -8,6 +8,8 @@ export interface GeneratedMap extends Room {
   stairs: Point;
   // The tiles inside the special room and its doorways, or none when the map has no special room.
   specialRoom: Point[];
+  // The floor tiles of corridors. Items, chests, and stairs are not put there.
+  corridor: Point[];
 }
 
 export interface MapOptions {
@@ -20,7 +22,8 @@ export interface MapOptions {
   random: Random;
 }
 
-// Starts over after this many maps that had no place for the special room, and then gives up.
+// Starts over after this many maps that had no place for the special room or the stairs, and then
+// gives up.
 const MAX_MAP_ATTEMPTS = 20;
 
 // Chosen by measuring loop counts on generated maps. Brogue CE passes 20 to addLoops(), but its
@@ -59,6 +62,7 @@ function rotated(room: Room): Room {
     tiles,
     start: room.start && turn(room.start),
     monsters: room.monsters.map(turn),
+    isCorridor: room.isCorridor,
   };
 }
 
@@ -107,10 +111,10 @@ export function generateMap(options: MapOptions): GeneratedMap {
       return map;
     }
   }
-  throw new Error('No map had a place for the special room');
+  throw new Error('No map had a place for the special room or the stairs');
 }
 
-// Returns null when the special room found no place.
+// Returns null when the special room or the stairs found no place.
 function tryGenerateMap({
   startRooms,
   normalRooms,
@@ -192,6 +196,8 @@ function tryGenerateMap({
   let roomsBuilt = 1;
   // Where the special room was put, or null while it still needs a place.
   let specialTiles: Point[] | null = specialRoom ? null : [];
+  // The corridors put in the map, with the places of their doors.
+  let corridors: { floors: Point[]; doors: Point[] }[] = [];
 
   for (
     let attempt = 0;
@@ -222,6 +228,15 @@ function tryGenerateMap({
 
     stamp(room, offset, joined);
     roomsBuilt++;
+    if (room.isCorridor) {
+      const at = ({ x, y }: Point) => ({ x: x + offset.x, y: y + offset.y });
+      corridors.push({
+        floors: room.tiles.flatMap((row, y) =>
+          row.flatMap((tile, x) => (tile === 'floor' ? [at({ x, y })] : [])),
+        ),
+        doors: findDoors(room).map(at),
+      });
+    }
     if (isSpecial) {
       specialTiles = room.tiles.flatMap((row, y) =>
         row.flatMap((tile, x) =>
@@ -244,9 +259,27 @@ function tryGenerateMap({
     tiles[y][x] = 'wall';
   }
 
+  // A corridor links rooms, so one with fewer than two doors in use leads nowhere. It is taken out,
+  // and taking one out can leave the corridor before it with a door unused, so this repeats.
+  const doorsInUse = ({ doors }: { doors: Point[] }) =>
+    doors.filter(({ x, y }) => tiles[y][x] === 'door').length;
+  for (let dead = corridors.find((c) => doorsInUse(c) < 2); dead; ) {
+    for (const { x, y } of dead.floors) {
+      tiles[y][x] = 'void';
+    }
+    for (const { x, y } of dead.doors) {
+      if (tiles[y][x] === 'door') {
+        tiles[y][x] = 'wall';
+      }
+    }
+    corridors = corridors.filter((corridor) => corridor !== dead);
+    dead = corridors.find((c) => doorsInUse(c) < 2);
+  }
+  const corridorTiles = corridors.flatMap(({ floors }) => floors);
+
   addLoops(grid, random);
 
-  return finishMap(grid, gridStart, gridMonsters, specialTiles, random);
+  return finishMap(grid, gridStart, gridMonsters, specialTiles, corridorTiles, random);
 }
 
 // Joins two rooms with a door where they share a wall but are far apart on foot.
@@ -286,7 +319,8 @@ export function pickItemTiles(map: GeneratedMap, count: number, random: Random):
   map.tiles.forEach((row, y) =>
     row.forEach((tile, x) => {
       const isTaken = [map.start, ...map.monsters].some((taken) => taken.x === x && taken.y === y);
-      if (tile === 'floor' && !isTaken && doorCounts[y][x] >= minDoors) {
+      const isCorridor = map.corridor.some((other) => other.x === x && other.y === y);
+      if (tile === 'floor' && !isTaken && !isCorridor && doorCounts[y][x] >= minDoors) {
         tiles.push({ x, y });
       }
     }),
@@ -300,8 +334,9 @@ function finishMap(
   start: Point,
   monsters: Point[],
   specialRoom: Point[],
+  corridor: Point[],
   random: Random,
-): GeneratedMap {
+): GeneratedMap | null {
   const doorCounts = doorCountsFrom(grid, start);
   const minDoors = Math.min(STAIRS_MIN_DOORS, Math.max(...doorCounts.flat()));
   const stairsTiles: Point[] = [];
@@ -321,12 +356,17 @@ function finishMap(
       maxY = Math.max(maxY, y);
 
       const isFree = ![start, ...monsters].some((taken) => taken.x === x && taken.y === y);
-      if (tile === 'floor' && isFree && doorCounts[y][x] >= minDoors) {
+      const isCorridor = corridor.some((other) => other.x === x && other.y === y);
+      if (tile === 'floor' && isFree && !isCorridor && doorCounts[y][x] >= minDoors) {
         stairsTiles.push({ x, y });
       }
     }),
   );
 
+  // A map whose rooms are too few or too close to the start has no place for stairs.
+  if (stairsTiles.length === 0) {
+    return null;
+  }
   const stairs = pick(random, stairsTiles);
   grid.tiles[stairs.y][stairs.x] = 'stairs';
 
@@ -339,5 +379,6 @@ function finishMap(
     stairs: crop(stairs),
     monsters: monsters.map(crop),
     specialRoom: specialRoom.map(crop),
+    corridor: corridor.map(crop),
   };
 }

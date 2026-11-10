@@ -99,5 +99,6 @@ export function createSurface(): Surface {
       }
     }),
   );
-  return { map: { ...room, start: room.start!, stairs: stairs!, specialRoom: [] }, items, signs };
+  const map = { ...room, start: room.start!, stairs: stairs!, specialRoom: [], corridor: [] };
+  return { map, items, signs };
 }
