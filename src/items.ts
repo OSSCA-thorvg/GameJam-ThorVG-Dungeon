@@ -238,6 +238,11 @@ export function createStartingEquipment(): Equipment {
   return { weapon: 'worn-shortsword', armor: 'cloth-armor', accessory1: null, accessory2: null };
 }
 
+// On the surface, the hero starts with nothing on and picks up the starting gear.
+export function createEmptyEquipment(): Equipment {
+  return { weapon: null, armor: null, accessory1: null, accessory2: null };
+}
+
 // Every hero starts with a ration in Shattered Pixel Dungeon too.
 export function createStartingInventory(): ItemStack[] {
   return [{ name: 'ration', count: 1 }];

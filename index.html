@@ -193,7 +193,7 @@
       }
       #inventory,
       #settings,
-      #campfire {
+      #dialog {
         position: fixed;
         inset: 0;
         display: flex;
@@ -203,12 +203,12 @@
       }
       #inventory[hidden],
       #settings[hidden],
-      #campfire[hidden] {
+      #dialog[hidden] {
         display: none;
       }
       #inventory-panel,
       #settings-panel,
-      #campfire-panel {
+      #dialog-panel {
         width: min(340px, calc(100vw / var(--ui-scale, 1) - 24px));
         box-sizing: border-box;
         padding: 12px;
@@ -220,7 +220,7 @@
       }
       #inventory-header,
       #settings-header,
-      #campfire-header {
+      #dialog-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -229,7 +229,7 @@
       }
       #inventory-close,
       #settings-close,
-      #campfire-close {
+      #dialog-close {
         width: 36px;
         height: 36px;
         font-size: 20px;
@@ -253,16 +253,17 @@
         border: 1px solid #5a5d68;
         border-radius: 6px;
       }
-      #campfire-panel p {
+      #dialog-panel p {
         margin: 0 0 10px;
+        line-height: 1.5;
         color: #c8cad2;
       }
-      #campfire-actions {
+      #dialog-actions {
         display: flex;
         flex-direction: column;
         gap: 8px;
       }
-      .campfire-action {
+      .dialog-action {
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -277,12 +278,12 @@
         border-radius: 6px;
         cursor: pointer;
       }
-      .campfire-action span {
+      .dialog-action span {
         font-size: 13px;
         color: #b8bac2;
       }
-      .campfire-action:disabled,
-      .campfire-action:disabled span {
+      .dialog-action:disabled,
+      .dialog-action:disabled span {
         color: #7a7d86;
         cursor: default;
       }
@@ -472,14 +473,14 @@
         </label>
       </div>
     </div>
-    <div id="campfire" hidden>
-      <div id="campfire-panel" role="dialog" aria-label="Campfire">
-        <div id="campfire-header">
-          Campfire
-          <button id="campfire-close" aria-label="Close">×</button>
+    <div id="dialog" hidden>
+      <div id="dialog-panel" role="dialog" aria-labelledby="dialog-title">
+        <div id="dialog-header">
+          <span id="dialog-title"></span>
+          <button id="dialog-close" aria-label="Close">×</button>
         </div>
-        <p>A warm fire crackles here. You can rest by it, or cook raw meat over it.</p>
-        <div id="campfire-actions"></div>
+        <p id="dialog-text"></p>
+        <div id="dialog-actions"></div>
       </div>
     </div>
     <div id="target-prompt" hidden>

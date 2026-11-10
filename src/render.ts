@@ -1,6 +1,6 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { EnemyKind } from './enemy';
-import { isWalkable, type Point, type Room } from './room';
+import { isFixture, isWalkable, type Point, type Room } from './room';
 import { STATUS_LABELS, type StatusName } from './status';
 
 type Color = [r: number, g: number, b: number];
@@ -345,9 +345,10 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
         case 'stairs':
           STAIRS_STEPS.forEach((color, step) => addPolygon(inset(1 - step * 0.28), color));
           break;
-        // The campfire itself is placed on its floor like an item.
+        // A fixture itself is placed on its floor like an item.
         case 'floor':
         case 'campfire':
+        case 'sign':
           addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
           break;
         case 'door': {
@@ -658,10 +659,10 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       coveredHeroTile = isCovered(tile) ? tile : null;
       updateCuts();
     },
-    // The outline shows on the tiles the hero can walk on, and on the campfire, which the hero uses.
+    // The outline shows on the tiles the hero can walk on, and on fixtures, which the hero uses.
     setCursorTile(tile, target) {
       const isPointable =
-        tile && (isWalkable(room, tile.x, tile.y) || room.tiles[tile.y][tile.x] === 'campfire');
+        tile && (isWalkable(room, tile.x, tile.y) || isFixture(room, tile.x, tile.y));
       const next = isPointable ? tile : null;
       if (next?.x === cursorTile?.x && next?.y === cursorTile?.y && target === cursorTarget) {
         return false;

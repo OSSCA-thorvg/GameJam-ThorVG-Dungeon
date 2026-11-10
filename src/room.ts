@@ -1,6 +1,12 @@
-// A campfire stands on the floor of its room. Nothing can step on it, but it does not block the
-// view.
-export type Tile = 'void' | 'wall' | 'floor' | 'door' | 'stairs' | 'campfire';
+export type Tile = 'void' | 'wall' | 'floor' | 'door' | 'stairs' | 'campfire' | 'sign';
+
+// Fixtures are things that stand on a floor, like a campfire or a sign. Nothing can step on them,
+// they do not block the view, and the hero uses them from a tile next to them.
+const FIXTURES: readonly Tile[] = ['campfire', 'sign'];
+
+export function isFixture(room: Room, x: number, y: number): boolean {
+  return FIXTURES.includes(room.tiles[y]?.[x] ?? 'void');
+}
 
 export interface Point {
   x: number;
@@ -24,6 +30,8 @@ const GLYPHS = new Map<string, Tile>([
   ['@', 'floor'],
   ['1', 'floor'],
   ['&', 'campfire'],
+  ['s', 'sign'],
+  ['>', 'stairs'],
 ]);
 
 export function parseRoom(text: string): Room {

@@ -31,7 +31,7 @@ import {
   REST_HEAL_FRACTION,
   REST_TURNS,
 } from './campfire';
-import { createCampfirePanel } from './campfirePanel';
+import { createDialog } from './dialog';
 import { createHazardField, spreadArea } from './hazards';
 import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
@@ -42,6 +42,7 @@ import {
   accuracyFactor,
   addItem,
   canSurpriseAttack,
+  createEmptyEquipment,
   createStartingEquipment,
   createStartingInventory,
   equip,
@@ -60,7 +61,7 @@ import {
   type ItemName,
   type ItemStack,
 } from './items';
-import { generateMap, pickItemTiles } from './mapgen';
+import { generateMap, pickItemTiles, type GeneratedMap } from './mapgen';
 import { createMessageLog } from './messageLog';
 import { canReach, findPath } from './path';
 import {
@@ -100,7 +101,7 @@ import {
   tintCharacter,
   type DamageTarget,
 } from './render';
-import { isAdjacent, isWalkable, type Point } from './room';
+import { isAdjacent, isFixture, isWalkable, type Point } from './room';
 import {
   addStatus,
   HARMFUL_STATUSES,
@@ -115,6 +116,13 @@ import {
 } from './status';
 import { campfireRoom, normalRooms, startRooms } from './roomSources';
 import { playSplash } from './splash';
+import {
+  createSurface,
+  hasFinishedSurface,
+  markSurfaceFinished,
+  SIGN_ICON,
+  type Sign,
+} from './surface';
 import { computeVision, DEFAULT_VIEW_DISTANCE } from './vision';
 
 const MIN_ZOOM = 0.5;
@@ -232,7 +240,9 @@ const newRunSeed = () =>
   fixedSeed === null ? Math.floor(Math.random() * 2 ** 31) : Number(fixedSeed);
 
 let runSeed = newRunSeed();
-let floor = 1;
+// Floor 0 is the surface, where only the first run in a browser starts.
+const firstFloor = () => (hasFinishedSurface() ? 1 : 0);
+let floor = firstFloor();
 // For the summary shown when the hero dies.
 let killCount = 0;
 let turnCount = 0;
@@ -298,6 +308,15 @@ function createMimic(position: Point, random: Random): Enemy {
 }
 
 function createLevel() {
+  if (floor === 0) {
+    const surface = createSurface();
+    const floorItems = surface.items.map(({ name, position }) => ({
+      thing: { kind: 'item', name } satisfies GroundThing,
+      position,
+    }));
+    return finishLevel(surface.map, [], floorItems, surface.signs);
+  }
+
   const random = createRandom(runSeed + floor);
   const hasCampfire = planStage(currentStage()).campfireFloor === floorInStage();
   const room = generateMap({
@@ -328,7 +347,15 @@ function createLevel() {
     enemies.push(createMimic(tiles[loot.length], random));
   }
   const floorItems = things.map((thing, index) => ({ thing, position: tiles[index] }));
+  return finishLevel(room, enemies, floorItems, []);
+}
 
+function finishLevel(
+  room: GeneratedMap,
+  enemies: Enemy[],
+  floorItems: { thing: GroundThing; position: Point }[],
+  signs: Sign[],
+) {
   const roomView = createRoomView(TVG, room);
   return {
     room,
@@ -344,10 +371,11 @@ function createLevel() {
     hero: createCharacter(TVG, heroIcon),
     enemies,
     floorItems,
+    signs,
   };
 }
 
-let { room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems } =
+let { room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems, signs } =
   createLevel();
 let heroPosition = room.start;
 let heroHp = HERO_MAX_HP;
@@ -384,8 +412,11 @@ let cameraFrame = 0;
 let mousePosition: Point | null = null;
 let cameraDrag: { pointerId: number; start: Point; last: Point; isDragging: boolean } | null = null;
 const activePointers = new Map<number, Point>();
-let inventory: ItemStack[] = createStartingInventory();
-let equipment: Equipment = createStartingEquipment();
+// On the surface the hero starts with nothing, and picks up the starting gear lying there.
+const startingInventory = () => (floor === 0 ? [] : createStartingInventory());
+const startingEquipment = () => (floor === 0 ? createEmptyEquipment() : createStartingEquipment());
+let inventory: ItemStack[] = startingInventory();
+let equipment: Equipment = startingEquipment();
 let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
 
 function createItemContext(): ItemContext {
@@ -583,7 +614,7 @@ const inventoryPanel = createInventoryPanel({
   onDrop: dropFromBag,
 });
 
-const campfirePanel = createCampfirePanel();
+const dialog = createDialog();
 
 // Choosing a tile for an action, like the CellSelector of Shattered Pixel Dungeon. While this is
 // set, a press on a tile picks the target instead of walking there.
@@ -641,12 +672,21 @@ function updateCursorTile() {
   if (tile && enemyAt(tile)) {
     return roomView.setCursorTile(tile, 'enemy');
   }
-  const hasItem = tile && (itemsAt(tile).length > 0 || hasChest(tile) || isCampfire(tile));
+  const hasItem =
+    tile && (itemsAt(tile).length > 0 || hasChest(tile) || isFixture(room, tile.x, tile.y));
   return roomView.setCursorTile(tile, hasItem ? 'item' : 'floor');
 }
 
 function isCampfire({ x, y }: Point): boolean {
   return room.tiles[y]?.[x] === 'campfire';
+}
+
+function signAt(tile: Point): Sign | undefined {
+  return signs.find(({ position }) => isSameTile(position, tile));
+}
+
+function readSign(sign: Sign) {
+  dialog.open({ title: 'Sign', text: sign.text, actions: [] });
 }
 
 function isEnemyInCampfireRoom(): boolean {
@@ -960,8 +1000,9 @@ function startLevel() {
   }
   room.tiles.forEach((row, y) =>
     row.forEach((tile, x) => {
-      if (tile === 'campfire') {
-        roomView.place(createItemPaint(TVG, CAMPFIRE_ICON), x, y);
+      if (tile === 'campfire' || tile === 'sign') {
+        const icon = tile === 'campfire' ? CAMPFIRE_ICON : SIGN_ICON;
+        roomView.place(createItemPaint(TVG, icon), x, y);
       }
     }),
   );
@@ -979,7 +1020,7 @@ function startLevel() {
   applyCamera();
 
   gameOverScreen.hidden = true;
-  floorLabel.textContent = `Floor ${floor}`;
+  floorLabel.textContent = floor === 0 ? 'Surface' : `Floor ${floor}`;
   canvas.update().render();
 }
 
@@ -988,22 +1029,35 @@ function canGoDownStairs() {
   return isSameTile(heroPosition, room.stairs) && itemsAt(room.stairs).length === 0;
 }
 
+// Going down from the surface finishes it, so the next runs in this browser start on floor 1.
 function goDownStairs() {
+  const wasSurface = floor === 0;
   floor++;
   replaceLevel();
-  messageLog.add('You went down to the next floor.');
+  if (wasSurface) {
+    markSurfaceFinished();
+    messageLog.add('You went down into the dungeon.');
+  } else {
+    messageLog.add('You went down to the next floor.');
+  }
 }
 
 function replaceLevel() {
   damageNumbers.clear();
   mapScene.remove(roomView.scene);
-  ({ room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems } =
+  ({ room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems, signs } =
     createLevel());
   startLevel();
 }
 
+// The first line of a run.
+const greet = () =>
+  messageLog.add(
+    floor === 0 ? 'You arrived at the entrance of the dungeon.' : 'You entered an unknown dungeon.',
+  );
+
 startLevel();
-messageLog.add('You entered an unknown dungeon.');
+greet();
 
 window.addEventListener('resize', () => {
   canvas.resize(window.innerWidth, window.innerHeight);
@@ -1442,7 +1496,7 @@ function pathToUse(tile: Point): Point[] {
   if (isAdjacent(tile, heroPosition)) {
     return [];
   }
-  if (!isCampfire(tile)) {
+  if (!isFixture(room, tile.x, tile.y)) {
     return pathNextTo(tile);
   }
   let best: Point[] = [];
@@ -1479,7 +1533,10 @@ function walk() {
     if (attackTarget && canHeroReach(attackTarget)) {
       playHeroAttack(attackTarget);
     } else if (useTarget && isAdjacent(useTarget, heroPosition)) {
-      if (isCampfire(useTarget)) {
+      const sign = signAt(useTarget);
+      if (sign) {
+        readSign(sign);
+      } else if (isCampfire(useTarget)) {
         openCampfire();
       } else {
         openChests(useTarget);
@@ -1534,11 +1591,11 @@ function traceTo(target: Point, rule: PathRule): Trajectory {
   return traceLine(heroPosition, target, rule, {
     isBlocked({ x, y }) {
       const tile = room.tiles[y]?.[x] ?? 'void';
-      // The campfire stops what is thrown at it, before it lands in the fire.
+      // A fixture stops what is thrown at it, so nothing lands in the campfire.
       return (
         tile === 'wall' ||
         tile === 'void' ||
-        tile === 'campfire' ||
+        isFixture(room, x, y) ||
         (tile === 'door' && !openDoors.has(y * room.width + x))
       );
     },
@@ -1649,7 +1706,7 @@ function pressTileAt(position: Point, isMouse: boolean) {
   if (clicked) {
     path = pathToAttack(clicked);
     attackTarget = clicked;
-  } else if (isExplored(target) && (hasChest(target) || isCampfire(target))) {
+  } else if (isExplored(target) && (hasChest(target) || isFixture(room, target.x, target.y))) {
     path = pathToUse(target);
     useTarget = target;
   } else {
@@ -1960,6 +2017,8 @@ function describeTerrain({ x, y }: Point): string {
       return 'Stairs down to the next floor.';
     case 'campfire':
       return 'A campfire. From a tile next to it, you can rest or cook raw meat.';
+    case 'sign':
+      return `A sign. It reads: "${signAt({ x, y })?.text ?? ''}"`;
     default:
       return 'The floor.';
   }
@@ -1977,20 +2036,24 @@ function openCampfire() {
   const rawMeat = inventory.find(({ name }) => name === 'raw-meat')?.count ?? 0;
   const heal = Math.round(heroMaxHp * REST_HEAL_FRACTION);
   const cookTime = COOK_TURNS === 1 ? 'one turn' : `${COOK_TURNS} turns`;
-  campfirePanel.open([
-    {
-      label: 'Rest',
-      detail: `Recover ${heal} HP over ${REST_TURNS} turns.`,
-      blockedReason: enemyNearby ?? (heroHp >= heroMaxHp ? 'Your HP is already full.' : null),
-      run: rest,
-    },
-    {
-      label: 'Cook raw meat',
-      detail: `Cook one piece in ${cookTime}. You have ${rawMeat}.`,
-      blockedReason: enemyNearby ?? (rawMeat === 0 ? 'You have no raw meat.' : null),
-      run: cookMeat,
-    },
-  ]);
+  dialog.open({
+    title: 'Campfire',
+    text: 'A warm fire crackles here. You can rest by it, or cook raw meat over it.',
+    actions: [
+      {
+        label: 'Rest',
+        detail: `Recover ${heal} HP over ${REST_TURNS} turns.`,
+        blockedReason: enemyNearby ?? (heroHp >= heroMaxHp ? 'Your HP is already full.' : null),
+        run: rest,
+      },
+      {
+        label: 'Cook raw meat',
+        detail: `Cook one piece in ${cookTime}. You have ${rawMeat}.`,
+        blockedReason: enemyNearby ?? (rawMeat === 0 ? 'You have no raw meat.' : null),
+        run: cookMeat,
+      },
+    ],
+  });
 }
 
 // Spends some turns at the campfire, one after another. onTurn runs on each turn and returns
@@ -2197,9 +2260,9 @@ window.addEventListener('keydown', (event) => {
 document.querySelector('#restart')!.addEventListener('click', () => {
   cancelTargeting();
   campfireTask = null;
-  campfirePanel.close();
+  dialog.close();
   runSeed = newRunSeed();
-  floor = 1;
+  floor = firstFloor();
   heroHp = HERO_MAX_HP;
   heroMaxHp = HERO_MAX_HP;
   heroLevel = 1;
@@ -2212,12 +2275,12 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   potionLore = createPotionLore(createRandom(runSeed));
   killCount = 0;
   turnCount = 0;
-  inventory = createStartingInventory();
-  equipment = createStartingEquipment();
+  inventory = startingInventory();
+  equipment = startingEquipment();
   inventoryPanel.refresh();
   replaceLevel();
   messageLog.clear();
-  messageLog.add('You entered an unknown dungeon.');
+  greet();
 });
 
 // Same wheel sensitivity as defaultWheelDelta in d3-zoom.
