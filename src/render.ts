@@ -1018,6 +1018,15 @@ export function createHazardPaint(TVG: ThorVGNamespace, kind: HazardKind): Shape
   return shape;
 }
 
+const SEARCH_COLOR: Color = [190, 225, 255];
+
+// The light of a search over a tile's floor, centered on the paint's local origin.
+export function createSearchPaint(TVG: ThorVGNamespace): Shape {
+  const shape = appendTileDiamond(new TVG.Shape());
+  shape.fill(...SEARCH_COLOR, 255);
+  return shape;
+}
+
 // Frost covering a tile's floor, centered on the paint's local origin.
 export function createFrostPaint(TVG: ThorVGNamespace): Shape {
   const shape = appendTileDiamond(new TVG.Shape());

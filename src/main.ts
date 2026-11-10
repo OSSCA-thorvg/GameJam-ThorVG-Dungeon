@@ -72,6 +72,8 @@ import {
   type ItemStack,
 } from './items';
 import { generateMap, pickItemTiles, type GeneratedMap } from './mapgen';
+import { SEARCH_RADIUS } from './search';
+import { playSearch } from './searchEffect';
 import { createMessageLog } from './messageLog';
 import { canReach, findPath } from './path';
 import {
@@ -1810,9 +1812,48 @@ function canTarget(tile: Point | null): tile is Point {
   return tile !== null && targeting !== null && targeting.request.canPick(tile);
 }
 
+// A search takes a turn and finds what is hidden nearby. Nothing is hidden yet.
+function searchArea() {
+  messageLog.add('You search the area and find nothing.');
+}
+
+// A search lights the area around the hero, and finds what is hidden there once the light has
+// passed. It takes a turn.
+function startSearch() {
+  stopWalking();
+  const tiles: Point[] = [];
+  for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
+    for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
+      const tile = { x: heroPosition.x + dx, y: heroPosition.y + dy };
+      const kind = room.tiles[tile.y]?.[tile.x] ?? 'void';
+      if ((dx !== 0 || dy !== 0) && kind !== 'void') {
+        tiles.push(tile);
+      }
+    }
+  }
+  finishAttackEffect = playSearch({
+    TVG,
+    view: roomView,
+    center: heroPosition,
+    tiles,
+    render: renderCanvas,
+    onEnd() {
+      finishAttackEffect = null;
+      searchArea();
+      passTurn(() => {});
+    },
+  });
+}
+
+// While examining, the second press of the button searches.
+function showExamineLabel() {
+  examineButton.textContent = targeting?.request === EXAMINE_REQUEST ? 'Search' : 'Examine';
+}
+
 function requestTarget(request: TargetRequest) {
   stopWalking();
   targeting = { request, preview: null };
+  showExamineLabel();
   document.querySelector('#target-prompt-text')!.textContent = request.prompt;
   targetPrompt.hidden = false;
   updateCursorTile();
@@ -1824,6 +1865,7 @@ function cancelTargeting() {
     return;
   }
   targeting = null;
+  showExamineLabel();
   targetPrompt.hidden = true;
   updateCursorTile();
   renderCanvas();
@@ -2411,7 +2453,8 @@ function playWaitEffect() {
     .animate({ opacity: [1, 0, 0, 1], offset: [0, 0.15, 0.75, 1] }, timing);
 }
 
-// A second press while choosing a tile to examine stops choosing.
+// A second press while choosing a tile to examine stops choosing and searches the area, which takes
+// a turn.
 examineButton.addEventListener('click', () => {
   if (cannotAct()) {
     return;
@@ -2422,6 +2465,7 @@ examineButton.addEventListener('click', () => {
   }
   if (targeting?.request === EXAMINE_REQUEST) {
     cancelTargeting();
+    startSearch();
     return;
   }
   inventoryPanel.close();

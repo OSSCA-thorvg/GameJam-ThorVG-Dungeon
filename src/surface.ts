@@ -27,7 +27,8 @@ const SIGN_TEXTS: Record<string, string> = {
   c:
     'The way into the dungeon lies behind this locked door. Find the key, click the door to ' +
     'unlock it, step into the doorway, and take the stairs down. Below, click an enemy to attack ' +
-    'it. Examine tells you what something is, and Wait lets a turn pass.',
+    'it. Examine tells you what something is, and pressing it again searches the area around ' +
+    'you, which takes a turn. Wait lets a turn pass.',
 };
 
 export const SIGN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
