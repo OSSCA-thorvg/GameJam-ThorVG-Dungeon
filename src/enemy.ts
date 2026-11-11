@@ -193,6 +193,8 @@ export type EnemyAction =
   | { type: 'wait' }
   | { type: 'move'; to: Point }
   | { type: 'attack' }
+  // An arrow at the hero from where the enemy stands, which needs a clear line of sight.
+  | { type: 'shoot' }
   // The giant centipede rears up to charge down a line of tiles, which the hero can see and leave.
   | { type: 'windup'; lane: Point[]; direction: Point }
   // It charges along the path. It hits the hero standing at the end of it, or else crashes.
@@ -449,6 +451,37 @@ function freeLine(room: Room, from: Point, direction: Point, blocked: Point[]): 
     line.push(tile);
   }
 }
+
+// The skeleton archer of the second stage. Placeholder values. It is frail, and shoots from afar.
+export const skeletonArcherStats: EnemyStats = {
+  name: 'skeleton archer',
+  maxHp: 12,
+  damage: [3, 5],
+  accuracy: 11,
+  evasion: 4,
+  actions: 1,
+  experience: 5,
+};
+
+// Placeholder value. How far, in tiles, an archer that has noticed the hero shoots from.
+const ARCHER_RANGE = 6;
+
+// An archer that has noticed the hero and sees them within its range stops and shoots, even from
+// the next tile. Otherwise it goes after the hero like any enemy, which is also how it notices the
+// hero.
+export const archer: EnemyBehavior = (enemy, context) => {
+  const { hero, canSeeHero } = context;
+  const distance = Math.max(
+    Math.abs(enemy.position.x - hero.x),
+    Math.abs(enemy.position.y - hero.y),
+  );
+  if (enemy.state === 'hunting' && canSeeHero && distance <= ARCHER_RANGE) {
+    alertEnemy(enemy, hero);
+    return { type: 'shoot' };
+  }
+  const action = chaser(enemy, context);
+  return action.type === 'attack' ? { type: 'shoot' } : action;
+};
 
 // The giant centipede always knows where the hero is. It moves one tile a turn along rows and
 // columns, and bites hard when the hero is next to its head. With the hero in a line along a row or a column

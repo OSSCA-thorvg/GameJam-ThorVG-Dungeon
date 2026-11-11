@@ -26,10 +26,12 @@ import {
   HERO_EVASION,
   ENEMY_KINDS,
   HERO_MAX_HP,
+  archer,
   ghostStats,
   mimicStats,
   pickEnemyKind,
   rollHit,
+  skeletonArcherStats,
   UNDEAD_KINDS,
   wholeOf,
   type Enemy,
@@ -206,6 +208,8 @@ const HELPLESS_TURN_MS = 300;
 // Placeholder value. How long an enemy waits before it strikes, after the blow that came before,
 // such as the hero's.
 const ENEMY_ATTACK_DELAY_MS = 150;
+// Placeholder value. How long the hero flashes red when an arrow hits.
+const HIT_FLASH_MS = 100;
 // Placeholder values. How high a levitating hero floats, and how see-through an invisible
 // hero and an enemy sensed by telepathy are drawn.
 const LEVITATION_HEIGHT = 8;
@@ -368,6 +372,21 @@ function planCoffins(room: GeneratedMap, random: Random): CoffinSpec[] {
   });
 }
 
+const SECOND_STAGE_STATS = {
+  ghoul: UNDEAD_KINDS.ghoul,
+  ghost: ghostStats,
+  skeleton: skeletonArcherStats,
+};
+
+// What a place for an enemy holds on the second stage: a ghoul now and then, and else a ghost or a
+// skeleton archer in equal shares.
+function pickSecondStageKind(random: Random) {
+  if (random() < WANDERING_GHOUL_CHANCE) {
+    return 'ghoul' as const;
+  }
+  return random() < 0.5 ? ('ghost' as const) : ('skeleton' as const);
+}
+
 // A mimic in disguise, drawn as a chest on the floor is. It holds gold, one of the prizes
 // Mimic.generatePrize() of Shattered Pixel Dungeon picks from.
 function createMimic(position: Point, random: Random): Enemy {
@@ -436,21 +455,16 @@ function createLevel() {
     random,
   });
 
-  // The second stage has enemies of its own, the ghouls and the ghosts, with few ghouls wandering
-  // about, as most come out of coffins. The enemies of the first stage do not turn up there.
+  // The second stage has enemies of its own, which are ghouls, ghosts, and skeleton archers, with
+  // few ghouls wandering about, as most come out of coffins. The enemies of the first stage do not
+  // turn up there.
   const enemies = room.monsters.map((position) => {
-    const isSecondStage = currentStage() >= 1;
-    const kind = isSecondStage
-      ? random() < WANDERING_GHOUL_CHANCE
-        ? ('ghoul' as const)
-        : ('ghost' as const)
-      : pickEnemyKind(random, floor);
+    const kind =
+      currentStage() >= 1 ? pickSecondStageKind(random) : pickEnemyKind(random, floor);
     const stats =
-      kind === 'ghoul'
-        ? UNDEAD_KINDS.ghoul
-        : kind === 'ghost'
-          ? ghostStats
-          : ENEMY_KINDS[kind];
+      kind === 'ghoul' || kind === 'ghost' || kind === 'skeleton'
+        ? SECOND_STAGE_STATS[kind]
+        : ENEMY_KINDS[kind];
     const enemy = createEnemy(
       stats,
       position,
@@ -458,7 +472,7 @@ function createLevel() {
       createDummyEnemy(TVG, kind),
       createEnemyHealthBar(TVG, renderCanvas),
       createSleepMark(TVG),
-      chaser,
+      kind === 'skeleton' ? archer : chaser,
     );
     // A ghost floats for good, so the hazards of the floor do not touch it.
     if (kind === 'ghost') {
@@ -1548,17 +1562,16 @@ function landArrow(target: ArrowTarget, damage: number) {
   }
 }
 
-// Shoots an arrow from a trap at the hero or an enemy. The action that set the trap off is not over
-// until the arrow lands, so the turn goes on after that.
-function shootArrow(from: Point, target: ArrowTarget, damage: number) {
-  const to = target === 'hero' ? heroPosition : target.position;
+// Flies an arrow between two tiles and runs what it does once it lands. The action that shot it is
+// not over until then, so the next action waits for it.
+function launchArrow(from: Point, to: Point, onLand: () => void) {
   const shotInEpoch = epoch;
   arrowsInFlight++;
   playArrow(TVG, roomView, from, to, renderCanvas, () => {
     if (shotInEpoch !== epoch) {
       return;
     }
-    landArrow(target, damage);
+    onLand();
     arrowsInFlight--;
     if (arrowsInFlight === 0) {
       const waiters = arrowWaiters;
@@ -1566,6 +1579,13 @@ function shootArrow(from: Point, target: ArrowTarget, damage: number) {
       waiters.forEach((next) => next());
     }
   });
+}
+
+// Shoots an arrow from a trap at the hero or an enemy. The action that set the trap off is not over
+// until the arrow lands, so the turn goes on after that.
+function shootArrow(from: Point, target: ArrowTarget, damage: number) {
+  const to = target === 'hero' ? heroPosition : target.position;
+  launchArrow(from, to, () => landArrow(target, damage));
 }
 
 // A trap goes off once. Spikes hurt whoever stepped on them. An arrow is shot at the nearest
@@ -1772,6 +1792,42 @@ function killEnemy(part: Enemy) {
   updateVision();
 }
 
+// A hit on the hero. The armor takes away part of it, as in Char.attack() of Shattered Pixel
+// Dungeon, and what the enemy does besides the damage follows from it.
+function hitHero(enemy: Enemy, damage: number) {
+  const armor = rollArmor(equipment, currentStrength());
+  const dealt = Math.min(heroHp, Math.max(0, damage - armor));
+  damageHero(dealt);
+  healFromBite(enemy, dealt);
+  if (enemy.stats.weakens) {
+    addHeroStatus('weakened', WEAKENED_TURNS);
+  }
+  showHeroStats();
+}
+
+// An enemy shoots an arrow at the hero. As with a blow, it hits unless the hero's evasion roll is
+// higher, and a paralyzed or frozen hero cannot evade. The turn goes on once the arrow lands.
+function shootAtHero(enemy: Enemy) {
+  const isHit = isHelpless(heroStatuses) || rollHit(enemy.stats.accuracy, heroEvasion());
+  const damage = normalIntRange(Math.random, ...enemy.stats.damage);
+  launchArrow(enemy.position, heroPosition, () => {
+    if (isHit) {
+      hitHero(enemy, damage);
+      hero.resetEffects();
+      hero.fillEffect(220, 60, 60, 255);
+      renderCanvas();
+      setTimeout(() => {
+        tintCharacter(hero, tintOf(heroStatuses));
+        renderCanvas();
+      }, HIT_FLASH_MS);
+    } else {
+      damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
+    }
+    // Being shot stops the walk, even by a miss, so the player can decide again.
+    stopWalking();
+  });
+}
+
 // A paralyzed or frozen hero cannot evade. An ambush always hits for the most damage, as a hidden
 // Mimic attacks in Shattered Pixel Dungeon.
 function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } = {}) {
@@ -1802,18 +1858,10 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
     render: () => canvas.update().render(),
     onHit: () => {
       if (isHit) {
-        // The armor takes away part of the hit, as in Char.attack() of Shattered Pixel Dungeon.
         const damage = isAmbush
           ? enemy.stats.damage[1]
           : normalIntRange(Math.random, ...enemy.stats.damage);
-        const armor = rollArmor(equipment, currentStrength());
-        const dealt = Math.min(heroHp, Math.max(0, damage - armor));
-        damageHero(dealt);
-        healFromBite(enemy, dealt);
-        if (enemy.stats.weakens) {
-          addHeroStatus('weakened', WEAKENED_TURNS);
-        }
-        showHeroStats();
+        hitHero(enemy, damage);
       } else {
         damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
       }
@@ -2082,6 +2130,17 @@ function runEnemyTurn(onDone: () => void) {
         setTimeout(() => {
           finishAttackEffect = null;
           playEnemyAttack(enemy, actNext);
+        }, ENEMY_ATTACK_DELAY_MS);
+        break;
+      case 'shoot':
+        showEnemy(enemy);
+        showNoticeMark();
+        // The same pause as before a blow, with input waiting too.
+        finishAttackEffect = () => undefined;
+        setTimeout(() => {
+          finishAttackEffect = null;
+          shootAtHero(enemy);
+          actNext();
         }, ENEMY_ATTACK_DELAY_MS);
         break;
       case 'wait':
