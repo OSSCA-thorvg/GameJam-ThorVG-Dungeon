@@ -1,9 +1,9 @@
 import type { Point } from './room';
 
 const LUNGE_MS = 70;
-// 5 frames at 60 FPS, the longest of the 2 to 5 frames that game feel guides suggest.
-const HIT_STOP_MS = 83;
-const RECOVER_MS = 150;
+// 4 frames at 60 FPS, within the 2 to 5 frames that game feel guides suggest.
+const HIT_STOP_MS = 67;
+const RECOVER_MS = 125;
 
 const KNOCKBACK_PX = 6;
 
