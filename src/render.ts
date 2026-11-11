@@ -1145,6 +1145,16 @@ export function createArrowPaint(TVG: ThorVGNamespace): Shape {
   return shape;
 }
 
+// Placeholder color of the dark magic that strikes a tile.
+const DARK_COLOR: [...Color, number] = [120, 40, 170, 230];
+
+// Dark magic covering a tile's floor, centered on the paint's local origin.
+export function createDarkPaint(TVG: ThorVGNamespace): Shape {
+  const shape = appendTileDiamond(new TVG.Shape());
+  shape.fill(...DARK_COLOR);
+  return shape;
+}
+
 // Frost covering a tile's floor, centered on the paint's local origin.
 export function createFrostPaint(TVG: ThorVGNamespace): Shape {
   const shape = appendTileDiamond(new TVG.Shape());

@@ -4,6 +4,7 @@ import type { Random } from './random';
 import type { Loot } from './loot';
 import type { HealthBar } from './render';
 import { isAdjacent, isWalkable, type Point, type Room } from './room';
+import { THROWN, traceLine } from './trajectory';
 import type { Statuses } from './status';
 
 // Placeholder value.
@@ -200,6 +201,10 @@ export type EnemyAction =
   | { type: 'chant' }
   | { type: 'raise' }
   | { type: 'unshield' }
+  // The necromancer gathers dark magic for a cone of tiles, which the hero can see and leave.
+  | { type: 'gather'; tiles: Point[]; direction: Point }
+  // The cone strikes the hero if they are still in it.
+  | { type: 'cone'; tiles: Point[] }
   // The giant centipede rears up to charge down a line of tiles, which the hero can see and leave.
   | { type: 'windup'; lane: Point[]; direction: Point }
   // It charges along the path. It hits the hero standing at the end of it, or else crashes.
@@ -493,22 +498,36 @@ export const archer: EnemyBehavior = (enemy, context) => {
   return action.type === 'attack' ? { type: 'shoot' } : action;
 };
 
-// How many chants the necromancer has begun, and whether one is going on, and whether it has raised
-// what is in the coffins yet.
+// How many chants the necromancer has begun, whether one is going on, and whether it has raised
+// what is in the coffins yet. Also the cone it is gathering, the turns until it strikes, and the
+// turns until it can gather another.
 export interface NecromancerState {
   chants: number;
   isChanting: boolean;
   hasRaised: boolean;
+  cone: Point[] | null;
+  coneTurns: number;
+  coneCooldown: number;
 }
+
+// Placeholder values. The turns before its first cone and between cones, and how many turns the
+// hero has from the sight of the cone to the strike.
+const FIRST_CONE_TURNS = 3;
+const CONE_COOLDOWN = 5;
+const CONE_WARNING_TURNS = 2;
 
 export const createNecromancerState = (): NecromancerState => ({
   chants: 0,
   isChanting: false,
   hasRaised: false,
+  cone: null,
+  coneTurns: 0,
+  coneCooldown: FIRST_CONE_TURNS,
 });
 
-// The necromancer of the second stage. Placeholder values. It shoots from afar, and when it is
-// hurt enough it chants, which wakes the ghouls in two of the coffins of its room.
+// The necromancer of the second stage. Placeholder values. It shoots from afar, sweeps a cone of
+// dark magic over the hero when they come near, and when it is hurt enough it chants, which wakes
+// the ghouls in two of the coffins of its room.
 export const necromancerStats: EnemyStats = {
   name: 'necromancer',
   maxHp: 90,
@@ -519,14 +538,47 @@ export const necromancerStats: EnemyStats = {
   experience: 20,
 };
 
-// Placeholder values. How far it shoots from, and the shares of its health at which it chants.
+// Placeholder values. How far it shoots from, the shares of its health at which it chants, and how
+// far and how wide its cone reaches, as the half of the angle.
 const NECROMANCER_RANGE = 7;
 const CHANT_AT = [0.75, 0.5, 0.25];
+const CONE_RANGE = 5;
+const CONE_HALF_ANGLE = (30 * Math.PI) / 180;
+
+// The tiles of a cone that opens from a tile toward another, as far as the dark magic reaches and
+// nothing solid is in the way. The cone is as wide as its angle makes it, so it is narrow near the
+// necromancer and wide far from it.
+function coneTiles(room: Room, from: Point, toward: Point): Point[] {
+  const aim = Math.atan2(toward.y - from.y, toward.x - from.x);
+  const isSolid = ({ x, y }: Point) => {
+    const tile = room.tiles[y]?.[x] ?? 'void';
+    return tile === 'wall' || tile === 'void' || tile === 'locked-door';
+  };
+  const tiles: Point[] = [];
+  for (let dy = -CONE_RANGE; dy <= CONE_RANGE; dy++) {
+    for (let dx = -CONE_RANGE; dx <= CONE_RANGE; dx++) {
+      const tile = { x: from.x + dx, y: from.y + dy };
+      const distance = Math.hypot(dx, dy);
+      if ((dx === 0 && dy === 0) || distance > CONE_RANGE + 0.5 || isSolid(tile)) {
+        continue;
+      }
+      const off = Math.atan2(dy, dx) - aim;
+      const angle = Math.abs(Math.atan2(Math.sin(off), Math.cos(off)));
+      const world = { isBlocked: isSolid, hasCharacter: () => false };
+      const reaches = isSameTile(traceLine(from, tile, THROWN, world).end, tile);
+      if (angle <= CONE_HALF_ANGLE && reaches) {
+        tiles.push(tile);
+      }
+    }
+  }
+  return tiles;
+}
 
 // Between chants it shoots at the hero from where it stands, and goes after them when it cannot see
-// them. At each share of its health it chants: it stands still behind a shield, so nothing can hurt
-// it, a turn later the ghouls come out of two coffins, and when the hero has dealt with them the
-// shield falls.
+// them. When the hero is near it gathers a cone of dark magic, which shows for a couple of turns
+// and then strikes whoever is still in it. At each share of its health it chants: it stands still
+// behind a shield, so nothing can hurt it, a turn later the ghouls come out of two coffins, and
+// when the hero has dealt with them the shield falls.
 export const necromancer: EnemyBehavior = (enemy, context) => {
   const state = enemy.necromancer!;
   const { room, hero, canSeeHero, occupied } = context;
@@ -541,6 +593,16 @@ export const necromancer: EnemyBehavior = (enemy, context) => {
     }
     return { type: 'wait' };
   }
+  if (state.cone) {
+    state.coneTurns--;
+    if (state.coneTurns > 0) {
+      return { type: 'wait' };
+    }
+    const tiles = state.cone;
+    state.cone = null;
+    state.coneCooldown = CONE_COOLDOWN;
+    return { type: 'cone', tiles };
+  }
   const next = CHANT_AT[state.chants];
   if (next !== undefined && enemy.hp <= enemy.stats.maxHp * next && context.canSummon) {
     state.chants++;
@@ -553,6 +615,19 @@ export const necromancer: EnemyBehavior = (enemy, context) => {
     Math.abs(enemy.position.x - hero.x),
     Math.abs(enemy.position.y - hero.y),
   );
+  if (state.coneCooldown > 0) {
+    state.coneCooldown--;
+  } else if (canSeeHero && distance <= CONE_RANGE) {
+    const tiles = coneTiles(room, enemy.position, hero);
+    const length = Math.hypot(hero.x - enemy.position.x, hero.y - enemy.position.y);
+    state.cone = tiles;
+    state.coneTurns = CONE_WARNING_TURNS;
+    const direction = {
+      x: (hero.x - enemy.position.x) / length,
+      y: (hero.y - enemy.position.y) / length,
+    };
+    return { type: 'gather', tiles, direction };
+  }
   if (canSeeHero && distance <= NECROMANCER_RANGE) {
     return { type: 'shoot' };
   }

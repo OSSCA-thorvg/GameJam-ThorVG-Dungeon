@@ -2,6 +2,7 @@ import type { Paint, ThorVGNamespace } from '@thorvg/webcanvas';
 import {
   CHARACTER_WAIST_HEIGHT,
   createArrowPaint,
+  createDarkPaint,
   createFrostPaint,
   tileDistance,
   type RoomView,
@@ -19,6 +20,8 @@ const BOUNCE_MS = 400;
 const SPLASH_RADIUS = 18;
 // Placeholder value. How long the frost from a frost potion takes to fade.
 const FROST_MS = 700;
+// Placeholder value. How long the dark magic of the necromancer takes to fade.
+const DARK_MS = 700;
 // Placeholder value. How fast the arrow of a trap flies.
 const ARROW_TILES_PER_SECOND = 20;
 
@@ -185,6 +188,39 @@ export function playArrow(
       y: offset.y * progress - CHARACTER_WAIST_HEIGHT,
     });
     arrow.rotate(angle);
+    render();
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Dark magic that covers the tiles of a cone at once and fades out, where the necromancer strikes.
+export function playDark(
+  TVG: ThorVGNamespace,
+  view: RoomView,
+  tiles: Point[],
+  render: () => void,
+): void {
+  const paints = tiles.map((tile) => {
+    const paint = createDarkPaint(TVG);
+    view.placeOverlay(paint, tile.x, tile.y);
+    return paint;
+  });
+
+  let startTime: number | null = null;
+  const step = (time: number) => {
+    startTime ??= time;
+    const progress = (time - startTime) / DARK_MS;
+    if (progress >= 1) {
+      for (const paint of paints) {
+        view.remove(paint);
+      }
+      render();
+      return;
+    }
+    for (const paint of paints) {
+      paint.opacity(Math.round(255 * (1 - progress)));
+    }
     render();
     requestAnimationFrame(step);
   };

@@ -4,7 +4,14 @@ import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import heroIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
 import { createDamageNumbers } from './damageNumbers';
-import { playArrow, playBounce, playFrost, playShatter, playThrow } from './throwEffect';
+import {
+  playArrow,
+  playBounce,
+  playDark,
+  playFrost,
+  playShatter,
+  playThrow,
+} from './throwEffect';
 import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   alertEnemy,
@@ -1417,6 +1424,29 @@ function startChargeWarning(lane: Point[], direction: Point) {
   stopWalking();
 }
 
+// The necromancer gathers a cone of dark magic and shows it. The hero has a couple of turns to
+// leave the cone.
+function startConeWarning(tiles: Point[], direction: Point) {
+  stopChargeWarning();
+  chargeWarning = showLaneWarning(TVG, roomView, tiles, direction, renderCanvas);
+  messageLog.add('The necromancer gathers dark magic!');
+  stopWalking();
+}
+
+// Placeholder value. How much the dark magic of the necromancer hurts. Armor does not hold it back.
+const CONE_DAMAGE: [min: number, max: number] = [10, 14];
+
+// The cone strikes. Whoever stands in it takes the damage, and the tiles flash dark.
+function strikeCone(tiles: Point[]) {
+  stopChargeWarning();
+  playDark(TVG, roomView, tiles, renderCanvas);
+  if (tiles.some((tile) => isSameTile(tile, heroPosition))) {
+    messageLog.add('The dark magic strikes you!');
+    damageHero(normalIntRange(Math.random, ...CONE_DAMAGE));
+    stopWalking();
+  }
+}
+
 // Placeholder value. How long the centipede takes for each tile of its charge.
 const CHARGE_STEP_MS = 55;
 
@@ -2252,6 +2282,15 @@ function runEnemyTurn(onDone: () => void) {
         actNext();
         break;
       }
+      case 'gather':
+        showEnemy(enemy);
+        startConeWarning(action.tiles, action.direction);
+        actNext();
+        break;
+      case 'cone':
+        strikeCone(action.tiles);
+        actNext();
+        break;
       case 'unshield':
         delete enemy.statuses.shielded;
         showEnemy(enemy);
