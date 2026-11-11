@@ -4,7 +4,7 @@ import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import heroIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
 import { createDamageNumbers } from './damageNumbers';
-import { playBounce, playFrost, playShatter, playThrow } from './throwEffect';
+import { playArrow, playBounce, playFrost, playShatter, playThrow } from './throwEffect';
 import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   alertEnemy,
@@ -72,6 +72,18 @@ import {
   type ItemStack,
 } from './items';
 import { generateMap, pickItemTiles, type GeneratedMap } from './mapgen';
+import {
+  hasTraps,
+  isWithin,
+  NOTICE_CHANCE,
+  ARROW_RANGE,
+  TRAP_DAMAGE,
+  TRAP_LABELS,
+  trapCount,
+  trapKinds,
+  type Trap,
+  type TrapKind,
+} from './traps';
 import { SEARCH_RADIUS } from './search';
 import { playSearch } from './searchEffect';
 import { createMessageLog } from './messageLog';
@@ -106,6 +118,7 @@ import {
   createSurpriseMark,
   createCentipedePart,
   createTargetedText,
+  createTrapPaint,
   createDummyEnemy,
   createEnemyHealthBar,
   createItemPaint,
@@ -382,14 +395,23 @@ function createLevel() {
     );
   });
   const { loot, hasMimic } = floorContents(random);
-  const tiles = pickItemTiles(room, loot.length + (hasMimic ? 1 : 0), random);
+  const itemCount = loot.length + (hasMimic ? 1 : 0);
+  const numberOfTraps = hasTraps(currentStage(), floorInStage(), FLOORS_PER_STAGE)
+    ? randomInt(random, ...trapCount(currentStage()))
+    : 0;
+  // The traps take the tiles after those of the items, so a floor without traps stays as it was.
+  const picked = pickItemTiles(room, itemCount + numberOfTraps, random);
+  const tiles = picked.slice(0, itemCount);
   const things = hideInChests(random, loot.slice(0, tiles.length));
   // The mimic takes a tile of its own, so it adds to the chests instead of replacing one.
   if (hasMimic && tiles.length > loot.length) {
     enemies.push(createMimic(tiles[loot.length], random));
   }
   const floorItems = things.map((thing, index) => ({ thing, position: tiles[index] }));
-  return finishLevel(room, enemies, floorItems, []);
+  const trapSpecs = picked
+    .slice(itemCount)
+    .map((position) => ({ position, kind: pick(random, trapKinds(currentStage())) }));
+  return finishLevel(room, enemies, floorItems, [], trapSpecs);
 }
 
 function finishLevel(
@@ -397,6 +419,7 @@ function finishLevel(
   enemies: Enemy[],
   floorItems: { thing: GroundThing; position: Point }[],
   signs: Sign[],
+  trapSpecs: { position: Point; kind: TrapKind }[] = [],
 ) {
   const roomView = createRoomView(TVG, room);
   return {
@@ -414,11 +437,23 @@ function finishLevel(
     enemies,
     floorItems,
     signs,
+    trapSpecs,
   };
 }
 
-let { room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems, signs } =
-  createLevel();
+let {
+  room,
+  explored,
+  inView,
+  seenEnemies,
+  roomView,
+  hazards,
+  hero,
+  enemies,
+  floorItems,
+  signs,
+  trapSpecs,
+} = createLevel();
 let heroPosition = room.start;
 let heroHp = HERO_MAX_HP;
 let heroMaxHp = HERO_MAX_HP;
@@ -460,6 +495,7 @@ const startingEquipment = () => (floor === 0 ? createEmptyEquipment() : createSt
 let inventory: ItemStack[] = startingInventory();
 let equipment: Equipment = startingEquipment();
 let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
+let traps: Trap[] = [];
 
 function createItemContext(): ItemContext {
   return {
@@ -1077,6 +1113,7 @@ function placeEnemy(enemy: Enemy, tile: Point) {
 function startLevel() {
   visionState = '';
   groundItems = [];
+  traps = trapSpecs.map(({ position, kind }) => ({ position, kind, state: 'hidden', paint: null }));
   stopWalking();
   isWalkingToStairs = false;
   isWalking = false;
@@ -1146,8 +1183,19 @@ function replaceLevel() {
   stopChargeWarning();
   damageNumbers.clear();
   mapScene.remove(roomView.scene);
-  ({ room, explored, inView, seenEnemies, roomView, hazards, hero, enemies, floorItems, signs } =
-    createLevel());
+  ({
+    room,
+    explored,
+    inView,
+    seenEnemies,
+    roomView,
+    hazards,
+    hero,
+    enemies,
+    floorItems,
+    signs,
+    trapSpecs,
+  } = createLevel());
   startLevel();
 }
 
@@ -1252,18 +1300,219 @@ function moveEnemy(enemy: Enemy, tile: Point) {
   const trail = [enemy.position, ...enemy.followers.map(({ position }) => position)];
   placeEnemy(enemy, tile);
   enemy.followers.forEach((segment, index) => placeEnemy(segment, trail[index]));
+  triggerTrapUnder(enemy);
 }
 
 function occupiedTiles(except?: Enemy): Point[] {
   return enemies.filter((enemy) => enemy !== except).map((enemy) => enemy.position);
 }
 
-// The tiles the hero's paths go around: closed chests, and the enemies the hero has seen, so that
-// the paths cannot reveal unseen ones. A path may end on `end`, so whatever is there is left out.
+// The tiles the hero's paths go around: closed chests, traps that are known, and the enemies the
+// hero has seen, so that the paths cannot reveal unseen ones. A path may end on `end`, so whatever
+// is there is left out, which makes a walk to a known trap step onto it.
 function heroObstacles(end?: Point): Point[] {
-  const tiles = [...[...seenEnemies].map((enemy) => enemy.position), ...chestTiles()];
+  const knownTraps = traps.filter(({ state }) => state === 'known').map(({ position }) => position);
+  const tiles = [...[...seenEnemies].map((enemy) => enemy.position), ...chestTiles(), ...knownTraps];
   return tiles.filter((tile) => !isSameTile(tile, end ?? null));
 }
+
+function trapAt(tile: Point): Trap | undefined {
+  return traps.find(({ position }) => isSameTile(position, tile));
+}
+
+// Draws the plate of a trap that is known or spent.
+function showTrap(trap: Trap) {
+  if (trap.paint) {
+    roomView.remove(trap.paint);
+  }
+  trap.paint = trap.state === 'hidden' ? null : createTrapPaint(TVG, trap.kind, trap.state);
+  if (trap.paint) {
+    roomView.placeOnFloor(trap.paint, trap.position.x, trap.position.y);
+  }
+}
+
+// Finding a trap stops the walk, so the hero does not go on along a path that was chosen blind.
+function findTrap(trap: Trap) {
+  trap.state = 'known';
+  showTrap(trap);
+  messageLog.add(`You found ${TRAP_LABELS[trap.kind]}.`);
+  stopWalking();
+}
+
+// After each action, the hero may find a hidden trap on a tile next to them.
+function noticeTraps() {
+  for (const trap of traps) {
+    if (
+      trap.state === 'hidden' &&
+      isWithin(trap.position, heroPosition, 1) &&
+      Math.random() < NOTICE_CHANCE
+    ) {
+      findTrap(trap);
+    }
+  }
+}
+
+// A search finds every hidden trap in reach, even behind a wall.
+function searchArea() {
+  const hidden = traps.filter(
+    ({ state, position }) => state === 'hidden' && isWithin(position, heroPosition, SEARCH_RADIUS),
+  );
+  hidden.forEach(findTrap);
+  if (hidden.length === 0) {
+    messageLog.add('You search the area and find nothing.');
+  }
+}
+
+// A search lights the area around the hero, and finds what is hidden there once the light has
+// passed. It takes a turn.
+function startSearch() {
+  stopWalking();
+  const tiles: Point[] = [];
+  for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
+    for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
+      const tile = { x: heroPosition.x + dx, y: heroPosition.y + dy };
+      const kind = room.tiles[tile.y]?.[tile.x] ?? 'void';
+      if ((dx !== 0 || dy !== 0) && kind !== 'void') {
+        tiles.push(tile);
+      }
+    }
+  }
+  finishAttackEffect = playSearch({
+    TVG,
+    view: roomView,
+    center: heroPosition,
+    tiles,
+    render: renderCanvas,
+    onEnd() {
+      finishAttackEffect = null;
+      searchArea();
+      passTurn(() => {});
+    },
+  });
+}
+
+// What sets a trap off: the hero or an enemy stepping on it, or a thrown item landing on it.
+type TrapTrigger = 'hero' | 'item' | Enemy;
+
+// What an arrow trap shoots: the hero, or an enemy.
+type ArrowTarget = 'hero' | Enemy;
+
+// The character nearest to an arrow trap within its range that nothing blocks the way to. It may be
+// the hero or an enemy, and is the one standing on the trap when someone stepped on it.
+function arrowTarget(from: Point): ArrowTarget | null {
+  const candidates: { who: ArrowTarget; position: Point }[] = [
+    { who: 'hero', position: heroPosition },
+    ...enemies
+      .filter((enemy) => enemy.state !== 'disguised')
+      .map((enemy) => ({ who: enemy, position: enemy.position })),
+  ];
+  const distance = ({ position }: { position: Point }) =>
+    Math.max(Math.abs(position.x - from.x), Math.abs(position.y - from.y));
+  const isClear = ({ position }: { position: Point }) =>
+    isSameTile(traceTo(position, THROWN, false, from).end, position);
+  return (
+    candidates
+      .filter(({ position }) => isWithin(from, position, ARROW_RANGE))
+      .sort((a, b) => distance(a) - distance(b))
+      .find(isClear)?.who ?? null
+  );
+}
+
+// Shoots an arrow from a trap at the hero or an enemy, which it hurts when the arrow lands.
+function shootArrow(from: Point, target: ArrowTarget, damage: number) {
+  const to = target === 'hero' ? heroPosition : target.position;
+  playArrow(TVG, roomView, from, to, renderCanvas, () => {
+    if (target === 'hero') {
+      if (!isGameOver) {
+        messageLog.add('An arrow hits you!');
+        damageHero(damage);
+        if (heroHp === 0) {
+          endGame();
+        }
+      }
+      return;
+    }
+    if (!enemies.includes(target)) {
+      return;
+    }
+    hurtEnemy(target, damage);
+    if (target.hp === 0) {
+      killEnemy(target);
+    }
+  });
+}
+
+// A trap goes off once. Spikes hurt whoever stepped on them. An arrow is shot at the nearest
+// character within its range, so it hits whoever stepped on the trap, and when a thrown item set it
+// off, whoever is nearest, if anyone is in range. The log tells of what happens in view only, so it
+// does not give away what happens elsewhere.
+function setOffTrap(trap: Trap, by: TrapTrigger) {
+  trap.state = 'spent';
+  showTrap(trap);
+  const isHero = by === 'hero';
+  if (isHero) {
+    stopWalking();
+  }
+  const tellsOf = isHero || isInView(trap.position);
+  const lead = isHero
+    ? 'You stepped on a plate!'
+    : by === 'item'
+      ? 'Something set off a plate!'
+      : `The ${by.stats.name} stepped on a plate!`;
+  const damage = normalIntRange(Math.random, ...TRAP_DAMAGE[trap.kind]);
+  const hurtSteppingEnemy = () => {
+    if (typeof by === 'object') {
+      hurtEnemy(by, damage);
+    }
+  };
+
+  if (trap.kind === 'spike') {
+    if (tellsOf) {
+      messageLog.add(`${lead} Spikes jab up out of the floor!`);
+    }
+    if (isHero) {
+      damageHero(damage);
+    }
+    hurtSteppingEnemy();
+    return;
+  }
+
+  const target = arrowTarget(trap.position);
+  if (tellsOf) {
+    messageLog.add(
+      target
+        ? `${lead} An arrow shoots out of the floor!`
+        : `${lead} An arrow shoots out of the floor and finds no one.`,
+    );
+  }
+  if (target) {
+    if (target === 'hero') {
+      stopWalking();
+    }
+    shootArrow(trap.position, target, damage);
+  }
+}
+
+// The hero stepping on a trap, but a levitating hero floats over it.
+function triggerTrapAt(tile: Point) {
+  const trap = trapAt(tile);
+  if (trap && trap.state !== 'spent' && !hasStatus(heroStatuses, 'levitating')) {
+    setOffTrap(trap, 'hero');
+  }
+}
+
+// An enemy stepping on a trap, which it does only when the trap is hidden, as it goes around the
+// ones that are known. A levitating enemy floats over it.
+function triggerTrapUnder(enemy: Enemy) {
+  const trap = trapAt(enemy.position);
+  if (trap && trap.state !== 'spent' && !hasStatus(enemy.statuses, 'levitating')) {
+    setOffTrap(trap, enemy);
+  }
+}
+
+// The tiles that enemies go around, which are the traps the hero has found.
+const knownTrapTiles = () =>
+  traps.filter(({ state }) => state === 'known').map(({ position }) => position);
 
 function showDamage(amount: number, tile: Point, target: DamageTarget) {
   damageNumbers.show(roomView, createDamageNumber(TVG, amount, target), tile);
@@ -1391,9 +1640,11 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
   });
 }
 
-// Ends one action of the hero. A hasted hero takes two actions in each turn of the enemies.
-// An enemy that already acted in this turn, like a mimic that bit the hero opening it, waits.
+// Ends one action of the hero. A hasted hero takes two actions in each turn of the enemies, and may
+// find a trap after each of them. An enemy that already acted in this turn, like a mimic that bit
+// the hero opening it, waits.
 function passTurn(onDone: () => void, hasActed?: Enemy) {
+  noticeTraps();
   if (hasStatus(heroStatuses, 'haste') && !hasActedOnce) {
     hasActedOnce = true;
     canvas.update().render();
@@ -1565,7 +1816,8 @@ function runEnemyTurn(onDone: () => void, hasActed?: Enemy) {
     const canSeeHero = canEnemySeeHero(enemy);
     // A sleeping enemy does not watch the hero, so the hero's attack surprises it.
     enemy.hasSeenHero = canSeeHero && enemy.state !== 'sleeping';
-    if (isHelpless(enemy.statuses)) {
+    // An enemy that a trap or a fire ended in this turn does not act any more.
+    if (isHelpless(enemy.statuses) || enemy.hp === 0) {
       actNext();
       return;
     }
@@ -1573,7 +1825,7 @@ function runEnemyTurn(onDone: () => void, hasActed?: Enemy) {
       room,
       hero: heroPosition,
       canSeeHero,
-      occupied: [...occupiedTiles(enemy), ...chestTiles()],
+      occupied: [...occupiedTiles(enemy), ...chestTiles(), ...knownTrapTiles()],
     });
 
     // Shown where the enemy ends its turn, so the mark does not stay behind when it moves.
@@ -1771,6 +2023,7 @@ function walk() {
   // Seeing a new enemy on this step empties the path, which must not count as arriving.
   const hasArrived = path.length === 0;
   placeHero(next);
+  triggerTrapAt(next);
   // As in Shattered Pixel Dungeon, items are only picked up on the tile the player chose.
   const hasPickedUp = hasArrived && !attackTarget && !useTarget && pickUpItems(next);
 
@@ -1790,8 +2043,13 @@ function cannotAct() {
 
 // A closed door stops what flies through it. With `landsOnDoor`, what is thrown at the door itself
 // falls on it, which opens it.
-function traceTo(target: Point, rule: PathRule, landsOnDoor = false): Trajectory {
-  return traceLine(heroPosition, target, rule, {
+function traceTo(
+  target: Point,
+  rule: PathRule,
+  landsOnDoor = false,
+  from = heroPosition,
+): Trajectory {
+  return traceLine(from, target, rule, {
     isBlocked({ x, y }) {
       const tile = room.tiles[y]?.[x] ?? 'void';
       const isTarget = x === target.x && y === target.y;
@@ -1810,39 +2068,6 @@ function traceTo(target: Point, rule: PathRule, landsOnDoor = false): Trajectory
 
 function canTarget(tile: Point | null): tile is Point {
   return tile !== null && targeting !== null && targeting.request.canPick(tile);
-}
-
-// A search takes a turn and finds what is hidden nearby. Nothing is hidden yet.
-function searchArea() {
-  messageLog.add('You search the area and find nothing.');
-}
-
-// A search lights the area around the hero, and finds what is hidden there once the light has
-// passed. It takes a turn.
-function startSearch() {
-  stopWalking();
-  const tiles: Point[] = [];
-  for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
-    for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
-      const tile = { x: heroPosition.x + dx, y: heroPosition.y + dy };
-      const kind = room.tiles[tile.y]?.[tile.x] ?? 'void';
-      if ((dx !== 0 || dy !== 0) && kind !== 'void') {
-        tiles.push(tile);
-      }
-    }
-  }
-  finishAttackEffect = playSearch({
-    TVG,
-    view: roomView,
-    center: heroPosition,
-    tiles,
-    render: renderCanvas,
-    onEnd() {
-      finishAttackEffect = null;
-      searchArea();
-      passTurn(() => {});
-    },
-  });
 }
 
 // While examining, the second press of the button searches.
@@ -1954,7 +2179,7 @@ function pressTileAt(position: Point, isMouse: boolean) {
     path = pathToUse(target);
     useTarget = target;
   } else {
-    path = findPath(room, heroPosition, target, heroObstacles(), isExplored);
+    path = findPath(room, heroPosition, target, heroObstacles(target), isExplored);
   }
 
   if (!isWalking) {
@@ -2189,6 +2414,10 @@ function throwItem(name: ItemName) {
           } else {
             dropItem(name, end);
           }
+          const trap = trapAt(end);
+          if (trap && trap.state !== 'spent') {
+            setOffTrap(trap, 'item');
+          }
           updateVision();
           passTurn(() => {});
         },
@@ -2218,6 +2447,18 @@ function describeTile(tile: Point): string[] {
   const things = itemsAt(tile);
   if (things.length > 0) {
     return things.map(({ thing }) => describeThing(thing));
+  }
+  const trap = trapAt(tile);
+  if (trap?.state === 'known') {
+    return [
+      trap.kind === 'arrow'
+        ? 'An arrow trap. When it is activated, it shoots the nearest character within ' +
+          `${ARROW_RANGE} tiles.`
+        : 'A spike trap. When it is activated, it hurts whoever stands on it.',
+    ];
+  }
+  if (trap?.state === 'spent') {
+    return ['A plate that has already gone off.'];
   }
   return [describeTerrain(tile)];
 }

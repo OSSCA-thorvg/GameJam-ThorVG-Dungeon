@@ -1,5 +1,11 @@
 import type { Paint, ThorVGNamespace } from '@thorvg/webcanvas';
-import { CHARACTER_WAIST_HEIGHT, createFrostPaint, tileDistance, type RoomView } from './render';
+import {
+  CHARACTER_WAIST_HEIGHT,
+  createArrowPaint,
+  createFrostPaint,
+  tileDistance,
+  type RoomView,
+} from './render';
 import type { Point } from './room';
 
 // Same as MissileSprite in Shattered Pixel Dungeon: 240 pixels per second on 16 pixel tiles,
@@ -13,6 +19,8 @@ const BOUNCE_MS = 400;
 const SPLASH_RADIUS = 18;
 // Placeholder value. How long the frost from a frost potion takes to fade.
 const FROST_MS = 700;
+// Placeholder value. How fast the arrow of a trap flies.
+const ARROW_TILES_PER_SECOND = 20;
 
 export interface Throw {
   view: RoomView;
@@ -139,6 +147,44 @@ export function playFrost(
     for (const paint of paints) {
       paint.opacity(Math.round(255 * (1 - progress)));
     }
+    render();
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Flies an arrow at waist height between two tiles, then calls onLand. It does not hold up the
+// game, so what the arrow does comes with the landing.
+export function playArrow(
+  TVG: ThorVGNamespace,
+  view: RoomView,
+  from: Point,
+  to: Point,
+  render: () => void,
+  onLand: () => void,
+): void {
+  const arrow = createArrowPaint(TVG);
+  const offset = tileDistance(from, to);
+  const angle = (Math.atan2(offset.y, offset.x) * 180) / Math.PI;
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  const durationMs = Math.max(1, (1000 * distance) / ARROW_TILES_PER_SECOND);
+  view.placeOverlay(arrow, from.x, from.y);
+
+  let startTime: number | null = null;
+  const step = (time: number) => {
+    startTime ??= time;
+    const progress = Math.min(1, (time - startTime) / durationMs);
+    if (progress >= 1) {
+      view.remove(arrow);
+      onLand();
+      render();
+      return;
+    }
+    view.nudge(arrow, from, {
+      x: offset.x * progress,
+      y: offset.y * progress - CHARACTER_WAIST_HEIGHT,
+    });
+    arrow.rotate(angle);
     render();
     requestAnimationFrame(step);
   };

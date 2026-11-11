@@ -1027,6 +1027,64 @@ export function createSearchPaint(TVG: ThorVGNamespace): Shape {
   return shape;
 }
 
+const TRAP_PLATE_SCALE = 0.6;
+const TRAP_COLORS = {
+  known: { fill: [86, 48, 48, 255], edge: [210, 90, 70, 255] },
+  spent: { fill: [70, 72, 80, 255], edge: [110, 112, 120, 255] },
+} as const;
+
+// The pressure plate of a trap on a tile's floor, centered on the paint's local origin, with spikes
+// or an arrow on it by the kind. A spent plate is gray.
+export function createTrapPaint(
+  TVG: ThorVGNamespace,
+  kind: 'spike' | 'arrow',
+  state: 'known' | 'spent',
+): Scene {
+  const halfWidth = (TILE_WIDTH / 2) * TRAP_PLATE_SCALE;
+  const halfHeight = (TILE_HEIGHT / 2) * TRAP_PLATE_SCALE;
+  const { fill, edge } = TRAP_COLORS[state];
+  const edgeColor: Color = [edge[0], edge[1], edge[2]];
+
+  const plate = new TVG.Shape()
+    .moveTo(0, -halfHeight)
+    .lineTo(halfWidth, 0)
+    .lineTo(0, halfHeight)
+    .lineTo(-halfWidth, 0)
+    .close();
+  plate.fill(fill[0], fill[1], fill[2], fill[3]);
+  plate.stroke({ width: 1.5, color: [...edgeColor, 255], join: TVG.StrokeJoin.Round });
+
+  const mark = new TVG.Shape();
+  if (kind === 'spike') {
+    for (const x of [-7, 0, 7]) {
+      mark.moveTo(x - 3.5, 3).lineTo(x, -4).lineTo(x + 3.5, 3).close();
+    }
+    mark.fill(...edgeColor, 255);
+  } else {
+    mark.moveTo(-9, 0).lineTo(5, 0);
+    mark.moveTo(10, 0).lineTo(4, -4).lineTo(4, 4).close();
+    mark.fill(...edgeColor, 255);
+    mark.stroke({ width: 1.5, color: [...edgeColor, 255], join: TVG.StrokeJoin.Round });
+  }
+
+  const scene = new TVG.Scene();
+  scene.add(plate);
+  scene.add(mark);
+  return scene;
+}
+
+const ARROW_COLOR: Color = [214, 184, 132];
+
+// An arrow in flight, pointing right and centered on the paint's local origin.
+export function createArrowPaint(TVG: ThorVGNamespace): Shape {
+  const shape = new TVG.Shape();
+  shape.moveTo(-9, 0).lineTo(5, 0);
+  shape.moveTo(10, 0).lineTo(4, -3.5).lineTo(4, 3.5).close();
+  shape.fill(...ARROW_COLOR, 255);
+  shape.stroke({ width: 2, color: [...ARROW_COLOR, 255], join: TVG.StrokeJoin.Round });
+  return shape;
+}
+
 // Frost covering a tile's floor, centered on the paint's local origin.
 export function createFrostPaint(TVG: ThorVGNamespace): Shape {
   const shape = appendTileDiamond(new TVG.Shape());
