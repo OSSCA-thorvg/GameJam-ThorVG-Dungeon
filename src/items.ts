@@ -533,12 +533,19 @@ export const STARTING_STRENGTH = 10;
 // above 10 does in stat_modify_damage() of Dungeon Crawl Stone Soup.
 const DAMAGE_PER_STRENGTH = 0.025;
 
+// A surprise attack rolls from a third of the way up the range to its maximum, so the most it can
+// do does not change, but a high roll is likelier. A range of 1 to 10 becomes 4 to 10.
+function surpriseRange([min, max]: [number, number]): [number, number] {
+  return [min + Math.floor((max - min) / 3), max];
+}
+
 // Rolls the damage of an attack with the equipped weapon, scaled by strength. The result is rounded
-// up or down at random, so that every point of strength raises the average damage a little.
+// up or down at random, so that every point of strength raises the average damage a little. A
+// weapon that rolls a surprise attack its own way keeps its range.
 export function rollDamage(equipment: Equipment, strength: number, isSurprise: boolean): number {
   const weapon = equipment.weapon ? ITEMS[equipment.weapon] : undefined;
-  const [min, max] =
-    (isSurprise ? weapon?.surpriseDamage : undefined) ?? weapon?.damage ?? UNARMED_DAMAGE;
+  const range = weapon?.damage ?? UNARMED_DAMAGE;
+  const [min, max] = isSurprise ? (weapon?.surpriseDamage ?? surpriseRange(range)) : range;
   const scale = 1 + (strength - STARTING_STRENGTH) * DAMAGE_PER_STRENGTH;
   return roundRandomly(Math.random, normalIntRange(Math.random, min, max) * scale);
 }
