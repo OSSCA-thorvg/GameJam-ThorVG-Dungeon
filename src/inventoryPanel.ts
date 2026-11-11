@@ -21,6 +21,8 @@ export interface ItemDescription {
 export interface InventoryPanelOptions {
   getStacks(): ItemStack[];
   getEquipment(): Equipment;
+  // The hero's strength now, which the strength an item needs is shown against.
+  getStrength(): number;
   describeItem(name: ItemName): ItemDescription;
   onOpen(): void;
   onUse(name: ItemName): void;
@@ -42,6 +44,7 @@ type Selection = { from: 'bag'; name: ItemName } | { from: 'equipment'; slot: Eq
 export function createInventoryPanel({
   getStacks,
   getEquipment,
+  getStrength,
   describeItem,
   onOpen,
   onUse,
@@ -85,16 +88,32 @@ export function createInventoryPanel({
     const title = document.createElement('strong');
     title.textContent = look.displayName;
     const description = document.createElement('p');
+    description.className = 'item-description';
     description.textContent = reason ?? look.description;
-    const stats = [
-      item.damage && `Damage: ${item.damage[0]}-${item.damage[1]}`,
-      item.armor && `Armor: ${item.armor[0]}-${item.armor[1]}`,
-      item.strength !== undefined ? `Strength: ${item.strength}` : undefined,
-    ].filter((line) => line !== undefined);
-    const statLines = stats.map((line) => {
+    // The number of the strength line shows whether the hero has the strength the item needs.
+    const stats: { label: string; value: string; tone?: 'enough' | 'short' }[] = [];
+    if (item.damage) {
+      stats.push({ label: 'Damage', value: `${item.damage[0]}-${item.damage[1]}` });
+    }
+    if (item.armor) {
+      stats.push({ label: 'Armor', value: `${item.armor[0]}-${item.armor[1]}` });
+    }
+    if (item.strength !== undefined) {
+      stats.push({
+        label: 'Strength',
+        value: String(item.strength),
+        tone: getStrength() >= item.strength ? 'enough' : 'short',
+      });
+    }
+    const statLines = stats.map(({ label, value, tone }) => {
       const element = document.createElement('p');
       element.className = 'item-stat';
-      element.textContent = line;
+      const number = document.createElement('span');
+      number.textContent = value;
+      if (tone) {
+        number.className = tone;
+      }
+      element.append(`${label}: `, number);
       return element;
     });
 

@@ -796,6 +796,7 @@ function updateHeroLook() {
 const inventoryPanel = createInventoryPanel({
   getStacks: () => inventory,
   getEquipment: () => equipment,
+  getStrength: currentStrength,
   describeItem(name) {
     const look = potionLore.lookOf(name);
     const blockedReason = look.isKnown
