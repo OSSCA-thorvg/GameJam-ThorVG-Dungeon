@@ -223,11 +223,12 @@ const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   heal: [120, 230, 120],
 };
 // Placeholder looks of each kind of enemy: its color, and its size against the hero.
-const ENEMY_LOOKS: Record<EnemyKind | UndeadKind, { color: Color; scale: number }> = {
+const ENEMY_LOOKS: Record<EnemyKind | UndeadKind | 'ghost', { color: Color; scale: number }> = {
   weak: { color: [176, 112, 96], scale: 0.8 },
   medium: { color: [196, 64, 64], scale: 1 },
   strong: { color: [130, 50, 150], scale: 1.2 },
   ghoul: { color: [128, 150, 112], scale: 1 },
+  ghost: { color: [176, 196, 220], scale: 1 },
 };
 // Placeholder colors of each effect, for its name over a character and its icon on the screen.
 export const STATUS_COLORS: Record<StatusName, Color> = {
@@ -240,6 +241,7 @@ export const STATUS_COLORS: Record<StatusName, Color> = {
   burning: [255, 140, 40],
   poisoned: [140, 200, 70],
   stunned: [255, 190, 60],
+  weakened: [170, 130, 220],
 };
 // Placeholder colors, laid over a character with the alpha at the end.
 const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {
@@ -996,7 +998,10 @@ export function createCentipedePart(TVG: ThorVGNamespace, isHead: boolean): Scen
   return scene;
 }
 
-export function createDummyEnemy(TVG: ThorVGNamespace, kind: EnemyKind | UndeadKind): Scene {
+export function createDummyEnemy(
+  TVG: ThorVGNamespace,
+  kind: EnemyKind | UndeadKind | 'ghost',
+): Scene {
   const { color, scale } = ENEMY_LOOKS[kind];
   const size = CHARACTER_SIZE * scale;
   const shape = new TVG.Shape();

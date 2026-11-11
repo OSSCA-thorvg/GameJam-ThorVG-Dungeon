@@ -26,6 +26,7 @@ import {
   HERO_EVASION,
   ENEMY_KINDS,
   HERO_MAX_HP,
+  ghostStats,
   mimicStats,
   pickEnemyKind,
   rollHit,
@@ -343,8 +344,7 @@ interface Coffin extends CoffinSpec {
 const AMBUSH_CHANCE = 0.2;
 const MAX_AMBUSHES = 4;
 // Placeholder value. How many of the places that enemies are put at random on the second stage
-// hold a ghoul. The ghouls come mostly out of coffins, and wandering enemies of another kind are
-// to take the rest of those places.
+// hold a ghoul. The ghouls come mostly out of coffins, and the rest of the places hold a ghost.
 const WANDERING_GHOUL_CHANCE = 0.3;
 // How close the hero must come to a coffin in view, in tiles, for its undead to burst out.
 const AMBUSH_DISTANCE = 1;
@@ -436,16 +436,23 @@ function createLevel() {
     random,
   });
 
-  // The second stage has enemies of its own, which are only the ghouls for now, and few of them
-  // wander about. The enemies of the first stage do not turn up there.
-  const places =
-    currentStage() >= 1
-      ? room.monsters.filter(() => random() < WANDERING_GHOUL_CHANCE)
-      : room.monsters;
-  const enemies = places.map((position) => {
-    const kind = currentStage() >= 1 ? ('ghoul' as const) : pickEnemyKind(random, floor);
-    return createEnemy(
-      kind === 'ghoul' ? UNDEAD_KINDS.ghoul : ENEMY_KINDS[kind],
+  // The second stage has enemies of its own, the ghouls and the ghosts, with few ghouls wandering
+  // about, as most come out of coffins. The enemies of the first stage do not turn up there.
+  const enemies = room.monsters.map((position) => {
+    const isSecondStage = currentStage() >= 1;
+    const kind = isSecondStage
+      ? random() < WANDERING_GHOUL_CHANCE
+        ? ('ghoul' as const)
+        : ('ghost' as const)
+      : pickEnemyKind(random, floor);
+    const stats =
+      kind === 'ghoul'
+        ? UNDEAD_KINDS.ghoul
+        : kind === 'ghost'
+          ? ghostStats
+          : ENEMY_KINDS[kind];
+    const enemy = createEnemy(
+      stats,
       position,
       random() < ASLEEP_CHANCE,
       createDummyEnemy(TVG, kind),
@@ -453,6 +460,11 @@ function createLevel() {
       createSleepMark(TVG),
       chaser,
     );
+    // A ghost floats for good, so the hazards of the floor do not touch it.
+    if (kind === 'ghost') {
+      enemy.statuses.levitating = Infinity;
+    }
+    return enemy;
   });
   const { loot, hasMimic } = floorContents(random);
   const itemCount = loot.length + (hasMimic ? 1 : 0);
@@ -525,6 +537,13 @@ let heroExperience = 0;
 let heroStrength = STARTING_STRENGTH;
 let heroGold = 0;
 let heroStatuses: Statuses = {};
+// Placeholder values. The touch of a ghost lowers the hero's strength by this much for this many
+// turns, and another touch starts the turns again, so the strength never drops further.
+const WEAKENED_STRENGTH = 1;
+const WEAKENED_TURNS = 10;
+// The hero's strength now. What gear asks for is measured against it.
+const currentStrength = () =>
+  heroStrength - (hasStatus(heroStatuses, 'weakened') ? WEAKENED_STRENGTH : 0);
 let heroHunger = createHunger();
 // Whether a hasted hero already took the first of their two actions in this turn.
 let hasActedOnce = false;
@@ -720,9 +739,10 @@ function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
 }
 
 const heroAccuracy = () =>
-  (HERO_ACCURACY + (heroLevel - 1) * LEVEL_UP_ACCURACY) * accuracyFactor(equipment, heroStrength);
+  (HERO_ACCURACY + (heroLevel - 1) * LEVEL_UP_ACCURACY) *
+  accuracyFactor(equipment, currentStrength());
 const heroEvasion = () =>
-  (HERO_EVASION + (heroLevel - 1) * LEVEL_UP_EVASION) * evasionFactor(equipment, heroStrength);
+  (HERO_EVASION + (heroLevel - 1) * LEVEL_UP_EVASION) * evasionFactor(equipment, currentStrength());
 const experienceToLevelUp = () => heroLevel * EXPERIENCE_PER_LEVEL;
 
 function levelUp() {
@@ -745,7 +765,8 @@ function gainExperience(amount: number) {
 
 function showHeroStats() {
   const experience = `XP ${heroExperience}/${experienceToLevelUp()}`;
-  statsLabel.textContent = `Lv ${heroLevel} · ${experience} · Str ${heroStrength} · ${heroGold}G`;
+  const strength = `Str ${currentStrength()}`;
+  statsLabel.textContent = `Lv ${heroLevel} · ${experience} · ${strength} · ${heroGold}G`;
   statusBar.show(heroStatuses, heroHunger);
 }
 
@@ -780,7 +801,7 @@ const inventoryPanel = createInventoryPanel({
     const blockedReason = look.isKnown
       ? (ITEMS[name].blockedReason?.(createItemContext()) ?? null)
       : null;
-    const tooHeavy = tooHeavyMessage(name, heroStrength);
+    const tooHeavy = tooHeavyMessage(name, currentStrength());
     const description = tooHeavy ? `${look.description} ${tooHeavy}` : look.description;
     return { ...look, description, blockedReason };
   },
@@ -1342,7 +1363,7 @@ function playCharge(enemy: Enemy, path: Point[], hitsHero: boolean, onDone: () =
     if (hitsHero) {
       messageLog.add('The giant centipede slams into you!');
       const damage = normalIntRange(Math.random, ...CHARGE_DAMAGE);
-      damageHero(Math.max(0, damage - rollArmor(equipment, heroStrength)));
+      damageHero(Math.max(0, damage - rollArmor(equipment, currentStrength())));
       showHeroStats();
       stopWalking();
       if (heroHp === 0) {
@@ -1784,9 +1805,13 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
         const damage = isAmbush
           ? enemy.stats.damage[1]
           : normalIntRange(Math.random, ...enemy.stats.damage);
-        const dealt = Math.min(heroHp, Math.max(0, damage - rollArmor(equipment, heroStrength)));
+        const armor = rollArmor(equipment, currentStrength());
+        const dealt = Math.min(heroHp, Math.max(0, damage - armor));
         damageHero(dealt);
         healFromBite(enemy, dealt);
+        if (enemy.stats.weakens) {
+          addHeroStatus('weakened', WEAKENED_TURNS);
+        }
         showHeroStats();
       } else {
         damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
@@ -2082,7 +2107,7 @@ function runEnemyTurn(onDone: () => void) {
 function playHeroAttack(enemy: Enemy) {
   const attackerTile = heroPosition;
   // A surprised enemy cannot evade, and neither can a paralyzed or frozen one.
-  const isSurprise = !enemy.hasSeenHero && canSurpriseAttack(equipment, heroStrength);
+  const isSurprise = !enemy.hasSeenHero && canSurpriseAttack(equipment, currentStrength());
   const isHit =
     isSurprise || isHelpless(enemy.statuses) || rollHit(heroAccuracy(), enemy.stats.evasion);
   // Attacking ends invisibility.
@@ -2119,7 +2144,7 @@ function playHeroAttack(enemy: Enemy) {
         if (isSurprise) {
           damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
         }
-        const damage = rollDamage(equipment, heroStrength, isSurprise);
+        const damage = rollDamage(equipment, currentStrength(), isSurprise);
         attackEnemy(enemy, heroPosition, damage);
         roomView.remove(enemy.sleepMark);
         showDamage(damage, enemy.position, 'enemy');

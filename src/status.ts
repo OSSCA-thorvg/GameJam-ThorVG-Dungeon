@@ -10,7 +10,8 @@ export type StatusName =
   | 'frozen'
   | 'burning'
   | 'poisoned'
-  | 'stunned';
+  | 'stunned'
+  | 'weakened';
 
 // The effects that work against the character they are on.
 export const HARMFUL_STATUSES: readonly StatusName[] = [
@@ -19,6 +20,7 @@ export const HARMFUL_STATUSES: readonly StatusName[] = [
   'burning',
   'poisoned',
   'stunned',
+  'weakened',
 ];
 
 // The turns left of each effect on a character.
@@ -35,6 +37,7 @@ export const STATUS_LABELS: Record<StatusName, string> = {
   burning: 'Burning',
   poisoned: 'Poisoned',
   stunned: 'Stunned',
+  weakened: 'Weakened',
 };
 
 // What each effect does to the hero, shown when the player points at its icon.
@@ -48,6 +51,7 @@ export const STATUS_DESCRIPTIONS: Record<StatusName, string> = {
   burning: 'Fire hurts you at the end of every turn.',
   poisoned: 'Poison hurts you at the end of every turn, less as it wears off.',
   stunned: 'You cannot act or dodge, dazed from a crash.',
+  weakened: 'You feel weak. Your strength is lowered by one, so heavy gear weighs on you more.',
 };
 
 // As Poison.act() of Shattered Pixel Dungeon, poison with some turns left deals a third of them

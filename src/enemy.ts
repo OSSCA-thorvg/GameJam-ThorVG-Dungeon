@@ -30,6 +30,8 @@ export interface EnemyStats {
   meatChance?: number;
   // The share of the damage it deals to the hero that it heals itself by.
   lifesteal?: number;
+  // Whether a bite that hits weakens the hero.
+  weakens?: boolean;
 }
 
 // Same as the crab of Shattered Pixel Dungeon, which leaves mystery meat a sixth of the time. The
@@ -118,6 +120,19 @@ export const UNDEAD_KINDS: Record<UndeadKind, EnemyStats> = {
     experience: 5,
     lifesteal: 0.25,
   },
+};
+
+// The ghost of the second stage. Placeholder values. It floats, so it is hard to hit and the
+// floor's hazards do not touch it, and its touch weakens the hero.
+export const ghostStats: EnemyStats = {
+  name: 'ghost',
+  maxHp: 16,
+  damage: [2, 5],
+  accuracy: 11,
+  evasion: 8,
+  actions: 1,
+  experience: 5,
+  weakens: true,
 };
 
 // Placeholder values for the boss of the first stage. It takes about 8 hits from the starting
