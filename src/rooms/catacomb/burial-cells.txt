@@ -1,0 +1,9 @@
+xxx xxx xxx xxx
+xCx xCx xCx xCx
+x.x x.x x.x x.x
+x.xxx.xxx.xxx.x
++.....1.......+
+x.xxx.xxx.xxx.x
+x.x x.x x.x x.x
+xCx xCx xCx xCx
+xxx xxx xxx xxx

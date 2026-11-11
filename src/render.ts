@@ -1,5 +1,5 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
-import type { EnemyKind } from './enemy';
+import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
 import { STATUS_LABELS, type StatusName } from './status';
 
@@ -9,7 +9,7 @@ type Color = [r: number, g: number, b: number];
 export type CursorTarget = 'floor' | 'enemy' | 'item' | 'target';
 
 // Who took the damage, which decides the color of the number.
-export type DamageTarget = 'enemy' | 'hero';
+export type DamageTarget = 'enemy' | 'hero' | 'heal';
 
 // An effect that shows as a color over a character.
 export type CharacterTint = 'frozen' | 'paralyzed' | 'burning';
@@ -220,12 +220,14 @@ const NOTICE_BUBBLE_TAIL = 4;
 const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   enemy: [255, 255, 255],
   hero: [255, 80, 70],
+  heal: [120, 230, 120],
 };
 // Placeholder looks of each kind of enemy: its color, and its size against the hero.
-const ENEMY_LOOKS: Record<EnemyKind, { color: Color; scale: number }> = {
+const ENEMY_LOOKS: Record<EnemyKind | UndeadKind, { color: Color; scale: number }> = {
   weak: { color: [176, 112, 96], scale: 0.8 },
   medium: { color: [196, 64, 64], scale: 1 },
   strong: { color: [130, 50, 150], scale: 1.2 },
+  ghoul: { color: [128, 150, 112], scale: 1 },
 };
 // Placeholder colors of each effect, for its name over a character and its icon on the screen.
 export const STATUS_COLORS: Record<StatusName, Color> = {
@@ -496,6 +498,10 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
           break;
         case 'water':
           addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? WATER_LIGHT : WATER_DARK);
+          break;
+        // The coffin itself is placed on its floor like an item.
+        case 'coffin':
+          addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
           break;
         case 'door':
         case 'locked-door': {
@@ -990,7 +996,7 @@ export function createCentipedePart(TVG: ThorVGNamespace, isHead: boolean): Scen
   return scene;
 }
 
-export function createDummyEnemy(TVG: ThorVGNamespace, kind: EnemyKind): Scene {
+export function createDummyEnemy(TVG: ThorVGNamespace, kind: EnemyKind | UndeadKind): Scene {
   const { color, scale } = ENEMY_LOOKS[kind];
   const size = CHARACTER_SIZE * scale;
   const shape = new TVG.Shape();
@@ -1074,6 +1080,46 @@ export function createTrapPaint(
 }
 
 const ARROW_COLOR: Color = [214, 184, 132];
+
+// Placeholder colors of a wooden coffin: its lid, and its two sides.
+const COFFIN_TOP: Color = [118, 82, 52];
+const COFFIN_LEFT: Color = [84, 58, 38];
+const COFFIN_RIGHT: Color = [62, 43, 29];
+// A coffin's half length along the map's x axis and half width along its y axis, in tiles, and its
+// height in pixels.
+const COFFIN_HALF_LENGTH = 0.44;
+const COFFIN_HALF_WIDTH = 0.26;
+const COFFIN_HEIGHT = 12;
+
+// A wooden coffin standing on a tile's floor, centered on the paint's local origin.
+export function createCoffinPaint(TVG: ThorVGNamespace): Scene {
+  const corner = (x: number, y: number, lift = 0): Point => ({
+    x: ((x - y) * TILE_WIDTH) / 2,
+    y: ((x + y) * TILE_HEIGHT) / 2 - lift,
+  });
+  const a = COFFIN_HALF_LENGTH;
+  const b = COFFIN_HALF_WIDTH;
+  const h = COFFIN_HEIGHT;
+  const scene = new TVG.Scene();
+  const face = (points: Point[], color: Color) => {
+    const shape = new TVG.Shape().moveTo(points[0].x, points[0].y);
+    for (const point of points.slice(1)) {
+      shape.lineTo(point.x, point.y);
+    }
+    shape.close().fill(...color, 255);
+    scene.add(shape);
+  };
+
+  // The side facing the viewer on the left runs along the edge y = +b, and the right one along
+  // x = +a.
+  face([corner(-a, b), corner(a, b), corner(a, b, h), corner(-a, b, h)], COFFIN_LEFT);
+  face([corner(a, b), corner(a, -b), corner(a, -b, h), corner(a, b, h)], COFFIN_RIGHT);
+  face(
+    [corner(-a, -b, h), corner(a, -b, h), corner(a, b, h), corner(-a, b, h)],
+    COFFIN_TOP,
+  );
+  return scene;
+}
 
 // An arrow in flight, pointing right and centered on the paint's local origin.
 export function createArrowPaint(TVG: ThorVGNamespace): Shape {

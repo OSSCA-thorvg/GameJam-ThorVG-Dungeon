@@ -4,6 +4,7 @@ export type Tile =
   | 'wall'
   | 'floor'
   | 'water'
+  | 'coffin'
   | 'door'
   | 'locked-door'
   | 'stairs'
@@ -40,6 +41,7 @@ const GLYPHS = new Map<string, Tile>([
   ['x', 'wall'],
   ['.', 'floor'],
   ['~', 'water'],
+  ['C', 'coffin'],
   ['+', 'door'],
   ['@', 'floor'],
   ['1', 'floor'],

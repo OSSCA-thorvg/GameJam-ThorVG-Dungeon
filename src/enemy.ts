@@ -28,6 +28,8 @@ export interface EnemyStats {
   experience: number;
   // How likely it is to leave raw meat when it dies. Without it, it has no meat.
   meatChance?: number;
+  // The share of the damage it deals to the hero that it heals itself by.
+  lifesteal?: number;
 }
 
 // Same as the crab of Shattered Pixel Dungeon, which leaves mystery meat a sixth of the time. The
@@ -99,6 +101,24 @@ export function mimicStats(floor: number): EnemyStats {
     experience: 0,
   };
 }
+
+// The undead that burst out of coffins on the second stage. Placeholder values. Each bite that
+// hurts the hero heals them by a share of the damage, so the longer a fight goes, the longer it
+// takes.
+export type UndeadKind = 'ghoul';
+
+export const UNDEAD_KINDS: Record<UndeadKind, EnemyStats> = {
+  ghoul: {
+    name: 'ghoul',
+    maxHp: 22,
+    damage: [3, 6],
+    accuracy: 10,
+    evasion: 4,
+    actions: 1,
+    experience: 5,
+    lifesteal: 0.25,
+  },
+};
 
 // Placeholder values for the boss of the first stage. It takes about 8 hits from the starting
 // sword, and its bite is far stronger than that of anything else on the floors. How long its body

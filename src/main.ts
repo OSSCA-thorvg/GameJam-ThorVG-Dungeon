@@ -29,8 +29,10 @@ import {
   mimicStats,
   pickEnemyKind,
   rollHit,
+  UNDEAD_KINDS,
   wholeOf,
   type Enemy,
+  type UndeadKind,
 } from './enemy';
 import { createBossFloor } from './bossFloor';
 import { showLaneWarning, type LaneWarning } from './laneWarning';
@@ -107,7 +109,15 @@ import {
   ITEM_FLOORS_PER_STAGE,
   planStagePotions,
 } from './potions';
-import { createRandom, normalIntRange, pick, randomInt, type Random } from './random';
+import {
+  createRandom,
+  normalIntRange,
+  pick,
+  randomInt,
+  roundRandomly,
+  shuffle,
+  type Random,
+} from './random';
 import {
   createCharacter,
   createDamageNumber,
@@ -119,6 +129,7 @@ import {
   createCentipedePart,
   createTargetedText,
   createTrapPaint,
+  createCoffinPaint,
   createDummyEnemy,
   createEnemyHealthBar,
   createItemPaint,
@@ -141,7 +152,7 @@ import {
   type StatusName,
   type Statuses,
 } from './status';
-import { campfireRoom, normalRooms, startRooms } from './roomSources';
+import { campfireRoom, catacombRooms, normalRooms, startRooms } from './roomSources';
 import { playSplash } from './splash';
 import {
   createSurface,
@@ -315,6 +326,45 @@ function floorContents(random: Random): { loot: Loot[]; hasMimic: boolean } {
   return { loot, hasMimic };
 }
 
+// A coffin on the second stage. Some hold an undead that bursts out when the hero comes near.
+interface CoffinSpec {
+  position: Point;
+  kind: UndeadKind | null;
+}
+
+interface Coffin extends CoffinSpec {
+  paint: Paint | null;
+}
+
+// Placeholder values. How likely a coffin is to hold an undead, and how many a floor holds at most.
+const AMBUSH_CHANCE = 0.2;
+const MAX_AMBUSHES = 4;
+// Placeholder value. How many of the places that enemies are put at random on the second stage
+// hold a ghoul. The ghouls come mostly out of coffins, and wandering enemies of another kind are
+// to take the rest of those places.
+const WANDERING_GHOUL_CHANCE = 0.3;
+// How close the hero must come to a coffin in view, in tiles, for its undead to burst out.
+const AMBUSH_DISTANCE = 1;
+
+// Picks the coffins of the floor that hold an undead, and which one.
+function planCoffins(room: GeneratedMap, random: Random): CoffinSpec[] {
+  const tiles: Point[] = [];
+  room.tiles.forEach((row, y) =>
+    row.forEach((tile, x) => {
+      if (tile === 'coffin') {
+        tiles.push({ x, y });
+      }
+    }),
+  );
+  const undead = Object.keys(UNDEAD_KINDS) as UndeadKind[];
+  let holders = 0;
+  return shuffle(random, tiles).map((position) => {
+    const holds = holders < MAX_AMBUSHES && random() < AMBUSH_CHANCE;
+    holders += holds ? 1 : 0;
+    return { position, kind: holds ? pick(random, undead) : null };
+  });
+}
+
 // A mimic in disguise, drawn as a chest on the floor is. It holds gold, one of the prizes
 // Mimic.generatePrize() of Shattered Pixel Dungeon picks from.
 function createMimic(position: Point, random: Random): Enemy {
@@ -376,16 +426,23 @@ function createLevel() {
   const hasCampfire = planStage(currentStage()).campfireFloor === floorInStage();
   const room = generateMap({
     startRooms,
-    normalRooms,
+    // The crypts with coffins only turn up on the second stage.
+    normalRooms: currentStage() >= 1 ? [...normalRooms, ...catacombRooms] : normalRooms,
     specialRoom: hasCampfire ? campfireRoom : undefined,
     roomCount: randomInt(random, MIN_ROOMS, MAX_ROOMS),
     random,
   });
 
-  const enemies = room.monsters.map((position) => {
-    const kind = pickEnemyKind(random, floor);
+  // The second stage has enemies of its own, which are only the ghouls for now, and few of them
+  // wander about. The enemies of the first stage do not turn up there.
+  const places =
+    currentStage() >= 1
+      ? room.monsters.filter(() => random() < WANDERING_GHOUL_CHANCE)
+      : room.monsters;
+  const enemies = places.map((position) => {
+    const kind = currentStage() >= 1 ? ('ghoul' as const) : pickEnemyKind(random, floor);
     return createEnemy(
-      ENEMY_KINDS[kind],
+      kind === 'ghoul' ? UNDEAD_KINDS.ghoul : ENEMY_KINDS[kind],
       position,
       random() < ASLEEP_CHANCE,
       createDummyEnemy(TVG, kind),
@@ -411,7 +468,7 @@ function createLevel() {
   const trapSpecs = picked
     .slice(itemCount)
     .map((position) => ({ position, kind: pick(random, trapKinds(currentStage())) }));
-  return finishLevel(room, enemies, floorItems, [], trapSpecs);
+  return finishLevel(room, enemies, floorItems, [], trapSpecs, planCoffins(room, random));
 }
 
 function finishLevel(
@@ -420,6 +477,7 @@ function finishLevel(
   floorItems: { thing: GroundThing; position: Point }[],
   signs: Sign[],
   trapSpecs: { position: Point; kind: TrapKind }[] = [],
+  coffinSpecs: CoffinSpec[] = [],
 ) {
   const roomView = createRoomView(TVG, room);
   return {
@@ -438,6 +496,7 @@ function finishLevel(
     floorItems,
     signs,
     trapSpecs,
+    coffinSpecs,
   };
 }
 
@@ -453,6 +512,7 @@ let {
   floorItems,
   signs,
   trapSpecs,
+  coffinSpecs,
 } = createLevel();
 let heroPosition = room.start;
 let heroHp = HERO_MAX_HP;
@@ -468,7 +528,9 @@ let hasActedOnce = false;
 // Whether the hero was hasted when the action in progress began. Haste speeds up the actions that
 // follow the one that gave it, and the enemy that already acted in the first half of a hasted turn.
 let wasHasted = false;
-let actedEarly: Enemy | undefined;
+// Enemies that already used their action in the turn about to run, like a mimic that bit the hero
+// opening it, or an undead that burst out of its coffin.
+const skippingThisTurn = new Set<Enemy>();
 // Arrows of traps in flight. What an arrow hits is settled when it lands, so the next action waits
 // for it. The epoch tells arrows of an earlier floor or run, which hit nothing.
 let arrowsInFlight = 0;
@@ -505,6 +567,7 @@ let inventory: ItemStack[] = startingInventory();
 let equipment: Equipment = startingEquipment();
 let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
 let traps: Trap[] = [];
+let coffins: Coffin[] = [];
 
 function createItemContext(): ItemContext {
   return {
@@ -1123,6 +1186,7 @@ function startLevel() {
   visionState = '';
   groundItems = [];
   traps = trapSpecs.map(({ position, kind }) => ({ position, kind, state: 'hidden', paint: null }));
+  coffins = coffinSpecs.map(({ position, kind }) => ({ position, kind, paint: null }));
   stopWalking();
   isWalkingToStairs = false;
   isWalking = false;
@@ -1151,6 +1215,7 @@ function startLevel() {
       }
     }),
   );
+  coffins.forEach(showCoffin);
   // The hero arrives by steps from the floor above, except on the surface.
   if (floor > 0) {
     roomView.markEntrance(room.start);
@@ -1207,6 +1272,7 @@ function replaceLevel() {
     floorItems,
     signs,
     trapSpecs,
+    coffinSpecs,
   } = createLevel());
   startLevel();
 }
@@ -1549,6 +1615,64 @@ function triggerTrapUnder(enemy: Enemy) {
 const knownTrapTiles = () =>
   traps.filter(({ state }) => state === 'known').map(({ position }) => position);
 
+function showCoffin(coffin: Coffin) {
+  if (coffin.paint) {
+    roomView.remove(coffin.paint);
+  }
+  coffin.paint = createCoffinPaint(TVG);
+  roomView.place(coffin.paint, coffin.position.x, coffin.position.y);
+}
+
+// An undead smashes out of each coffin that holds one when the hero comes near it in view. The
+// coffin is gone then, so it does not block the way any more. Bursting out is the undead's action
+// for this turn, so the hero has a turn to react.
+function wakeCoffins() {
+  for (const coffin of [...coffins]) {
+    const isNear = isWithin(coffin.position, heroPosition, AMBUSH_DISTANCE);
+    if (!coffin.kind || !isNear || !isInView(coffin.position)) {
+      continue;
+    }
+    const { position } = coffin;
+    if (coffin.paint) {
+      roomView.remove(coffin.paint);
+    }
+    coffins.splice(coffins.indexOf(coffin), 1);
+    room.tiles[position.y][position.x] = 'floor';
+    // The coffin may have blocked the view or the way, so the vision must be computed again.
+    visionState = '';
+    const enemy = createEnemy(
+      UNDEAD_KINDS[coffin.kind],
+      position,
+      false,
+      createDummyEnemy(TVG, coffin.kind),
+      createEnemyHealthBar(TVG, renderCanvas),
+      createSleepMark(TVG),
+      chaser,
+    );
+    enemies.push(enemy);
+    alertEnemy(enemy, heroPosition);
+    enemy.hasSeenHero = true;
+    placeEnemy(enemy, position);
+    skippingThisTurn.add(enemy);
+    messageLog.add(`A ${enemy.stats.name} smashes its way out of a coffin!`);
+    damageNumbers.show(roomView, createNoticeMark(TVG), position);
+    stopWalking();
+  }
+}
+
+// A bite that hurts the hero heals the enemies that live off it, by a share of the damage. A share
+// of a few points rounds up or down by chance, so over many bites it is the share.
+function healFromBite(enemy: Enemy, dealt: number) {
+  const whole = wholeOf(enemy);
+  const heal = roundRandomly(Math.random, dealt * (enemy.stats.lifesteal ?? 0));
+  if (heal > 0 && whole.hp < whole.stats.maxHp) {
+    healEnemy(enemy, heal);
+    if (seenEnemies.has(whole)) {
+      showDamage(heal, enemy.position, 'heal');
+    }
+  }
+}
+
 function showDamage(amount: number, tile: Point, target: DamageTarget) {
   damageNumbers.show(roomView, createDamageNumber(TVG, amount, target), tile);
 }
@@ -1657,7 +1781,9 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
         const damage = isAmbush
           ? enemy.stats.damage[1]
           : normalIntRange(Math.random, ...enemy.stats.damage);
-        damageHero(Math.max(0, damage - rollArmor(equipment, heroStrength)));
+        const dealt = Math.min(heroHp, Math.max(0, damage - rollArmor(equipment, heroStrength)));
+        damageHero(dealt);
+        healFromBite(enemy, dealt);
         showHeroStats();
       } else {
         damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
@@ -1692,7 +1818,10 @@ function passTurn(onDone: () => void, hasActed?: Enemy) {
       return;
     }
     noticeTraps();
-    actedEarly = hasActed ?? actedEarly;
+    wakeCoffins();
+    if (hasActed) {
+      skippingThisTurn.add(hasActed);
+    }
     if (wasHasted && hasStatus(heroStatuses, 'haste') && !hasActedOnce) {
       hasActedOnce = true;
       canvas.update().render();
@@ -1700,9 +1829,7 @@ function passTurn(onDone: () => void, hasActed?: Enemy) {
       return;
     }
     hasActedOnce = false;
-    const acted = actedEarly;
-    actedEarly = undefined;
-    runEnemyTurn(onDone, acted);
+    runEnemyTurn(onDone);
   });
 }
 
@@ -1863,13 +1990,16 @@ function endTurn(onDone: () => void) {
 
 // Lets each enemy act once, one after another, then ends the turn.
 // Every action of the hero ends with this, so it also counts the hero's turns.
-function runEnemyTurn(onDone: () => void, hasActed?: Enemy) {
+function runEnemyTurn(onDone: () => void) {
   turnCount++;
   // An enemy that acts more than once does so in a row. Haste doubles that.
-  const waiting = enemies.filter((enemy) => enemy !== hasActed).flatMap((enemy) => {
-    const actions = enemy.stats.actions * (hasStatus(enemy.statuses, 'haste') ? 2 : 1);
-    return Array<Enemy>(actions).fill(enemy);
-  });
+  const waiting = enemies
+    .filter((enemy) => !skippingThisTurn.has(enemy))
+    .flatMap((enemy) => {
+      const actions = enemy.stats.actions * (hasStatus(enemy.statuses, 'haste') ? 2 : 1);
+      return Array<Enemy>(actions).fill(enemy);
+    });
+  skippingThisTurn.clear();
 
   const actNext = () => {
     // The next enemy acts once what the last one did has landed, and not if that ended the hero.
@@ -2134,6 +2264,7 @@ function traceTo(
         tile === 'wall' ||
         tile === 'void' ||
         tile === 'locked-door' ||
+        tile === 'coffin' ||
         isFixture(room, x, y) ||
         (tile === 'door' && !openDoors.has(y * room.width + x) && !(landsOnDoor && isTarget))
       );
@@ -2584,6 +2715,8 @@ function describeTerrain({ x, y }: Point): string {
       return `A sign. It reads: "${signAt({ x, y })?.text ?? ''}"`;
     case 'water':
       return 'Shallow water. It puts out the fire on whoever stands in it.';
+    case 'coffin':
+      return 'A wooden coffin.';
     default:
       return floor > 0 && isSameTile({ x, y }, room.start)
         ? 'The stairs you came down. There is no way back up.'
@@ -2837,7 +2970,7 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   heroHunger = createHunger();
   hasActedOnce = false;
   wasHasted = false;
-  actedEarly = undefined;
+  skippingThisTurn.clear();
   potionLore = createPotionLore(createRandom(runSeed));
   killCount = 0;
   turnCount = 0;

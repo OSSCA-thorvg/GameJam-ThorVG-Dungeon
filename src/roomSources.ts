@@ -8,6 +8,15 @@ export const startRooms = load(
   import.meta.glob<string>('./rooms/start/*.txt', { query: '?raw', import: 'default', eager: true }),
 );
 
+// The crypts of the second stage, which have coffins in them. Only that stage has these rooms.
+export const catacombRooms = load(
+  import.meta.glob<string>('./rooms/catacomb/*.txt', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  }),
+);
+
 export const normalRooms = [
   ...load(
     import.meta.glob<string>('./rooms/normal/*.txt', {
