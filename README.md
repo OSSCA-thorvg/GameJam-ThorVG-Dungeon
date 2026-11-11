@@ -18,7 +18,7 @@ npm run dev
 | Asset | Author | Source | License | Changes |
 | --- | --- | --- | --- | --- |
 | Swordman icon | Cathelineau | [game-icons.net](https://game-icons.net/1x1/cathelineau/swordman.html) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | Removed the black background |
-| ThorVG splash | ThorVG project | [LottieFiles](https://app.lottiefiles.com/share/9fb04dcc-0426-4f7b-852d-643e6aaf252c) | [Terms](LICENSES/LicenseRef-ThorVG-Splash.txt) | Unpacked from `.lottie`, animation unchanged |
+| ThorVG splash | ThorVG project | [OSSCA ThorVG GameJam](https://ossca-thorvg.github.io/site/project/#event) | [Terms](LICENSES/LicenseRef-ThorVG-Splash.txt) | None, the file is used as provided |
 
 ### References
 

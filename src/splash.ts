@@ -1,6 +1,5 @@
 import type { Canvas, ThorVGNamespace } from '@thorvg/webcanvas';
-import splashImageUrl from '../assets/splash/2.webp?url';
-import splashJson from '../assets/splash/thorvg-splash.json?raw';
+import splashJson from '../assets/splash/powred.by.thorvg.1.json?raw';
 
 // Longest frame time that counts toward playback, so the splash still plays in full
 // after the browser pauses requestAnimationFrame in a background tab.
@@ -8,21 +7,8 @@ const MAX_FRAME_TIME_MS = 100;
 
 // Plays the ThorVG splash once and resolves when it ends.
 export async function playSplash(TVG: ThorVGNamespace, canvas: Canvas): Promise<void> {
-  const response = await fetch(splashImageUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to load the splash image: ${response.status}`);
-  }
-  const image = new Uint8Array(await response.arrayBuffer());
-
   const animation = new TVG.LottieAnimation();
   const picture = animation.picture!;
-  picture.resolver((paint) => {
-    if (paint instanceof TVG.Picture) {
-      paint.load(image, { type: 'webp' });
-      return true;
-    }
-    return false;
-  });
   animation.load(splashJson);
 
   const { width, height } = picture.size();
