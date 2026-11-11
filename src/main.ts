@@ -465,6 +465,15 @@ let heroStatuses: Statuses = {};
 let heroHunger = createHunger();
 // Whether a hasted hero already took the first of their two actions in this turn.
 let hasActedOnce = false;
+// Whether the hero was hasted when the action in progress began. Haste speeds up the actions that
+// follow the one that gave it, and the enemy that already acted in the first half of a hasted turn.
+let wasHasted = false;
+let actedEarly: Enemy | undefined;
+// Arrows of traps in flight. What an arrow hits is settled when it lands, so the next action waits
+// for it. The epoch tells arrows of an earlier floor or run, which hit nothing.
+let arrowsInFlight = 0;
+let arrowWaiters: (() => void)[] = [];
+let epoch = 0;
 let potionLore = createPotionLore(createRandom(runSeed));
 // How far the hero can see, in tiles. An effect that changes it should call updateVision().
 let heroViewDistance = DEFAULT_VIEW_DISTANCE;
@@ -1119,6 +1128,9 @@ function startLevel() {
   isWalking = false;
   isGameOver = false;
   finishAttackEffect = null;
+  epoch++;
+  arrowsInFlight = 0;
+  arrowWaiters = [];
 
   roomView.scene.scale(zoom);
   mapScene.add(roomView.scene);
@@ -1418,26 +1430,49 @@ function arrowTarget(from: Point): ArrowTarget | null {
   );
 }
 
-// Shoots an arrow from a trap at the hero or an enemy, which it hurts when the arrow lands.
-function shootArrow(from: Point, target: ArrowTarget, damage: number) {
-  const to = target === 'hero' ? heroPosition : target.position;
-  playArrow(TVG, roomView, from, to, renderCanvas, () => {
-    if (target === 'hero') {
-      if (!isGameOver) {
-        messageLog.add('An arrow hits you!');
-        damageHero(damage);
-        if (heroHp === 0) {
-          endGame();
-        }
-      }
-      return;
+// Runs what comes next once no arrow is in flight.
+function afterArrows(next: () => void) {
+  if (arrowsInFlight === 0) {
+    next();
+  } else {
+    arrowWaiters.push(next);
+  }
+}
+
+// What an arrow does when it lands. The target is hit even if it has moved on, as the arrow cannot
+// miss.
+function landArrow(target: ArrowTarget, damage: number) {
+  if (target === 'hero') {
+    if (!isGameOver) {
+      messageLog.add('An arrow hits you!');
+      damageHero(damage);
     }
-    if (!enemies.includes(target)) {
-      return;
-    }
+    return;
+  }
+  if (enemies.includes(target)) {
     hurtEnemy(target, damage);
     if (target.hp === 0) {
       killEnemy(target);
+    }
+  }
+}
+
+// Shoots an arrow from a trap at the hero or an enemy. The action that set the trap off is not over
+// until the arrow lands, so the turn goes on after that.
+function shootArrow(from: Point, target: ArrowTarget, damage: number) {
+  const to = target === 'hero' ? heroPosition : target.position;
+  const shotInEpoch = epoch;
+  arrowsInFlight++;
+  playArrow(TVG, roomView, from, to, renderCanvas, () => {
+    if (shotInEpoch !== epoch) {
+      return;
+    }
+    landArrow(target, damage);
+    arrowsInFlight--;
+    if (arrowsInFlight === 0) {
+      const waiters = arrowWaiters;
+      arrowWaiters = [];
+      waiters.forEach((next) => next());
     }
   });
 }
@@ -1640,19 +1675,35 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
   });
 }
 
-// Ends one action of the hero. A hasted hero takes two actions in each turn of the enemies, and may
-// find a trap after each of them. An enemy that already acted in this turn, like a mimic that bit
-// the hero opening it, waits.
+// Ends one action of the hero, once what the action set going has landed. What the action itself
+// did is settled by now, so the hero may have died of it, which ends the game before the enemies
+// act. Then the hero may find a trap next to them. A hasted hero takes two actions in each turn of
+// the enemies, but only an action that began hasted counts as half of one, not the one that gave
+// the haste. An enemy that already acted in this turn, like a mimic that bit the hero opening it,
+// waits, even when that was in the first half of a hasted turn.
 function passTurn(onDone: () => void, hasActed?: Enemy) {
-  noticeTraps();
-  if (hasStatus(heroStatuses, 'haste') && !hasActedOnce) {
-    hasActedOnce = true;
-    canvas.update().render();
-    onDone();
-    return;
-  }
-  hasActedOnce = false;
-  runEnemyTurn(onDone, hasActed);
+  afterArrows(() => {
+    if (heroHp === 0 && !isGameOver) {
+      endGame();
+    }
+    if (isGameOver) {
+      canvas.update().render();
+      onDone();
+      return;
+    }
+    noticeTraps();
+    actedEarly = hasActed ?? actedEarly;
+    if (wasHasted && hasStatus(heroStatuses, 'haste') && !hasActedOnce) {
+      hasActedOnce = true;
+      canvas.update().render();
+      onDone();
+      return;
+    }
+    hasActedOnce = false;
+    const acted = actedEarly;
+    actedEarly = undefined;
+    runEnemyTurn(onDone, acted);
+  });
 }
 
 // Sight goes both ways, unless the hero is invisible.
@@ -1660,8 +1711,25 @@ function canEnemySeeHero(enemy: Enemy) {
   return isInView(enemy.position) && !hasStatus(heroStatuses, 'invisible');
 }
 
-// Fire sets alight whoever stands in it, poison gas hurts, and paralyzing gas paralyzes. Then
-// burning hurts, and fire cooks raw meat.
+// Poison and burning hurt the characters that have them, and burning in the bag's items too.
+function applyStatusDamage() {
+  const poison = poisonDamage(heroStatuses);
+  if (poison > 0) {
+    damageHero(poison);
+  }
+  if (hasStatus(heroStatuses, 'burning')) {
+    damageHero(normalIntRange(Math.random, ...BURN_DAMAGE));
+    burnItemInBag();
+  }
+  for (const enemy of enemies) {
+    if (hasStatus(enemy.statuses, 'burning')) {
+      hurtEnemy(enemy, normalIntRange(Math.random, ...BURN_DAMAGE));
+    }
+  }
+}
+
+// Fire sets alight whoever stands in it, poison gas hurts, paralyzing gas paralyzes, and fire cooks
+// raw meat. Water puts out those that burn in it.
 function applyHazards() {
   const isOnFire = (tile: Point) => hazards.kindsAt(tile).includes('fire');
   setAlight([heroPosition, ...enemies.map(({ position }) => position)].filter(isOnFire));
@@ -1673,10 +1741,6 @@ function applyHazards() {
   if (heroHazards.includes('poison')) {
     damageHero(normalIntRange(Math.random, ...POISON_DAMAGE));
   }
-  if (hasStatus(heroStatuses, 'burning')) {
-    damageHero(normalIntRange(Math.random, ...BURN_DAMAGE));
-    burnItemInBag();
-  }
   cookMeatOnFloor(isOnFire);
 
   for (const enemy of enemies) {
@@ -1686,9 +1750,6 @@ function applyHazards() {
     }
     if (enemyHazards.includes('poison')) {
       hurtEnemy(enemy, normalIntRange(Math.random, ...POISON_DAMAGE));
-    }
-    if (hasStatus(enemy.statuses, 'burning')) {
-      hurtEnemy(enemy, normalIntRange(Math.random, ...BURN_DAMAGE));
     }
   }
   putOutBurningInWater();
@@ -1756,9 +1817,12 @@ function feelHunger() {
   }
 }
 
-// The end of a turn, after every enemy acted. Poison hurts, effects wear off and gas spreads, then
-// fire and gas do their harm, and then fire burns down. Last, the hero gets hungrier.
-// While the hero cannot act, the next turn follows by itself.
+// The end of a turn, after every enemy acted. First what is already on the characters acts: poison
+// and burning hurt, by what they have left, so they hurt before they wear off, whether the action
+// of the hero, an enemy, or the fire of the last turn put them there. Then every effect wears off
+// by one turn. What the hazards put on the characters now only starts to act in the next turn, so
+// it lasts as long as the same effect from an action. Last, fire burns down, the dead go, and the
+// hero gets hungrier. While the hero cannot act, the next turn follows by itself.
 function endTurn(onDone: () => void) {
   if (isGameOver) {
     canvas.update().render();
@@ -1766,12 +1830,13 @@ function endTurn(onDone: () => void) {
     return;
   }
 
-  // Poison hurts by the turns it has left, so it hurts before it wears off.
-  const poison = poisonDamage(heroStatuses);
-  if (poison > 0) {
-    damageHero(poison);
-  }
+  applyStatusDamage();
+  const hasteLeft = heroStatuses.haste;
   tickStatuses(heroStatuses);
+  // The action that gave the haste was not hasted, so that turn does not count against it.
+  if (!wasHasted && hasteLeft !== undefined) {
+    heroStatuses.haste = hasteLeft;
+  }
   for (const enemy of enemies) {
     tickStatuses(enemy.statuses);
   }
@@ -1786,6 +1851,7 @@ function endTurn(onDone: () => void) {
   if (heroHp === 0) {
     endGame();
   }
+  wasHasted = hasStatus(heroStatuses, 'haste');
   canvas.update().render();
 
   if (!isGameOver && isHelpless(heroStatuses)) {
@@ -1806,6 +1872,14 @@ function runEnemyTurn(onDone: () => void, hasActed?: Enemy) {
   });
 
   const actNext = () => {
+    // The next enemy acts once what the last one did has landed, and not if that ended the hero.
+    if (arrowsInFlight > 0) {
+      afterArrows(actNext);
+      return;
+    }
+    if (heroHp === 0 && !isGameOver) {
+      endGame();
+    }
     const enemy = waiting.shift();
     if (!enemy || isGameOver) {
       endTurn(onDone);
@@ -2038,7 +2112,9 @@ function walk() {
 // A paralyzed or frozen hero cannot act until the turns pass by themselves. While an attack or a
 // throw plays, input waits, so every hit can be seen before the next action.
 function cannotAct() {
-  return isGameOver || isHelpless(heroStatuses) || finishAttackEffect !== null;
+  return (
+    isGameOver || isHelpless(heroStatuses) || finishAttackEffect !== null || arrowsInFlight > 0
+  );
 }
 
 // A closed door stops what flies through it. With `landsOnDoor`, what is thrown at the door itself
@@ -2760,6 +2836,8 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   heroStatuses = {};
   heroHunger = createHunger();
   hasActedOnce = false;
+  wasHasted = false;
+  actedEarly = undefined;
   potionLore = createPotionLore(createRandom(runSeed));
   killCount = 0;
   turnCount = 0;
