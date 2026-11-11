@@ -202,6 +202,9 @@ const PARALYZED_TURNS = 2;
 const BAG_BURN_CHANCE = 0.5;
 // Placeholder value. How long each turn takes while the hero cannot act.
 const HELPLESS_TURN_MS = 300;
+// Placeholder value. How long an enemy waits before it strikes, after the blow that came before,
+// such as the hero's.
+const ENEMY_ATTACK_DELAY_MS = 150;
 // Placeholder values. How high a levitating hero floats, and how see-through an invisible
 // hero and an enemy sensed by telepathy are drawn.
 const LEVITATION_HEIGHT = 8;
@@ -2048,7 +2051,12 @@ function runEnemyTurn(onDone: () => void) {
       case 'attack':
         showEnemy(enemy);
         showNoticeMark();
-        playEnemyAttack(enemy, actNext);
+        // A pause after the previous blow, so that the blows can be told apart. Input waits too.
+        finishAttackEffect = () => undefined;
+        setTimeout(() => {
+          finishAttackEffect = null;
+          playEnemyAttack(enemy, actNext);
+        }, ENEMY_ATTACK_DELAY_MS);
         break;
       case 'wait':
         // It may have woken up.
