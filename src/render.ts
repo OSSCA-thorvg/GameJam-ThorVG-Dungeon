@@ -12,7 +12,7 @@ export type CursorTarget = 'floor' | 'enemy' | 'item' | 'target';
 export type DamageTarget = 'enemy' | 'hero' | 'heal';
 
 // An effect that shows as a color over a character.
-export type CharacterTint = 'frozen' | 'paralyzed' | 'burning';
+export type CharacterTint = 'frozen' | 'paralyzed' | 'burning' | 'shielded';
 
 // Fire or gas lying on a tile.
 export type GasKind = 'poison' | 'paralysis';
@@ -224,7 +224,7 @@ const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
 };
 // Placeholder looks of each kind of enemy: its color, and its size against the hero.
 const ENEMY_LOOKS: Record<
-  EnemyKind | UndeadKind | 'ghost' | 'skeleton',
+  EnemyKind | UndeadKind | 'ghost' | 'skeleton' | 'necromancer',
   { color: Color; scale: number }
 > = {
   weak: { color: [176, 112, 96], scale: 0.8 },
@@ -233,6 +233,7 @@ const ENEMY_LOOKS: Record<
   ghoul: { color: [128, 150, 112], scale: 1 },
   ghost: { color: [176, 196, 220], scale: 1 },
   skeleton: { color: [226, 220, 200], scale: 1 },
+  necromancer: { color: [112, 72, 150], scale: 1.2 },
 };
 // Placeholder colors of each effect, for its name over a character and its icon on the screen.
 export const STATUS_COLORS: Record<StatusName, Color> = {
@@ -246,12 +247,14 @@ export const STATUS_COLORS: Record<StatusName, Color> = {
   poisoned: [140, 200, 70],
   stunned: [255, 190, 60],
   weakened: [170, 130, 220],
+  shielded: [120, 190, 255],
 };
 // Placeholder colors, laid over a character with the alpha at the end.
 const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {
   frozen: [130, 200, 255, 150],
   paralyzed: [240, 220, 90, 130],
   burning: [255, 120, 40, 130],
+  shielded: [90, 160, 255, 140],
 };
 // Placeholder color of the frost that flashes over the floor where a frost potion breaks.
 const FROST_COLOR: [...Color, number] = [190, 230, 255, 210];
@@ -1004,7 +1007,7 @@ export function createCentipedePart(TVG: ThorVGNamespace, isHead: boolean): Scen
 
 export function createDummyEnemy(
   TVG: ThorVGNamespace,
-  kind: EnemyKind | UndeadKind | 'ghost' | 'skeleton',
+  kind: EnemyKind | UndeadKind | 'ghost' | 'skeleton' | 'necromancer',
 ): Scene {
   const { color, scale } = ENEMY_LOOKS[kind];
   const size = CHARACTER_SIZE * scale;
@@ -1092,6 +1095,7 @@ const ARROW_COLOR: Color = [214, 184, 132];
 
 // Placeholder colors of a wooden coffin: its lid, and its two sides.
 const COFFIN_TOP: Color = [118, 82, 52];
+const COFFIN_TOP_AWAKE: Color = [170, 64, 56];
 const COFFIN_LEFT: Color = [84, 58, 38];
 const COFFIN_RIGHT: Color = [62, 43, 29];
 // A coffin's half length along the map's x axis and half width along its y axis, in tiles, and its
@@ -1100,8 +1104,9 @@ const COFFIN_HALF_LENGTH = 0.44;
 const COFFIN_HALF_WIDTH = 0.26;
 const COFFIN_HEIGHT = 12;
 
-// A wooden coffin standing on a tile's floor, centered on the paint's local origin.
-export function createCoffinPaint(TVG: ThorVGNamespace): Scene {
+// A wooden coffin standing on a tile's floor, centered on the paint's local origin. A coffin that
+// is being chanted over has a red lid.
+export function createCoffinPaint(TVG: ThorVGNamespace, isAwake = false): Scene {
   const corner = (x: number, y: number, lift = 0): Point => ({
     x: ((x - y) * TILE_WIDTH) / 2,
     y: ((x + y) * TILE_HEIGHT) / 2 - lift,
@@ -1125,7 +1130,7 @@ export function createCoffinPaint(TVG: ThorVGNamespace): Scene {
   face([corner(a, b), corner(a, -b), corner(a, -b, h), corner(a, b, h)], COFFIN_RIGHT);
   face(
     [corner(-a, -b, h), corner(a, -b, h), corner(a, b, h), corner(-a, b, h)],
-    COFFIN_TOP,
+    isAwake ? COFFIN_TOP_AWAKE : COFFIN_TOP,
   );
   return scene;
 }

@@ -195,6 +195,11 @@ export type EnemyAction =
   | { type: 'attack' }
   // An arrow at the hero from where the enemy stands, which needs a clear line of sight.
   | { type: 'shoot' }
+  // The necromancer begins a chant over two coffins, which the hero can see and cannot hurt it
+  // during, then raises what is in them, then ends the chant when the hero has dealt with them.
+  | { type: 'chant' }
+  | { type: 'raise' }
+  | { type: 'unshield' }
   // The giant centipede rears up to charge down a line of tiles, which the hero can see and leave.
   | { type: 'windup'; lane: Point[]; direction: Point }
   // It charges along the path. It hits the hero standing at the end of it, or else crashes.
@@ -207,6 +212,10 @@ export interface EnemyContext {
   canSeeHero: boolean;
   // Tiles held by the other enemies.
   occupied: Point[];
+  // Whether the necromancer has two coffins to raise ghouls from.
+  canSummon?: boolean;
+  // How many of the ghouls that the necromancer raised are still alive.
+  summonsAlive?: number;
 }
 
 // Decides what an enemy does on its turn. New enemy types add a new behavior.
@@ -248,6 +257,7 @@ export interface Enemy {
   owner: Enemy | null;
   // Set on the head of a giant centipede: what it is up to.
   centipede: CentipedeState | null;
+  necromancer: NecromancerState | null;
 }
 
 // The direction a rearing centipede charges in, until it charges, and the turns until it can rear
@@ -483,6 +493,72 @@ export const archer: EnemyBehavior = (enemy, context) => {
   return action.type === 'attack' ? { type: 'shoot' } : action;
 };
 
+// How many chants the necromancer has begun, and whether one is going on, and whether it has raised
+// what is in the coffins yet.
+export interface NecromancerState {
+  chants: number;
+  isChanting: boolean;
+  hasRaised: boolean;
+}
+
+export const createNecromancerState = (): NecromancerState => ({
+  chants: 0,
+  isChanting: false,
+  hasRaised: false,
+});
+
+// The necromancer of the second stage. Placeholder values. It shoots from afar, and when it is
+// hurt enough it chants, which wakes the ghouls in two of the coffins of its room.
+export const necromancerStats: EnemyStats = {
+  name: 'necromancer',
+  maxHp: 90,
+  damage: [3, 6],
+  accuracy: 12,
+  evasion: 3,
+  actions: 1,
+  experience: 20,
+};
+
+// Placeholder values. How far it shoots from, and the shares of its health at which it chants.
+const NECROMANCER_RANGE = 7;
+const CHANT_AT = [0.75, 0.5, 0.25];
+
+// Between chants it shoots at the hero from where it stands, and goes after them when it cannot see
+// them. At each share of its health it chants: it stands still behind a shield, so nothing can hurt
+// it, a turn later the ghouls come out of two coffins, and when the hero has dealt with them the
+// shield falls.
+export const necromancer: EnemyBehavior = (enemy, context) => {
+  const state = enemy.necromancer!;
+  const { room, hero, canSeeHero, occupied } = context;
+  if (state.isChanting) {
+    if (!state.hasRaised) {
+      state.hasRaised = true;
+      return { type: 'raise' };
+    }
+    if ((context.summonsAlive ?? 0) === 0) {
+      state.isChanting = false;
+      return { type: 'unshield' };
+    }
+    return { type: 'wait' };
+  }
+  const next = CHANT_AT[state.chants];
+  if (next !== undefined && enemy.hp <= enemy.stats.maxHp * next && context.canSummon) {
+    state.chants++;
+    state.isChanting = true;
+    state.hasRaised = false;
+    return { type: 'chant' };
+  }
+
+  const distance = Math.max(
+    Math.abs(enemy.position.x - hero.x),
+    Math.abs(enemy.position.y - hero.y),
+  );
+  if (canSeeHero && distance <= NECROMANCER_RANGE) {
+    return { type: 'shoot' };
+  }
+  return stepToward(room, enemy.position, hero, occupied);
+};
+
 // The giant centipede always knows where the hero is. It moves one tile a turn along rows and
 // columns, and bites hard when the hero is next to its head. With the hero in a line along a row or a column
 // and nothing between them, it rears up for a turn, which fixes the direction and shows the line,
@@ -580,6 +656,7 @@ export function createEnemy(
     followers: [],
     owner: null,
     centipede: null,
+    necromancer: null,
   };
 }
 
@@ -602,6 +679,10 @@ export function disturbEnemy(part: Enemy): void {
 // Damage breaks the ice of a frozen enemy.
 export function damageEnemy(part: Enemy, damage: number): void {
   const enemy = wholeOf(part);
+  // A shield keeps anything from hurting what is behind it.
+  if ((enemy.statuses.shielded ?? 0) > 0) {
+    return;
+  }
   disturbEnemy(enemy);
   enemy.hp = Math.max(0, enemy.hp - damage);
   syncBody(enemy);

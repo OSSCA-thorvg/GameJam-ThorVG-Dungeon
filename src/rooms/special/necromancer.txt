@@ -1,0 +1,15 @@
+         xxx
+         x>x
+xxxxxxxxxxLxxxxxxxxxx
+xx.................xx
+xC........N........Cx
+xx.................xx
+xC....x.......x....Cx
+xx.................xx
+xC......C.C.C......Cx
+xx.................xx
+xC....x.......x....Cx
+xx.................xx
+xC.................Cx
+xx........@........xx
+xxxxxxxxxxxxxxxxxxxxx

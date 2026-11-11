@@ -19,6 +19,7 @@ import {
   chaser,
   createCentipedeState,
   createEnemy,
+  createNecromancerState,
   damageEnemy,
   disturbEnemy,
   healEnemy,
@@ -29,6 +30,8 @@ import {
   archer,
   ghostStats,
   mimicStats,
+  necromancer,
+  necromancerStats,
   pickEnemyKind,
   rollHit,
   skeletonArcherStats,
@@ -37,7 +40,7 @@ import {
   type Enemy,
   type UndeadKind,
 } from './enemy';
-import { createBossFloor } from './bossFloor';
+import { createBossFloor, createNecromancerFloor } from './bossFloor';
 import { showLaneWarning, type LaneWarning } from './laneWarning';
 import {
   CAMPFIRE_ICON,
@@ -338,6 +341,8 @@ function floorContents(random: Random): { loot: Loot[]; hasMimic: boolean } {
 interface CoffinSpec {
   position: Point;
   kind: UndeadKind | null;
+  // What wakes the undead in it: the hero coming near, or the necromancer.
+  waker: 'hero' | 'boss';
 }
 
 interface Coffin extends CoffinSpec {
@@ -353,8 +358,7 @@ const WANDERING_GHOUL_CHANCE = 0.3;
 // How close the hero must come to a coffin in view, in tiles, for its undead to burst out.
 const AMBUSH_DISTANCE = 1;
 
-// Picks the coffins of the floor that hold an undead, and which one.
-function planCoffins(room: GeneratedMap, random: Random): CoffinSpec[] {
+function coffinTiles(room: GeneratedMap): Point[] {
   const tiles: Point[] = [];
   room.tiles.forEach((row, y) =>
     row.forEach((tile, x) => {
@@ -363,13 +367,33 @@ function planCoffins(room: GeneratedMap, random: Random): CoffinSpec[] {
       }
     }),
   );
+  return tiles;
+}
+
+// Picks the coffins of the floor that hold an undead, and which one.
+function planCoffins(room: GeneratedMap, random: Random): CoffinSpec[] {
   const undead = Object.keys(UNDEAD_KINDS) as UndeadKind[];
   let holders = 0;
-  return shuffle(random, tiles).map((position) => {
+  return shuffle(random, coffinTiles(room)).map((position) => {
     const holds = holders < MAX_AMBUSHES && random() < AMBUSH_CHANCE;
     holders += holds ? 1 : 0;
-    return { position, kind: holds ? pick(random, undead) : null };
+    return { position, kind: holds ? pick(random, undead) : null, waker: 'hero' };
   });
+}
+
+// Placeholder values. How many coffins of the necromancer's room hold a ghoul, which is two for
+// each of its three chants, and how many of them it wakes in a chant. The other coffins are
+// empty, and look the same.
+const GHOULS_IN_BOSS_COFFINS = 6;
+const GHOULS_PER_CHANT = 2;
+
+// Picks the coffins of the necromancer's room that hold a ghoul. Only the necromancer wakes them.
+function planBossCoffins(room: GeneratedMap, random: Random): CoffinSpec[] {
+  return shuffle(random, coffinTiles(room)).map((position, index) => ({
+    position,
+    kind: index < GHOULS_IN_BOSS_COFFINS ? 'ghoul' : null,
+    waker: 'boss',
+  }));
 }
 
 const SECOND_STAGE_STATS = {
@@ -429,7 +453,31 @@ function createCentipede(tiles: Point[]): Enemy[] {
   return [head, ...body];
 }
 
+// The necromancer, which drops the key to the way down.
+function createNecromancer(position: Point): Enemy {
+  const enemy = createEnemy(
+    necromancerStats,
+    position,
+    false,
+    createDummyEnemy(TVG, 'necromancer'),
+    createEnemyHealthBar(TVG, renderCanvas),
+    createSleepMark(TVG),
+    necromancer,
+    { kind: 'item', name: 'iron-key' },
+  );
+  enemy.state = 'hunting';
+  enemy.necromancer = createNecromancerState();
+  return enemy;
+}
+
 function createLevel() {
+  if (floor === FLOORS_PER_STAGE * 2) {
+    const { map, boss } = createNecromancerFloor();
+    const bossRandom = createRandom(runSeed + floor);
+    const coffinSpecs = planBossCoffins(map, bossRandom);
+    return finishLevel(map, [createNecromancer(boss)], [], [], [], coffinSpecs);
+  }
+
   if (floor === FLOORS_PER_STAGE) {
     const { map, tiles } = createBossFloor();
     return finishLevel(map, createCentipede(tiles), [], []);
@@ -604,6 +652,10 @@ let equipment: Equipment = startingEquipment();
 let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
 let traps: Trap[] = [];
 let coffins: Coffin[] = [];
+// The coffins that the necromancer chants over, until it raises what is in them, and the ghouls it
+// raised.
+let chantedCoffins: Coffin[] = [];
+const summonedGhouls = new Set<Enemy>();
 
 function createItemContext(): ItemContext {
   return {
@@ -742,6 +794,9 @@ function addHeroStatus(name: StatusName, turns: number) {
 // Dungeon.
 function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
   if (HARMFUL_STATUSES.includes(name)) {
+    if (isShielded(enemy)) {
+      return;
+    }
     revealMimic(enemy);
   }
   if (!hasStatus(enemy.statuses, name) && seenEnemies.has(enemy)) {
@@ -878,6 +933,13 @@ function enemyAt({ x, y }: Point) {
   return [...seenEnemies].find(({ position }) => position.x === x && position.y === y);
 }
 
+// The enemy that the hero can target on a tile. A shielded enemy cannot be targeted, as if the tile
+// were a wall.
+function targetableEnemyAt(tile: Point) {
+  const enemy = enemyAt(tile);
+  return enemy && !isShielded(enemy) ? enemy : undefined;
+}
+
 function itemsAt({ x, y }: Point) {
   return groundItems.filter(({ position }) => position.x === x && position.y === y);
 }
@@ -887,7 +949,7 @@ function updateCursorTile() {
   if (targeting) {
     return previewTarget(tile);
   }
-  if (tile && enemyAt(tile)) {
+  if (tile && targetableEnemyAt(tile)) {
     return roomView.setCursorTile(tile, 'enemy');
   }
   const hasItem =
@@ -1225,7 +1287,9 @@ function startLevel() {
   visionState = '';
   groundItems = [];
   traps = trapSpecs.map(({ position, kind }) => ({ position, kind, state: 'hidden', paint: null }));
-  coffins = coffinSpecs.map(({ position, kind }) => ({ position, kind, paint: null }));
+  coffins = coffinSpecs.map((spec) => ({ ...spec, paint: null }));
+  chantedCoffins = [];
+  summonedGhouls.clear();
   stopWalking();
   isWalkingToStairs = false;
   isWalking = false;
@@ -1520,7 +1584,7 @@ function arrowTarget(from: Point): ArrowTarget | null {
   const candidates: { who: ArrowTarget; position: Point }[] = [
     { who: 'hero', position: heroPosition },
     ...enemies
-      .filter((enemy) => enemy.state !== 'disguised')
+      .filter((enemy) => enemy.state !== 'disguised' && !isShielded(enemy))
       .map((enemy) => ({ who: enemy, position: enemy.position })),
   ];
   const distance = ({ position }: { position: Point }) =>
@@ -1664,46 +1728,66 @@ function showCoffin(coffin: Coffin) {
   if (coffin.paint) {
     roomView.remove(coffin.paint);
   }
-  coffin.paint = createCoffinPaint(TVG);
+  coffin.paint = createCoffinPaint(TVG, chantedCoffins.includes(coffin));
   roomView.place(coffin.paint, coffin.position.x, coffin.position.y);
 }
 
-// An undead smashes out of each coffin that holds one when the hero comes near it in view. The
-// coffin is gone then, so it does not block the way any more. Bursting out is the undead's action
-// for this turn, so the hero has a turn to react.
+// The undead in a coffin smashes out of it. The coffin is gone then, so it does not block the way
+// any more. When the hero woke it, bursting out is its action for the turn about to run, so the
+// hero has a turn to react.
+function smashCoffin(coffin: Coffin, skipsTurn: boolean): Enemy | null {
+  if (!coffin.kind) {
+    return null;
+  }
+  const { position } = coffin;
+  if (coffin.paint) {
+    roomView.remove(coffin.paint);
+  }
+  coffins.splice(coffins.indexOf(coffin), 1);
+  room.tiles[position.y][position.x] = 'floor';
+  // The coffin may have blocked the view or the way, so the vision must be computed again.
+  visionState = '';
+  const enemy = createEnemy(
+    UNDEAD_KINDS[coffin.kind],
+    position,
+    false,
+    createDummyEnemy(TVG, coffin.kind),
+    createEnemyHealthBar(TVG, renderCanvas),
+    createSleepMark(TVG),
+    chaser,
+  );
+  enemies.push(enemy);
+  alertEnemy(enemy, heroPosition);
+  enemy.hasSeenHero = true;
+  placeEnemy(enemy, position);
+  if (skipsTurn) {
+    skippingThisTurn.add(enemy);
+  }
+  messageLog.add(`A ${enemy.stats.name} smashes its way out of a coffin!`);
+  damageNumbers.show(roomView, createNoticeMark(TVG), position);
+  stopWalking();
+  return enemy;
+}
+
+// An undead smashes out of each coffin that holds one when the hero comes near it in view.
 function wakeCoffins() {
   for (const coffin of [...coffins]) {
     const isNear = isWithin(coffin.position, heroPosition, AMBUSH_DISTANCE);
-    if (!coffin.kind || !isNear || !isInView(coffin.position)) {
-      continue;
+    if (coffin.waker === 'hero' && coffin.kind && isNear && isInView(coffin.position)) {
+      smashCoffin(coffin, true);
     }
-    const { position } = coffin;
-    if (coffin.paint) {
-      roomView.remove(coffin.paint);
-    }
-    coffins.splice(coffins.indexOf(coffin), 1);
-    room.tiles[position.y][position.x] = 'floor';
-    // The coffin may have blocked the view or the way, so the vision must be computed again.
-    visionState = '';
-    const enemy = createEnemy(
-      UNDEAD_KINDS[coffin.kind],
-      position,
-      false,
-      createDummyEnemy(TVG, coffin.kind),
-      createEnemyHealthBar(TVG, renderCanvas),
-      createSleepMark(TVG),
-      chaser,
-    );
-    enemies.push(enemy);
-    alertEnemy(enemy, heroPosition);
-    enemy.hasSeenHero = true;
-    placeEnemy(enemy, position);
-    skippingThisTurn.add(enemy);
-    messageLog.add(`A ${enemy.stats.name} smashes its way out of a coffin!`);
-    damageNumbers.show(roomView, createNoticeMark(TVG), position);
-    stopWalking();
   }
 }
+
+// The coffins of the necromancer's room that hold a ghoul, which only it can wake.
+const summonableCoffins = () =>
+  coffins.filter(({ kind, waker }) => kind !== null && waker === 'boss');
+
+// Whether the necromancer has the coffins to raise ghouls from.
+const canSummon = () => summonableCoffins().length >= GHOULS_PER_CHANT;
+
+// What keeps an enemy from being hurt or targeted, like a wall in front of it.
+const isShielded = (enemy: Enemy) => hasStatus(enemy.statuses, 'shielded');
 
 // A bite that hurts the hero heals the enemies that live off it, by a share of the damage. A share
 // of a few points rounds up or down by chance, so over many bites it is the share.
@@ -2107,6 +2191,8 @@ function runEnemyTurn(onDone: () => void) {
       hero: heroPosition,
       canSeeHero,
       occupied: [...occupiedTiles(enemy), ...chestTiles(), ...knownTrapTiles()],
+      canSummon: canSummon(),
+      summonsAlive: [...summonedGhouls].filter((ghoul) => enemies.includes(ghoul)).length,
     });
 
     // Shown where the enemy ends its turn, so the mark does not stay behind when it moves.
@@ -2142,6 +2228,37 @@ function runEnemyTurn(onDone: () => void) {
           shootAtHero(enemy);
           actNext();
         }, ENEMY_ATTACK_DELAY_MS);
+        break;
+      case 'chant': {
+        // The necromancer stands behind a shield, and the coffins it chants over turn red.
+        chantedCoffins = shuffle(Math.random, summonableCoffins()).slice(0, GHOULS_PER_CHANT);
+        chantedCoffins.forEach(showCoffin);
+        addEnemyStatus(enemy, 'shielded', Infinity);
+        if (isInView(enemy.position)) {
+          messageLog.add('The necromancer begins to chant an unknown spell!');
+        }
+        actNext();
+        break;
+      }
+      case 'raise': {
+        const raised = chantedCoffins.filter((coffin) => coffins.includes(coffin));
+        chantedCoffins = [];
+        for (const coffin of raised) {
+          const ghoul = smashCoffin(coffin, false);
+          if (ghoul) {
+            summonedGhouls.add(ghoul);
+          }
+        }
+        actNext();
+        break;
+      }
+      case 'unshield':
+        delete enemy.statuses.shielded;
+        showEnemy(enemy);
+        if (isInView(enemy.position)) {
+          messageLog.add('The shield around the necromancer fades!');
+        }
+        actNext();
         break;
       case 'wait':
         // It may have woken up.
@@ -2310,7 +2427,7 @@ function walk() {
     const isChosenTile = path.length === 0 && !attackTarget && !useTarget;
     stopWalking();
     isWalking = false;
-    if (isChosenTile && !seenEnemies.has(blocker)) {
+    if (isChosenTile && !seenEnemies.has(blocker) && !isShielded(blocker)) {
       playHeroAttack(blocker);
     }
     return;
@@ -2359,6 +2476,7 @@ function traceTo(
         tile === 'locked-door' ||
         tile === 'coffin' ||
         isFixture(room, x, y) ||
+        enemies.some((enemy) => isShielded(enemy) && isSameTile(enemy.position, { x, y })) ||
         (tile === 'door' && !openDoors.has(y * room.width + x) && !(landsOnDoor && isTarget))
       );
     },
@@ -2467,7 +2585,7 @@ function pressTileAt(position: Point, isMouse: boolean) {
     return;
   }
 
-  const clicked = enemyAt(target);
+  const clicked = targetableEnemyAt(target);
   // A click on the stairs goes down on arrival, but a click on an item lying there is for the item.
   isWalkingToStairs = !clicked && isStairs && itemsAt(target).length === 0;
 

@@ -11,7 +11,8 @@ export type StatusName =
   | 'burning'
   | 'poisoned'
   | 'stunned'
-  | 'weakened';
+  | 'weakened'
+  | 'shielded';
 
 // The effects that work against the character they are on.
 export const HARMFUL_STATUSES: readonly StatusName[] = [
@@ -38,6 +39,7 @@ export const STATUS_LABELS: Record<StatusName, string> = {
   poisoned: 'Poisoned',
   stunned: 'Stunned',
   weakened: 'Weakened',
+  shielded: 'Shielded',
 };
 
 // What each effect does to the hero, shown when the player points at its icon.
@@ -51,6 +53,7 @@ export const STATUS_DESCRIPTIONS: Record<StatusName, string> = {
   burning: 'Fire hurts you at the end of every turn.',
   poisoned: 'Poison hurts you at the end of every turn, less as it wears off.',
   stunned: 'You cannot act or dodge, dazed from a crash.',
+  shielded: 'A shield keeps anything from hurting you.',
   weakened: 'You feel weak. Your strength is lowered by one, so heavy gear weighs on you more.',
 };
 
@@ -95,7 +98,7 @@ export function isHelpless(statuses: Statuses): boolean {
 
 // The color a character is tinted with, from the effect that matters most to the player.
 export function tintOf(statuses: Statuses): CharacterTint | null {
-  const order: CharacterTint[] = ['frozen', 'paralyzed', 'burning'];
+  const order: CharacterTint[] = ['frozen', 'paralyzed', 'burning', 'shielded'];
   // A stunned character is tinted like a paralyzed one, as it is as helpless.
   if (hasStatus(statuses, 'stunned') && !hasStatus(statuses, 'frozen')) {
     return 'paralyzed';
