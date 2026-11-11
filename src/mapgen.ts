@@ -5,7 +5,8 @@ import type { RoomSource } from './roomgen';
 
 export interface GeneratedMap extends Room {
   start: Point;
-  stairs: Point;
+  // The way down, or none on the last floor.
+  stairs: Point | null;
   // The tiles inside the special room and its doorways, or none when the map has no special room.
   specialRoom: Point[];
   // The floor tiles of corridors. Items, chests, and stairs are not put there.

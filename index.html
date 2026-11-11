@@ -416,6 +416,13 @@
       #game-over[hidden] {
         display: none;
       }
+      #game-over-text {
+        max-width: 360px;
+        margin: 0;
+        font: 16px/1.5 sans-serif;
+        text-align: center;
+        color: #c8cad2;
+      }
       #run-stats {
         margin: 0;
         padding: 0;
@@ -499,7 +506,8 @@
       <button id="target-cancel">Cancel</button>
     </div>
     <div id="game-over" hidden>
-      You died
+      <span id="game-over-title">You died</span>
+      <p id="game-over-text" hidden></p>
       <ul id="run-stats"></ul>
       <button id="restart">Try again</button>
     </div>

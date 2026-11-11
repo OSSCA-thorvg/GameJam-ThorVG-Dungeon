@@ -48,7 +48,8 @@ export function createBossFloor(): BossFloor {
 }
 
 // The arena of the necromancer on the last floor of the second stage: a wide room with coffins in
-// niches along its sides and a few in the middle. "N" is the necromancer, on a floor tile.
+// niches along its sides and a few in the middle. "N" is the necromancer, on a floor tile. It is
+// the last floor, so there are no stairs.
 export interface NecromancerFloor {
   map: GeneratedMap;
   boss: Point;
@@ -72,14 +73,6 @@ export function createNecromancerFloor(): NecromancerFloor {
     .join('\n');
 
   const room = parseRoom(text);
-  let stairs: Point | undefined;
-  room.tiles.forEach((row, y) =>
-    row.forEach((tile, x) => {
-      if (tile === 'stairs') {
-        stairs = { x, y };
-      }
-    }),
-  );
-  const map = { ...room, start: room.start!, stairs: stairs!, specialRoom: [], corridor: [] };
+  const map = { ...room, start: room.start!, stairs: null, specialRoom: [], corridor: [] };
   return { map, boss: boss! };
 }

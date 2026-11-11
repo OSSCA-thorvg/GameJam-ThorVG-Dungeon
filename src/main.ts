@@ -460,7 +460,7 @@ function createCentipede(tiles: Point[]): Enemy[] {
   return [head, ...body];
 }
 
-// The necromancer, which drops the key to the way down.
+// The necromancer. Defeating it ends the run.
 function createNecromancer(position: Point): Enemy {
   const enemy = createEnemy(
     necromancerStats,
@@ -470,7 +470,6 @@ function createNecromancer(position: Point): Enemy {
     createEnemyHealthBar(TVG, renderCanvas),
     createSleepMark(TVG),
     necromancer,
-    { kind: 'item', name: 'iron-key' },
   );
   enemy.state = 'hunting';
   enemy.necromancer = createNecromancerState();
@@ -1162,7 +1161,7 @@ function lookAround(openDoors: Point[]) {
     inView[y][x] = true;
     explored[y][x] = true;
   }
-  if (isExplored(room.stairs)) {
+  if (room.stairs && isExplored(room.stairs)) {
     roomView.revealStairs();
   }
 
@@ -1350,7 +1349,11 @@ function startLevel() {
 
 // Items left on the stairs block them, so the hero has to clear them first.
 function canGoDownStairs() {
-  return isSameTile(heroPosition, room.stairs) && itemsAt(room.stairs).length === 0;
+  return (
+    room.stairs !== null &&
+    isSameTile(heroPosition, room.stairs) &&
+    itemsAt(room.stairs).length === 0
+  );
 }
 
 // Going down from the surface finishes it, so the next runs in this browser start on floor 1.
@@ -1836,11 +1839,15 @@ function showDamage(amount: number, tile: Point, target: DamageTarget) {
   damageNumbers.show(roomView, createDamageNumber(TVG, amount, target), tile);
 }
 
-function endGame() {
-  isGameOver = true;
-  roomView.remove(hero);
+// Shows the screen at the end of a run, with what the run came to.
+function showEndScreen(title: string, text: string | null, buttonLabel: string) {
   // The hero can die to the enemy turn after changing equipment, while the bag is open.
   inventoryPanel.close();
+  document.querySelector('#game-over-title')!.textContent = title;
+  const body = document.querySelector<HTMLElement>('#game-over-text')!;
+  body.textContent = text;
+  body.hidden = text === null;
+  document.querySelector('#restart')!.textContent = buttonLabel;
 
   const plural = (count: number, one: string, many: string) =>
     `${count} ${count === 1 ? one : many}`;
@@ -1856,6 +1863,40 @@ function endGame() {
     }),
   );
   gameOverScreen.hidden = false;
+}
+
+function endGame() {
+  isGameOver = true;
+  roomView.remove(hero);
+  showEndScreen('You died', null, 'Try again');
+}
+
+// Placeholder value. How long the screen waits after the necromancer falls.
+const WIN_DELAY_MS = 1500;
+
+// The necromancer is dead, which ends the run. What it raised crumbles with it. The game is over
+// at once, so nothing more happens, and the screen comes up a moment later.
+function winGame() {
+  isGameOver = true;
+  stopWalking();
+  for (const enemy of [...enemies]) {
+    roomView.remove(enemy.paint);
+    roomView.remove(enemy.healthBar.scene);
+    roomView.remove(enemy.sleepMark);
+    enemies.splice(enemies.indexOf(enemy), 1);
+    seenEnemies.delete(enemy);
+  }
+  messageLog.add('The dead crumble to dust.');
+  updateVision();
+  setTimeout(
+    () =>
+      showEndScreen(
+        'The dungeon is quiet.',
+        'With the necromancer gone, the dead lie still. Few return from this dungeon. You did.',
+        'Play again',
+      ),
+    WIN_DELAY_MS,
+  );
 }
 
 // Damage breaks the ice of a frozen hero.
@@ -1904,6 +1945,9 @@ function killEnemy(part: Enemy) {
   }
   gainExperience(enemy.stats.experience);
   updateVision();
+  if (enemy.stats === necromancerStats) {
+    winGame();
+  }
 }
 
 // A hit on the hero. The armor takes away part of it, as in Char.attack() of Shattered Pixel

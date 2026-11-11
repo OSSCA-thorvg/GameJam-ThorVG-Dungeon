@@ -1,6 +1,4 @@
-         xxx
-         x>x
-xxxxxxxxxxLxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxx
 xx.................xx
 xC........N........Cx
 xx.................xx
