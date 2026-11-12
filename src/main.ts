@@ -694,7 +694,7 @@ function createItemContext(): ItemContext {
       satisfyHunger(heroHunger, amount);
       showHeroStats();
     },
-    log: (message) => messageLog.add(message),
+    log: (message, category) => messageLog.add(message, category),
     // Fire and frost also reach a closed door, without going through it.
     areaAround: (tile, steps) => spreadArea(tile, steps, isOpenTile, isFlammableTile),
     // Fire catches whoever stands in it at once, but does not burn on water, which puts out whoever
@@ -852,7 +852,7 @@ function levelUp() {
   heroHp += LEVEL_UP_HP;
   showHeroHp();
   showHeroStats();
-  messageLog.add('Level up! Your max HP, accuracy, and evasion went up.');
+  messageLog.add('Level up! Your max HP, accuracy, and evasion went up.', 'good');
 }
 
 function gainExperience(amount: number) {
@@ -1098,7 +1098,7 @@ function revealMimic(enemy: Enemy) {
   if (isInView(enemy.position)) {
     alertEnemy(enemy, heroPosition);
     enemy.hasSeenHero = true;
-    messageLog.add('The chest bares its teeth. It was a mimic!');
+    messageLog.add('The chest bares its teeth. It was a mimic!', 'danger');
   }
   updateVision();
   showEnemy(enemy);
@@ -1462,7 +1462,7 @@ function startChargeWarning(lane: Point[], direction: Point) {
   stopChargeWarning();
   chargeWarning = showLaneWarning(TVG, roomView, lane, direction, renderCanvas);
   damageNumbers.show(roomView, createTargetedText(TVG), heroPosition);
-  messageLog.add('The giant centipede rears up and targets you!');
+  messageLog.add('The giant centipede rears up and targets you!', 'warning');
   stopWalking();
 }
 
@@ -1471,7 +1471,7 @@ function startChargeWarning(lane: Point[], direction: Point) {
 function startConeWarning(tiles: Point[], direction: Point) {
   stopChargeWarning();
   chargeWarning = showLaneWarning(TVG, roomView, tiles, direction, renderCanvas);
-  messageLog.add('The necromancer gathers dark magic!');
+  messageLog.add('The necromancer gathers dark magic!', 'warning');
   stopWalking();
 }
 
@@ -1483,7 +1483,7 @@ function strikeCone(tiles: Point[]) {
   stopChargeWarning();
   playDark(TVG, roomView, tiles, renderCanvas);
   if (tiles.some((tile) => isSameTile(tile, heroPosition))) {
-    messageLog.add('The dark magic strikes you!');
+    messageLog.add('The dark magic strikes you!', 'danger');
     damageHero(normalIntRange(Math.random, ...CONE_DAMAGE));
     stopWalking();
   }
@@ -1512,7 +1512,7 @@ function playCharge(enemy: Enemy, path: Point[], hitsHero: boolean, onDone: () =
     }
 
     if (hitsHero) {
-      messageLog.add('The giant centipede slams into you!');
+      messageLog.add('The giant centipede slams into you!', 'danger');
       const damage = normalIntRange(Math.random, ...CHARGE_DAMAGE);
       damageHero(Math.max(0, damage - rollArmor(equipment, currentStrength())));
       showHeroStats();
@@ -1588,7 +1588,7 @@ function showTrap(trap: Trap) {
 function findTrap(trap: Trap) {
   trap.state = 'known';
   showTrap(trap);
-  messageLog.add(`You found ${TRAP_LABELS[trap.kind]}.`);
+  messageLog.add(`You found ${TRAP_LABELS[trap.kind]}.`, 'warning');
   stopWalking();
 }
 
@@ -1685,7 +1685,7 @@ function afterArrows(next: () => void) {
 function landArrow(target: ArrowTarget, damage: number) {
   if (target === 'hero') {
     if (!isGameOver) {
-      messageLog.add('An arrow hits you!');
+      messageLog.add('An arrow hits you!', 'danger');
       damageHero(damage);
     }
     return;
@@ -1751,7 +1751,7 @@ function setOffTrap(trap: Trap, by: TrapTrigger) {
 
   if (trap.kind === 'spike') {
     if (tellsOf) {
-      messageLog.add(`${lead} Spikes jab up out of the floor!`);
+      messageLog.add(`${lead} Spikes jab up out of the floor!`, 'danger');
     }
     if (isHero) {
       damageHero(damage);
@@ -1766,6 +1766,7 @@ function setOffTrap(trap: Trap, by: TrapTrigger) {
       target
         ? `${lead} An arrow shoots out of the floor!`
         : `${lead} An arrow shoots out of the floor and finds no one.`,
+      'danger',
     );
   }
   if (target) {
@@ -1836,7 +1837,7 @@ function smashCoffin(coffin: Coffin, skipsTurn: boolean): Enemy | null {
   if (skipsTurn) {
     skippingThisTurn.add(enemy);
   }
-  messageLog.add(`A ${enemy.stats.name} smashes its way out of a coffin!`);
+  messageLog.add(`A ${enemy.stats.name} smashes its way out of a coffin!`, 'warning');
   damageNumbers.show(roomView, createNoticeMark(TVG), position);
   stopWalking();
   return enemy;
@@ -1926,7 +1927,7 @@ function winGame() {
     enemies.splice(enemies.indexOf(enemy), 1);
     seenEnemies.delete(enemy);
   }
-  messageLog.add('The dead crumble to dust.');
+  messageLog.add('The dead crumble to dust.', 'good');
   updateVision();
   setTimeout(
     () =>
@@ -2033,7 +2034,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
   const isHit =
     isAmbush || isHelpless(heroStatuses) || rollHit(enemy.stats.accuracy, heroEvasion());
   if (!seenEnemies.has(enemy)) {
-    messageLog.add('Something unseen attacked you.');
+    messageLog.add('Something unseen attacked you.', 'danger');
   }
 
   finishAttackEffect = playAttackEffect({
@@ -2238,10 +2239,10 @@ function feelHunger() {
   const damage = tickHunger(heroHunger, heroMaxHp);
   const after = hungerState(heroHunger);
   if (after !== before && after === 'hungry') {
-    messageLog.add('You are getting hungry.');
+    messageLog.add('You are getting hungry.', 'warning');
   }
   if (after !== before && after === 'starving') {
-    messageLog.add('You are starving! You will keep losing HP until you eat.');
+    messageLog.add('You are starving! You will keep losing HP until you eat.', 'danger');
     stopWalking();
   }
   if (damage > 0) {
@@ -2381,7 +2382,7 @@ function runEnemyTurn(onDone: () => void) {
         chantedCoffins.forEach(showCoffin);
         addEnemyStatus(enemy, 'shielded', Infinity);
         if (isInView(enemy.position)) {
-          messageLog.add('The necromancer begins to chant an unknown spell!');
+          messageLog.add('The necromancer begins to chant an unknown spell!', 'warning');
         }
         actNext();
         break;
@@ -3194,7 +3195,7 @@ function spendCampfireTurns(
     }
     if (isEnemyInCampfireRoom()) {
       campfireTask = null;
-      messageLog.add(`An enemy came into the room! You stopped ${verb}.`);
+      messageLog.add(`An enemy came into the room! You stopped ${verb}.`, 'danger');
       return;
     }
     if (isDone || turnsLeft === 0) {
@@ -3234,7 +3235,7 @@ function rest() {
       return heroHp >= heroMaxHp;
     },
     () => {
-      messageLog.add('You feel rested.');
+      messageLog.add('You feel rested.', 'good');
       openCampfire();
     },
   );

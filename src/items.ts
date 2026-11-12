@@ -1,5 +1,6 @@
 import { HUNGRY, STARVING } from './hunger';
 import { normalIntRange, roundRandomly } from './random';
+import type { MessageCategory } from './messageLog';
 import type { GasKind } from './render';
 import type { Point } from './room';
 import type { StatusName } from './status';
@@ -66,7 +67,7 @@ export interface ItemContext {
   gainStrength(): void;
   gainLevel(): void;
   satisfyHunger(amount: number): void;
-  log(message: string): void;
+  log(message: string, category?: MessageCategory): void;
   // The tiles within some steps of a tile, going around walls and closed doors.
   areaAround(tile: Point, steps: number): Point[];
   setFire(tiles: Point[], turns: number): void;
@@ -567,7 +568,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     ({ maxHp, addStatus, log }) => {
       if (Math.random() < FOOD_POISONING_CHANCE) {
         addStatus('poisoned', Math.round(maxHp * FOOD_POISONING_FRACTION));
-        log('Your stomach churns. The meat was bad!');
+        log('Your stomach churns. The meat was bad!', 'danger');
       }
     },
   ),
