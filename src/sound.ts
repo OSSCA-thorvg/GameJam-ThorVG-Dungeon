@@ -28,9 +28,11 @@ export interface Sound {
   play(name: SoundName, pitchVariance?: number): void;
   // Loops a track and fades the one playing out. Null stops the music.
   playMusic(name: MusicName | null): void;
-  // From 0 to 1.
-  setVolume(volume: number): void;
+  // The volume of the sound effects or of the music, from 0 to 1.
+  setVolume(kind: VolumeKind, volume: number): void;
 }
+
+export type VolumeKind = 'sfx' | 'music';
 
 const files = import.meta.glob<string>('../assets/sound/*.ogg', {
   query: '?url',
@@ -46,7 +48,7 @@ const GESTURES = ['pointerdown', 'pointerup', 'keydown'] as const;
 // Plays the sounds in assets/sound with Web Audio. A browser starts audio only after a click or a
 // key press, so sounds before the first one are skipped, and the music asked for before it starts
 // then.
-export function createSound(volume: number): Sound {
+export function createSound(volumes: Record<VolumeKind, number>): Sound {
   const downloads = new Map<string, Promise<ArrayBuffer | null>>();
   for (const [path, url] of Object.entries(files)) {
     const name = path.slice(path.lastIndexOf('/') + 1, -'.ogg'.length);
@@ -60,7 +62,7 @@ export function createSound(volume: number): Sound {
 
   const buffers = new Map<string, AudioBuffer>();
   let context: AudioContext | null = null;
-  let master: GainNode | null = null;
+  let gains: Record<VolumeKind, GainNode> | null = null;
   let wantedMusic: MusicName | null = null;
   let music: { name: MusicName; source: AudioBufferSourceNode; gain: GainNode } | null = null;
 
@@ -72,7 +74,7 @@ export function createSound(volume: number): Sound {
   };
 
   const applyMusic = () => {
-    if (!context || !master || context.state !== 'running' || music?.name === wantedMusic) {
+    if (!context || !gains || context.state !== 'running' || music?.name === wantedMusic) {
       return;
     }
     const buffer = wantedMusic && buffers.get(wantedMusic);
@@ -92,16 +94,20 @@ export function createSound(volume: number): Sound {
     const gain = context.createGain();
     gain.gain.setValueAtTime(0, context.currentTime);
     gain.gain.linearRampToValueAtTime(1, context.currentTime + MUSIC_FADE_SECONDS);
-    source.connect(gain).connect(master);
+    source.connect(gain).connect(gains.music);
     source.start();
     music = { name: wantedMusic, source, gain };
   };
 
   const start = () => {
     const created = new AudioContext();
-    master = created.createGain();
-    master.gain.value = volume;
-    master.connect(created.destination);
+    const createGain = (kind: VolumeKind) => {
+      const gain = created.createGain();
+      gain.gain.value = volumes[kind];
+      gain.connect(created.destination);
+      return gain;
+    };
+    gains = { sfx: createGain('sfx'), music: createGain('music') };
     for (const [name, download] of downloads) {
       void download.then(async (bytes) => {
         if (bytes) {
@@ -131,23 +137,23 @@ export function createSound(volume: number): Sound {
   return {
     play(name, pitchVariance = 0) {
       const buffer = buffers.get(name);
-      if (!context || !master || context.state !== 'running' || !buffer) {
+      if (!context || !gains || context.state !== 'running' || !buffer) {
         return;
       }
       const source = context.createBufferSource();
       source.buffer = buffer;
       source.playbackRate.value = 1 + (Math.random() * 2 - 1) * pitchVariance;
-      source.connect(master);
+      source.connect(gains.sfx);
       source.start();
     },
     playMusic(name) {
       wantedMusic = name;
       applyMusic();
     },
-    setVolume(next) {
-      volume = next;
-      if (master) {
-        master.gain.value = next;
+    setVolume(kind, next) {
+      volumes[kind] = next;
+      if (gains) {
+        gains[kind].gain.value = next;
       }
     },
   };

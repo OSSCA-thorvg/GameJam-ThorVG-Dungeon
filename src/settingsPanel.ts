@@ -20,7 +20,8 @@ export function createSettingsPanel({
   const button = document.querySelector<HTMLButtonElement>('#settings-button')!;
   const overlay = document.querySelector<HTMLElement>('#settings')!;
   const uiScale = document.querySelector<HTMLSelectElement>('#ui-scale')!;
-  const volume = document.querySelector<HTMLInputElement>('#volume')!;
+  const sfxVolume = document.querySelector<HTMLInputElement>('#sfx-volume')!;
+  const musicVolume = document.querySelector<HTMLInputElement>('#music-volume')!;
 
   const refresh = () => {
     uiScale.replaceChildren(
@@ -29,14 +30,18 @@ export function createSettingsPanel({
       ),
     );
     uiScale.value = String(uiScaleFor(getSettings(), window.innerWidth));
-    volume.value = String(Math.round(getSettings().volume * 100));
+    sfxVolume.value = String(Math.round(getSettings().sfxVolume * 100));
+    musicVolume.value = String(Math.round(getSettings().musicVolume * 100));
   };
 
   uiScale.addEventListener('change', () => {
     onChange({ ...getSettings(), uiScale: Number(uiScale.value) });
   });
-  volume.addEventListener('input', () => {
-    onChange({ ...getSettings(), volume: Number(volume.value) / 100 });
+  sfxVolume.addEventListener('input', () => {
+    onChange({ ...getSettings(), sfxVolume: Number(sfxVolume.value) / 100 });
+  });
+  musicVolume.addEventListener('input', () => {
+    onChange({ ...getSettings(), musicVolume: Number(musicVolume.value) / 100 });
   });
 
   const close = () => {

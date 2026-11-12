@@ -278,7 +278,7 @@ const heroHealthBar = createHeroHealthBar(TVG, renderCanvas);
 canvas.add(heroHealthBar.scene);
 
 let settings = loadSettings();
-const sound = createSound(settings.volume);
+const sound = createSound({ sfx: settings.sfxVolume, music: settings.musicVolume });
 
 // Any button makes the click sound, which is also the first click that lets the browser start audio.
 document.addEventListener('click', (event) => {
@@ -290,7 +290,8 @@ document.addEventListener('click', (event) => {
 // The CSS zooms the HTML by the UI scale. The hero health bar is on the canvas, so it is scaled
 // here to stay under its text.
 function applySettings() {
-  sound.setVolume(settings.volume);
+  sound.setVolume('sfx', settings.sfxVolume);
+  sound.setVolume('music', settings.musicVolume);
   const scale = uiScaleFor(settings, window.innerWidth);
   document.documentElement.style.setProperty('--ui-scale', String(scale));
   heroHealthBar.scene.scale(scale);
