@@ -12,7 +12,7 @@ export interface Sign {
 // the key to the locked entrance lie on the ground there, and signs explain how to play.
 export interface Surface {
   map: GeneratedMap;
-  items: { name: ItemName; position: Point }[];
+  items: { name: ItemName; count?: number; position: Point }[];
   signs: Sign[];
 }
 
@@ -23,7 +23,8 @@ const SIGN_TEXTS: Record<string, string> = {
     'back. So here you are at its entrance. Click a tile to walk there.',
   b:
     'Your gear lies on the ground. Walk onto an item to pick it up, then open the Bag to put on ' +
-    'the weapon and the armor. Save the food for when you get hungry.',
+    'the weapon and the armor. Save the food for when you get hungry. Darts are thrown from the ' +
+    'Bag at an enemy in sight.',
   c:
     'The way into the dungeon lies behind this locked door. Find the key, click the door to ' +
     'unlock it, step into the doorway, and take the stairs down. Below, click an enemy to attack ' +
@@ -64,7 +65,8 @@ export function markSurfaceFinished(): void {
 // The letters in the template that mark where the starting gear and the key to the dungeon lie.
 function itemGlyphs(): Record<string, ItemName> {
   const { weapon, armor } = createStartingEquipment();
-  return { W: weapon!, A: armor!, F: createStartingInventory()[0].name, K: 'iron-key' };
+  const [food, darts] = createStartingInventory();
+  return { W: weapon!, A: armor!, F: food.name, D: darts.name, K: 'iron-key' };
 }
 
 // Items and signs are taken out of the template, leaving a floor under each item and a sign tile
@@ -80,7 +82,8 @@ export function createSurface(): Surface {
         .map((glyph, x) => {
           const name = glyphs[glyph];
           if (name) {
-            items.push({ name, position: { x, y } });
+            const count = createStartingInventory().find((stack) => stack.name === name)?.count;
+            items.push({ name, count, position: { x, y } });
             return '.';
           }
           if (glyph in SIGN_TEXTS) {

@@ -97,6 +97,9 @@ export function createInventoryPanel({
     if (item.damage) {
       stats.push({ label: 'Damage', value: `${item.damage[0]}-${item.damage[1]}` });
     }
+    if (item.thrownDamage) {
+      stats.push({ label: 'Damage', value: `${item.thrownDamage[0]}-${item.thrownDamage[1]}` });
+    }
     if (item.armor) {
       stats.push({ label: 'Armor', value: `${item.armor[0]}-${item.armor[1]}` });
     }

@@ -18,6 +18,9 @@ export type PotionName =
   | 'paralysis-potion';
 export type ItemName =
   | PotionName
+  | 'dart'
+  | 'javelin'
+  | 'throwing-axe'
   | 'worn-shortsword'
   | 'longsword'
   | 'spear'
@@ -86,6 +89,8 @@ export interface ItemDefinition {
   armor?: [min: number, max: number];
   // The damage range of a weapon on a surprise attack, for weapons that roll it differently.
   surpriseDamage?: [min: number, max: number];
+  // Set for weapons that are thrown, with the damage of a hit.
+  thrownDamage?: [min: number, max: number];
   // How many steps away a weapon hits. Without it, a weapon hits only the tiles next to the hero.
   reach?: number;
   // The strength needed to use a weapon or armor without a penalty.
@@ -128,6 +133,21 @@ const TUNIC_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
 const RING_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <circle cx="12" cy="14" r="6" fill="none" stroke="#c8ccd4" stroke-width="2"/>
   <path fill="#c8ccd4" d="M10 5H14L15 7.500H9Z"/>
+</svg>`;
+const DART_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#8a6a3c" d="M5.500 17.500L18.500 4.500L19.500 5.500L6.500 18.500Z"/>
+  <path fill="#c8ccd4" d="M22 2L18 4L20 6Z"/>
+  <path fill="#c4455a" d="M2.500 16.500L7 17L5.500 18.500ZM7.500 21.500L7 17.500L5.500 19Z"/>
+</svg>`;
+const JAVELIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#8a6a3c" d="M3 20.500L17 6.500L18.500 8L4.500 22Z"/>
+  <path fill="#c8ccd4" d="M22.500 1.500L16 4L20 8Z"/>
+  <path fill="#6b4a2a" d="M3 20.500L5 18.500L6 19.500L4 21.500Z"/>
+</svg>`;
+const THROWING_AXE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#8a6a3c" d="M4.500 20L15 9.500L16.500 11L6 21.500Z"/>
+  <path fill="#c8ccd4" d="M12.500 4.500L20.500 3L21 10.500L17.500 12L14.500 9Z"/>
+  <path fill="#a3a8b2" d="M17.500 5.500L20 5L20.200 9L18.500 9.800Z"/>
 </svg>`;
 const LONGSWORD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <path fill="#c8ccd4" d="M6.272 15.889L8.111 17.728L21.051 4.788L22.253 1.747L19.212 2.949Z"/>
@@ -254,7 +274,10 @@ export function createEmptyEquipment(): Equipment {
 
 // Every hero starts with a ration in Shattered Pixel Dungeon too.
 export function createStartingInventory(): ItemStack[] {
-  return [{ name: 'ration', count: 1 }];
+  return [
+    { name: 'ration', count: 1 },
+    { name: 'dart', count: 3 },
+  ];
 }
 
 // Same as the default capacity of a Bag in Shattered Pixel Dungeon.
@@ -404,6 +427,32 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     description: 'Releases a gas that paralyzes anything in it. Throw it at enemies.',
     shatter: ({ releaseGas }, tile) => releaseGas('paralysis', tile, PARALYSIS_GAS_AMOUNT),
   }),
+  // Placeholder values. The damage of each throwing weapon is about that of a melee weapon of its
+  // tier, with a hit of a dart at half of a worn shortsword. It needs 1 strength less than a melee
+  // weapon of its tier.
+  dart: {
+    displayName: 'Dart',
+    description: 'A small dart for throwing at an enemy from afar. Some break when they hit.',
+    thrownDamage: [2, 4],
+    strength: strengthForTier(1) - 1,
+    icon: DART_ICON,
+  },
+  javelin: {
+    displayName: 'Javelin',
+    description:
+      'A light spear made for throwing. It hits harder than a dart. Some break when they hit.',
+    thrownDamage: [4, 7],
+    strength: strengthForTier(2) - 1,
+    icon: JAVELIN_ICON,
+  },
+  'throwing-axe': {
+    displayName: 'Throwing axe',
+    description:
+      'A hatchet balanced for throwing. It hits harder than a javelin. Some break when they hit.',
+    thrownDamage: [6, 10],
+    strength: strengthForTier(3) - 1,
+    icon: THROWING_AXE_ICON,
+  },
   'worn-shortsword': {
     displayName: 'Worn shortsword',
     description: 'A short sword, worn from use.',
@@ -560,6 +609,17 @@ export function rollDamage(equipment: Equipment, strength: number, isSurprise: b
   return roundRandomly(Math.random, normalIntRange(Math.random, min, max) * scale);
 }
 
+// How likely a thrown weapon that hit is to break.
+export const THROWN_BREAK_CHANCE = 1 / 4;
+
+// Rolls the damage of a thrown weapon that hit. A surprise attack rolls it from a higher minimum, as
+// a melee weapon does.
+export function rollThrownDamage(name: ItemName, isSurprise: boolean): number {
+  const range = ITEMS[name].thrownDamage ?? UNARMED_DAMAGE;
+  const [min, max] = isSurprise ? surpriseRange(range) : range;
+  return normalIntRange(Math.random, min, max);
+}
+
 // How many steps away the hero hits with the equipped weapon, or with bare hands.
 export function weaponReach(equipment: Equipment): number {
   return (equipment.weapon && ITEMS[equipment.weapon].reach) ?? 1;
@@ -586,12 +646,23 @@ function missingStrength(name: ItemName | null, strength: number): number {
 
 // The warning shown with equipment that is too heavy for the hero, or null when it is not.
 export function tooHeavyMessage(name: ItemName, strength: number): string | null {
-  const kind = ITEMS[name].equipKind;
+  // A thrown weapon is as heavy to throw as a weapon is to swing.
+  const kind = ITEMS[name].equipKind ?? (ITEMS[name].thrownDamage ? 'weapon' : undefined);
   return kind && missingStrength(name, strength) > 0 ? (TOO_HEAVY_MESSAGES[kind] ?? null) : null;
 }
 
 export function accuracyFactor(equipment: Equipment, strength: number): number {
   return MISSING_STRENGTH_DIVISOR ** -missingStrength(equipment.weapon, strength);
+}
+
+// What a thrown weapon that is too heavy does to accuracy, and whether it can make a surprise
+// attack, as a melee weapon does.
+export function thrownAccuracyFactor(name: ItemName, strength: number): number {
+  return MISSING_STRENGTH_DIVISOR ** -missingStrength(name, strength);
+}
+
+export function canSurpriseThrow(name: ItemName, strength: number): boolean {
+  return missingStrength(name, strength) === 0;
 }
 
 export function evasionFactor(equipment: Equipment, strength: number): number {

@@ -9,9 +9,10 @@ export interface PathRule {
   stopAtCharacters: boolean;
 }
 
-// A thrown item flies over characters to the chosen tile. Throwing weapons, which must hit the
-// first character in the way, will need a rule that stops at characters.
+// A thrown item flies over characters to the chosen tile. A thrown weapon hits the first character
+// in the way instead.
 export const THROWN: PathRule = { stopAtTarget: true, stopAtCharacters: false };
+export const THROWN_WEAPON: PathRule = { stopAtTarget: true, stopAtCharacters: true };
 
 export interface Trajectory {
   // The tiles the object passes through, ending where it stops.

@@ -12,7 +12,7 @@ import {
   playShatter,
   playThrow,
 } from './throwEffect';
-import { THROWN, traceLine, type PathRule, type Trajectory } from './trajectory';
+import { THROWN, THROWN_WEAPON, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   alertEnemy,
   ASLEEP_CHANCE,
@@ -74,6 +74,10 @@ import {
   evasionFactor,
   rollArmor,
   rollDamage,
+  rollThrownDamage,
+  thrownAccuracyFactor,
+  canSurpriseThrow,
+  THROWN_BREAK_CHANCE,
   STARTING_STRENGTH,
   tooHeavyMessage,
   unequip,
@@ -112,6 +116,7 @@ import {
   MIMIC_ICON,
   pickMimicFloor,
   rollEquipment,
+  rollThrownWeapons,
   rollGold,
   type GroundThing,
   type Loot,
@@ -336,6 +341,7 @@ function floorContents(random: Random): { loot: Loot[]; hasMimic: boolean } {
   ];
   const loot = [
     ...items.map((name): Loot => ({ kind: 'item', name })),
+    ...rollThrownWeapons(random, floor),
     ...Array.from({ length: GOLD_PILES_PER_FLOOR }, (): Loot => ({
       kind: 'gold',
       amount: rollGold(random, floor),
@@ -491,8 +497,8 @@ function createLevel() {
 
   if (floor === 0) {
     const surface = createSurface();
-    const floorItems = surface.items.map(({ name, position }) => ({
-      thing: { kind: 'item', name } satisfies GroundThing,
+    const floorItems = surface.items.map(({ name, count, position }) => ({
+      thing: { kind: 'item', name, count } satisfies GroundThing,
       position,
     }));
     return finishLevel(surface.map, [], floorItems, surface.signs);
@@ -831,6 +837,10 @@ function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
 const heroAccuracy = () =>
   (HERO_ACCURACY + (heroLevel - 1) * LEVEL_UP_ACCURACY) *
   accuracyFactor(equipment, currentStrength());
+// The equipped weapon does not count for a thrown one, but the strength the thrown one needs does.
+const heroThrowAccuracy = (name: ItemName) =>
+  (HERO_ACCURACY + (heroLevel - 1) * LEVEL_UP_ACCURACY) *
+  thrownAccuracyFactor(name, currentStrength());
 const heroEvasion = () =>
   (HERO_EVASION + (heroLevel - 1) * LEVEL_UP_EVASION) * evasionFactor(equipment, currentStrength());
 const experienceToLevelUp = () => heroLevel * EXPERIENCE_PER_LEVEL;
@@ -1105,10 +1115,17 @@ function pickUpItems(tile: Point): boolean {
       messageLog.add(`You picked up ${thing.amount} gold.`);
     } else if (thing.kind === 'item') {
       if (addItem(inventory, thing.name)) {
+        // The rest of a pile goes onto the stack that the first one started.
+        const count = thing.count ?? 1;
+        for (let i = 1; i < count; i++) {
+          addItem(inventory, thing.name);
+        }
         removeFromGround(item);
         hasPickedUp = true;
         // Same wording as you_now_have of Hero in Shattered Pixel Dungeon.
-        messageLog.add(`You picked up: ${potionLore.lookOf(thing.name).displayName}.`);
+        messageLog.add(
+          `You picked up: ${potionLore.lookOf(thing.name).displayName}${count > 1 ? ` x${count}` : ''}.`,
+        );
       } else {
         playBounce(roomView, item.paint, tile, renderCanvas);
       }
@@ -2939,13 +2956,55 @@ function shatterPotion(name: ItemName, tile: Point) {
   }
 }
 
+// A thrown weapon that reaches an enemy hits it by the rules of an attack: an enemy that has not
+// noticed the hero cannot evade, and a hit rolls the damage from a higher minimum. The weapon falls
+// where it lands, unless it hit and broke. Returns whether it broke.
+function throwAtEnemy(name: ItemName, enemy: Enemy): boolean {
+  const isSurprise = !enemy.hasSeenHero && canSurpriseThrow(name, currentStrength());
+  const isHit =
+    isSurprise ||
+    isHelpless(enemy.statuses) ||
+    rollHit(heroThrowAccuracy(name), enemy.stats.evasion);
+  // Attacking ends invisibility.
+  if (hasStatus(heroStatuses, 'invisible')) {
+    delete heroStatuses.invisible;
+    updateHeroLook();
+  }
+  roomView.remove(enemy.sleepMark);
+
+  let isBroken = false;
+  if (isHit) {
+    if (isSurprise) {
+      damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
+    }
+    const damage = rollThrownDamage(name, isSurprise);
+    attackEnemy(enemy, heroPosition, damage);
+    showDamage(damage, enemy.position, 'enemy');
+    isBroken = Math.random() < THROWN_BREAK_CHANCE;
+    if (isBroken) {
+      messageLog.add(`The ${ITEMS[name].displayName.toLowerCase()} breaks.`);
+    }
+    if (enemy.hp === 0) {
+      killEnemy(enemy);
+    }
+  } else {
+    alertEnemy(enemy, heroPosition);
+    damageNumbers.show(roomView, createEvadeText(TVG), enemy.position);
+  }
+  if (!isBroken) {
+    dropItem(name, enemy.position);
+  }
+  return isBroken;
+}
+
 function throwItem(name: ItemName) {
   inventoryPanel.close();
   requestTarget({
     prompt: `Throw the ${potionLore.lookOf(name).displayName.toLowerCase()} where?`,
     canPick: isInView,
     onSelect(tile) {
-      const { end } = traceTo(tile, THROWN, !ITEMS[name].potion);
+      const isWeapon = ITEMS[name].thrownDamage !== undefined;
+      const { end } = traceTo(tile, isWeapon ? THROWN_WEAPON : THROWN, !ITEMS[name].potion);
       if (!takeFromBag(name)) {
         return;
       }
@@ -2957,13 +3016,19 @@ function throwItem(name: ItemName) {
         render: renderCanvas,
         onLand() {
           finishAttackEffect = null;
+          const target = isWeapon
+            ? enemies.find(({ position }) => isSameTile(position, end))
+            : undefined;
+          let isBroken = false;
           if (ITEMS[name].potion) {
             shatterPotion(name, end);
+          } else if (target) {
+            isBroken = throwAtEnemy(name, target);
           } else {
             dropItem(name, end);
           }
           const trap = trapAt(end);
-          if (trap && trap.state !== 'spent') {
+          if (!isBroken && trap && trap.state !== 'spent') {
             setOffTrap(trap, 'item');
           }
           updateVision();
@@ -3031,7 +3096,8 @@ function describeThing(thing: GroundThing): string {
   switch (thing.kind) {
     case 'item': {
       const look = potionLore.lookOf(thing.name);
-      return `${look.displayName}: ${look.description}`;
+      const count = thing.count ?? 1;
+      return `${look.displayName}${count > 1 ? ` x${count}` : ''}: ${look.description}`;
     }
     case 'gold':
       return `${thing.amount} gold.`;
