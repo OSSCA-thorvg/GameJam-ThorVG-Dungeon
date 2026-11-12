@@ -106,6 +106,7 @@ import {
 } from './traps';
 import { SEARCH_RADIUS } from './search';
 import { playSearch } from './searchEffect';
+import { playLevelUp } from './levelUpEffect';
 import { createMessageLog } from './messageLog';
 import { canReach, findPath } from './path';
 import {
@@ -852,6 +853,7 @@ function levelUp() {
   heroHp += LEVEL_UP_HP;
   showHeroHp();
   showHeroStats();
+  playLevelUp(TVG, roomView, heroPosition, renderCanvas);
   messageLog.add('Level up! Your max HP, accuracy, and evasion went up.', 'good');
 }
 
