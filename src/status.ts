@@ -12,7 +12,8 @@ export type StatusName =
   | 'poisoned'
   | 'stunned'
   | 'weakened'
-  | 'shielded';
+  | 'shielded'
+  | 'regenerating';
 
 // The effects that work against the character they are on.
 export const HARMFUL_STATUSES: readonly StatusName[] = [
@@ -40,6 +41,7 @@ export const STATUS_LABELS: Record<StatusName, string> = {
   stunned: 'Stunned',
   weakened: 'Weakened',
   shielded: 'Shielded',
+  regenerating: 'Regenerating',
 };
 
 // What each effect does to the hero, shown when the player points at its icon.
@@ -54,6 +56,7 @@ export const STATUS_DESCRIPTIONS: Record<StatusName, string> = {
   poisoned: 'Poison hurts you at the end of every turn, less as it wears off.',
   stunned: 'You cannot act or dodge, dazed from a crash.',
   shielded: 'A shield keeps anything from hurting you.',
+  regenerating: 'Your wounds keep closing, a little at the end of every turn.',
   weakened: 'You feel weak. Your strength is lowered by one, so heavy gear weighs on you more.',
 };
 

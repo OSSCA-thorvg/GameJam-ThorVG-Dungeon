@@ -48,6 +48,8 @@ const ICONS: Record<StatusName | ShownHunger, string> = {
   stunned: '<circle class="line" cx="5" cy="5" r="4.2"/><path class="line" d="M3 3L7 7M7 3L3 7"/>',
   // A shield.
   shielded: '<path class="line" d="M5 0.8L9 2.3V5.5C9 7.7 7.2 9 5 9.8C2.8 9 1 7.7 1 5.5V2.3Z"/>',
+  // A cross.
+  regenerating: '<path class="line" d="M5 1V9M1 5H9"/>',
   // An arrow pointing down.
   weakened: '<path class="line" d="M5 1V8.5M2 5.5L5 8.5L8 5.5"/>',
   hungry: FORK_AND_KNIFE,

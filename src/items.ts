@@ -58,6 +58,8 @@ export interface ItemContext {
   heal(amount: number): void;
   // Puts an effect on the hero.
   addStatus(name: StatusName, turns: number): void;
+  // Heals the hero by a total spread over the next turns, replacing what was left of an earlier one.
+  regenerate(total: number, turns: number): void;
   gainStrength(): void;
   gainLevel(): void;
   satisfyHunger(amount: number): void;
@@ -260,7 +262,12 @@ export const INVENTORY_SLOTS = 20;
 
 // Placeholder values for the potions. Effects last for a number of turns, and spread over the
 // tiles within a number of steps from where a potion breaks.
-const HEALING_POTION_HP = 10;
+// A healing potion heals a share of the max HP at once, and another over some turns. Thrown at an
+// enemy it heals a fixed amount.
+const HEALING_POTION_NOW = 0.3;
+const HEALING_POTION_LATER = 0.4;
+const HEALING_POTION_TURNS = 10;
+const THROWN_HEALING_HP = 10;
 const HASTE_TURNS = 20;
 const INVISIBLE_TURNS = 20;
 const LEVITATION_TURNS = 20;
@@ -317,12 +324,15 @@ const food = (
 export const ITEMS: Record<ItemName, ItemDefinition> = {
   'healing-potion': potion('helpful', {
     displayName: 'Healing potion',
-    description: `Restores ${HEALING_POTION_HP} HP.`,
+    description: 'Heals a good part of your HP at once, then keeps healing you for a while.',
     blockedReason: ({ hp, maxHp }) => (hp >= maxHp ? 'Your HP is already full.' : null),
-    use: ({ heal }) => heal(HEALING_POTION_HP),
+    use: ({ maxHp, heal, regenerate }) => {
+      heal(Math.round(maxHp * HEALING_POTION_NOW));
+      regenerate(Math.round(maxHp * HEALING_POTION_LATER), HEALING_POTION_TURNS);
+    },
     useMessage: 'Your wounds healed!',
     enemyEffect: {
-      heal: HEALING_POTION_HP,
+      heal: THROWN_HEALING_HP,
       message: (name) => `The ${name}'s wounds healed!`,
     },
   }),

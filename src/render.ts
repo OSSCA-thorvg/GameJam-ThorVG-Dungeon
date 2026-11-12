@@ -248,6 +248,7 @@ export const STATUS_COLORS: Record<StatusName, Color> = {
   stunned: [255, 190, 60],
   weakened: [170, 130, 220],
   shielded: [120, 190, 255],
+  regenerating: [230, 70, 70],
 };
 // Placeholder colors, laid over a character with the alpha at the end.
 const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {

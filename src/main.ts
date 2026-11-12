@@ -672,6 +672,7 @@ function createItemContext(): ItemContext {
       showHeroHp();
     },
     addStatus: addHeroStatus,
+    regenerate: startRegeneration,
     gainStrength() {
       heroStrength++;
       showHeroStats();
@@ -782,6 +783,15 @@ function putOutBurningInWater() {
 // A new effect shows its name over the character. One that only lasts longer does not.
 function showStatusText(tile: Point, name: StatusName) {
   damageNumbers.show(roomView, createStatusText(TVG, name), tile);
+}
+
+// What a healing potion still heals over time: the total, and the turns it is spread over.
+let regeneration = { total: 0, turns: 0 };
+
+function startRegeneration(total: number, turns: number) {
+  regeneration = { total, turns };
+  heroStatuses.regenerating = 0;
+  addHeroStatus('regenerating', turns);
 }
 
 function addHeroStatus(name: StatusName, turns: number) {
@@ -2090,6 +2100,21 @@ function applyStatusDamage() {
   }
 }
 
+// The turns of the regeneration go by with the status, so what it heals this turn is the share of
+// the total that the turn adds, and the shares add up to the total. A hero who died of poison
+// this turn stays dead.
+function applyRegeneration() {
+  const left = heroStatuses.regenerating ?? 0;
+  if (left <= 0 || heroHp === 0) {
+    return;
+  }
+  const { total, turns } = regeneration;
+  const done = turns - left;
+  const amount = Math.floor((total * (done + 1)) / turns) - Math.floor((total * done) / turns);
+  heroHp = Math.min(heroMaxHp, heroHp + amount);
+  showHeroHp();
+}
+
 // Fire sets alight whoever stands in it, poison gas hurts, paralyzing gas paralyzes, and fire cooks
 // raw meat. Water puts out those that burn in it.
 function applyHazards() {
@@ -2193,6 +2218,7 @@ function endTurn(onDone: () => void) {
   }
 
   applyStatusDamage();
+  applyRegeneration();
   const hasteLeft = heroStatuses.haste;
   tickStatuses(heroStatuses);
   // The action that gave the haste was not hasted, so that turn does not count against it.
