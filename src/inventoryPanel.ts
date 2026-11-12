@@ -14,6 +14,8 @@ export interface ItemDescription {
   displayName: string;
   description: string;
   icon: string;
+  // Whether the item is known. The slot of one that is not has a color of its own.
+  isKnown: boolean;
   // Why the item cannot be used right now, if there is a reason.
   blockedReason: string | null;
 }
@@ -159,7 +161,9 @@ export function createInventoryPanel({
     slot.className = 'inventory-slot';
     slot.disabled = !name;
     if (name) {
-      slot.innerHTML = describeItem(name).icon;
+      const look = describeItem(name);
+      slot.innerHTML = look.icon;
+      slot.classList.toggle('unidentified', !look.isKnown);
       slot.classList.toggle('selected', isSelected);
       slot.addEventListener('click', () => {
         onSelect();

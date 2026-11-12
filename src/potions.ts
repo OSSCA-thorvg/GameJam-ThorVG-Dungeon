@@ -1,5 +1,8 @@
 import { ITEMS, type ItemName, type PotionName } from './items';
 import { shuffle, type Random } from './random';
+import { STATUS_COLORS } from './render';
+import type { StatusName } from './status';
+import { STATUS_ICONS } from './statusIcons';
 
 type Color = [r: number, g: number, b: number];
 
@@ -82,10 +85,60 @@ export function planStagePotions(random: Random): PotionName[][] {
   return floors;
 }
 
-function potionIcon([r, g, b]: Color): string {
+// The mark of each potion, drawn in a 10 by 10 box. It is the icon of the status effect the potion
+// causes, in the color of that effect. A potion that causes none has a mark of its own, with a
+// placeholder color.
+interface PotionMark {
+  icon: string;
+  color: Color;
+}
+
+const ofStatus = (name: StatusName): PotionMark => ({
+  icon: STATUS_ICONS[name],
+  color: STATUS_COLORS[name],
+});
+
+const POTION_MARKS: Record<PotionName, PotionMark> = {
+  'healing-potion': ofStatus('regenerating'),
+  'strength-potion': {
+    // A triangle pointing up.
+    icon: '<path class="fill" d="M5 1L9 9H1Z"/>',
+    color: [255, 150, 90],
+  },
+  'experience-potion': {
+    // A star.
+    icon: '<path class="fill" d="M5 0L6.3 3.7L10 5L6.3 6.3L5 10L3.7 6.3L0 5L3.7 3.7Z"/>',
+    color: [100, 210, 190],
+  },
+  'haste-potion': ofStatus('haste'),
+  'invisibility-potion': ofStatus('invisible'),
+  'levitation-potion': ofStatus('levitating'),
+  'telepathy-potion': ofStatus('telepathy'),
+  'fire-potion': ofStatus('burning'),
+  'frost-potion': ofStatus('frozen'),
+  'poison-gas-potion': ofStatus('poisoned'),
+  'paralysis-potion': ofStatus('paralyzed'),
+};
+
+// The icons style their parts by class, which a picture drawn outside the page does not have.
+const markStyled = ({ icon, color: [r, g, b] }: PotionMark) =>
+  icon
+    .replaceAll(
+      'class="line"',
+      `fill="none" stroke="rgb(${r},${g},${b})" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"`,
+    )
+    .replaceAll('class="fill"', `fill="rgb(${r},${g},${b})"`);
+
+// A flask of the color of its liquid. Once the potion is known, its mark sits in a corner.
+function potionIcon([r, g, b]: Color, mark?: PotionMark): string {
+  const badge = mark
+    ? `<circle cx="19" cy="5" r="5" fill="#1e2027" stroke="#6a6e7c" stroke-width="0.7"/>
+    <g transform="translate(15.500 1.500) scale(0.700)">${markStyled(mark)}</g>`
+    : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
     <path fill="#b9c0cc" d="M9 2H15V4H14V9L19.500 18.500Q20.500 21 18 21H6Q3.500 21 4.500 18.500L10 9V4H9Z"/>
     <path fill="rgb(${r},${g},${b})" d="M8.300 13H15.700L18.600 18.800Q19 20 17.500 20H6.500Q5 20 5.400 18.800Z"/>
+    ${badge}
   </svg>`;
 }
 
@@ -124,7 +177,7 @@ export function createPotionLore(random: Random): PotionLore {
         description: isKnown
           ? item.description
           : 'You do not know what this potion does. Drinking it will tell you.',
-        icon: potionIcon(appearance.color),
+        icon: potionIcon(appearance.color, isKnown ? POTION_MARKS[name as PotionName] : undefined),
         isKnown,
         color: appearance.color,
       };
