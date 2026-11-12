@@ -30,6 +30,16 @@ These games were used as references for algorithms and numeric values. Their cod
 
 The field of view and the shape of the light use the method from [Sight & Light](https://ncase.me/sight-and-light/) by Nicky Case.
 
+## Sound
+
+The sound effects and music are made by code. They are not recordings or samples, and no outside audio is used in them.
+
+- [`assets/sound`](assets/sound) holds the sounds as Ogg Vorbis files. A synthesizer script rendered them as WAV files with seeded random numbers, and ffmpeg with libvorbis encoded the WAV files to Ogg. The script is not part of this repository.
+- The scores were written for this game, not transcribed from an existing piece.
+- The synthesizer script was written with Claude Code (Anthropic). The developer chose each sound by listening and gave the directions to change it.
+
+Whether copyright applies to work made with an AI tool is unsettled, so this repository claims nothing beyond this: to the extent any rights exist in these sounds, they are licensed under [MIT](LICENSE) like the code.
+
 ## License
 
-The code is licensed under [MIT](LICENSE). The assets in `assets/` have the licenses listed in [Credits](#credits).
+The code is licensed under [MIT](LICENSE). The assets in `assets/` have the licenses listed in [Credits](#credits). The sounds in `assets/sound` are covered in [Sound](#sound).
