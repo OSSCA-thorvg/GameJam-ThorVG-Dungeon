@@ -60,6 +60,7 @@ import { createDialog } from './dialog';
 import { createHazardField, spreadArea } from './hazards';
 import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
+import { showMainMenu } from './mainMenu';
 import { loadSettings, saveSettings, uiScaleFor } from './settings';
 import { createSettingsPanel } from './settingsPanel';
 import { createStatusBar } from './statusBar';
@@ -1427,6 +1428,12 @@ const greet = () =>
   messageLog.add(
     floor === 0 ? 'You arrived at the entrance of the dungeon.' : 'You entered an unknown dungeon.',
   );
+
+await showMainMenu(() => document.querySelector<HTMLButtonElement>('#settings-button')!.click());
+// The window may have been resized while the menu was open.
+canvas.resize(window.innerWidth, window.innerHeight);
+applySettings();
+settingsPanel.refresh();
 
 startLevel();
 greet();

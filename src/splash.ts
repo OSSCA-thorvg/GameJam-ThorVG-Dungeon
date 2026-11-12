@@ -5,6 +5,9 @@ import splashJson from '../assets/splash/powred.by.thorvg.1.json?raw';
 // after the browser pauses requestAnimationFrame in a background tab.
 const MAX_FRAME_TIME_MS = 100;
 
+// Placeholder value. How long the last frame fades out to the black behind it.
+const FADE_OUT_MS = 500;
+
 // Plays the ThorVG splash once and resolves when it ends.
 export async function playSplash(TVG: ThorVGNamespace, canvas: Canvas): Promise<void> {
   const animation = new TVG.LottieAnimation();
@@ -52,9 +55,17 @@ export async function playSplash(TVG: ThorVGNamespace, canvas: Canvas): Promise<
     requestAnimationFrame(step);
   });
 
-  document.body.style.background = '';
+  // The last frame fades out to the black behind it, so the screen does not cut to the next one.
+  const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas')!;
+  canvasElement.style.transition = `opacity ${FADE_OUT_MS}ms ease`;
+  canvasElement.style.opacity = '0';
+  await new Promise((resolve) => setTimeout(resolve, FADE_OUT_MS));
+
   window.removeEventListener('resize', onResize);
   canvas.remove(picture);
   animation.dispose();
   canvas.update().render();
+  canvasElement.style.transition = '';
+  canvasElement.style.opacity = '';
+  document.body.style.background = '';
 }

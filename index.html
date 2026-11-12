@@ -441,6 +441,44 @@
         font: 16px sans-serif;
         cursor: pointer;
       }
+      #main-menu {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #14151a;
+        color: #e8e8ec;
+      }
+      #main-menu[hidden] {
+        display: none;
+      }
+      /* The menu fades in over its dark background, which the splash leaves behind it. */
+      #main-menu > * {
+        transition: opacity 0.8s ease;
+      }
+      #main-menu.faded > * {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #main-menu h1 {
+        margin: 0 0 24px;
+        font: bold 44px sans-serif;
+        letter-spacing: 2px;
+      }
+      #main-menu button {
+        width: 200px;
+        padding: 10px 20px;
+        font: 18px sans-serif;
+        color: #e8e8ec;
+        background: #2c2e36;
+        border: 1px solid #4a4d58;
+        border-radius: 6px;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
     </style>
   </head>
   <body>
@@ -483,6 +521,11 @@
         <div id="inventory-slots"></div>
         <div id="inventory-details"></div>
       </div>
+    </div>
+    <div id="main-menu" hidden>
+      <h1>ThorVG Dungeon</h1>
+      <button id="menu-play">Play</button>
+      <button id="menu-settings">Settings</button>
     </div>
     <div id="settings" hidden>
       <div id="settings-panel" role="dialog" aria-label="Settings">
