@@ -424,7 +424,7 @@ function createMimic(position: Point, random: Random): Enemy {
   const look = new TVG.Scene();
   look.add(createItemPaint(TVG, CHEST_ICON));
   const mimic = createEnemy(
-    mimicStats(floor),
+    mimicStats(currentStage()),
     position,
     false,
     look,

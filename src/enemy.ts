@@ -90,18 +90,17 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
   },
 };
 
-// Mimic.adjustStats(), attackSkill() and damageRoll() of Shattered Pixel Dungeon, whose level is
-// the floor. A mimic gives no experience there either.
-export function mimicStats(floor: number): EnemyStats {
-  return {
-    name: 'mimic',
-    maxHp: (1 + floor) * 6,
-    damage: [1 + floor, 2 + 2 * floor],
-    accuracy: 6 + floor,
-    evasion: 2 + Math.floor(floor / 2),
-    actions: 1,
-    experience: 0,
-  };
+// Placeholder values for the mimic of each stage, a little stronger than the common enemies of that
+// stage. The mimic of Shattered Pixel Dungeon grows with the floor, but the enemies here do not
+// differ much between the floors of a stage, so neither does the mimic. It gives no experience
+// there either.
+const MIMIC_STATS: EnemyStats[] = [
+  { name: 'mimic', maxHp: 20, damage: [2, 6], accuracy: 10, evasion: 3, actions: 1, experience: 0 },
+  { name: 'mimic', maxHp: 28, damage: [4, 8], accuracy: 11, evasion: 4, actions: 1, experience: 0 },
+];
+
+export function mimicStats(stage: number): EnemyStats {
+  return MIMIC_STATS[Math.min(stage, MIMIC_STATS.length - 1)];
 }
 
 // The undead that burst out of coffins on the second stage. Placeholder values. Each bite that
