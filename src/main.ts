@@ -62,6 +62,7 @@ import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
 import { showMainMenu } from './mainMenu';
 import { loadSettings, saveSettings, uiScaleFor } from './settings';
+import { createLogPanel } from './logPanel';
 import { createSettingsPanel } from './settingsPanel';
 import { createStatusBar } from './statusBar';
 import {
@@ -309,6 +310,14 @@ const settingsPanel = createSettingsPanel({
     saveSettings(settings);
     applySettings();
     renderCanvas();
+  },
+});
+
+createLogPanel({
+  getMessages: () => messageLog.history(),
+  onOpen() {
+    stopWalking();
+    cancelTargeting();
   },
 });
 

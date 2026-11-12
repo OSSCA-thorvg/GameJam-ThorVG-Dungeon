@@ -167,6 +167,7 @@
       }
       #wait,
       #examine,
+      #log-button,
       #inventory-button {
         min-width: 72px;
         min-height: 44px;
@@ -192,6 +193,7 @@
         stroke-linecap: round;
       }
       #inventory,
+      #log-window,
       #settings,
       #dialog {
         position: fixed;
@@ -202,11 +204,13 @@
         background: rgb(0 0 0 / 50%);
       }
       #inventory[hidden],
+      #log-window[hidden],
       #settings[hidden],
       #dialog[hidden] {
         display: none;
       }
       #inventory-panel,
+      #log-panel,
       #settings-panel,
       #dialog-panel {
         width: min(340px, calc(100vw / var(--ui-scale, 1) - 24px));
@@ -219,6 +223,7 @@
         border-radius: 8px;
       }
       #inventory-header,
+      #log-header,
       #settings-header,
       #dialog-header {
         display: flex;
@@ -228,6 +233,7 @@
         font-size: 16px;
       }
       #inventory-close,
+      #log-close,
       #settings-close,
       #dialog-close {
         width: 36px;
@@ -237,6 +243,15 @@
         background: none;
         border: none;
         cursor: pointer;
+      }
+      #log-lines {
+        height: 60vh;
+        overflow-y: scroll;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+      #log-lines div {
+        padding: 2px 0;
       }
       #settings-panel label {
         display: flex;
@@ -509,6 +524,7 @@
         </svg>
       </button>
       <button id="examine" hidden>Examine</button>
+      <button id="log-button" hidden>Log</button>
     </div>
     <button id="inventory-button" hidden>Bag</button>
     <div id="inventory" hidden>
@@ -526,6 +542,15 @@
       <h1>ThorVG Dungeon</h1>
       <button id="menu-play">Play</button>
       <button id="menu-settings">Settings</button>
+    </div>
+    <div id="log-window" hidden>
+      <div id="log-panel" role="dialog" aria-label="Log">
+        <div id="log-header">
+          Log
+          <button id="log-close" aria-label="Close">×</button>
+        </div>
+        <div id="log-lines"></div>
+      </div>
     </div>
     <div id="settings" hidden>
       <div id="settings-panel" role="dialog" aria-label="Settings">

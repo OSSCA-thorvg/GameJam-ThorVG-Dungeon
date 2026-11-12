@@ -15,18 +15,30 @@ const CATEGORY_COLORS: Record<MessageCategory, string> = {
   warning: '#f4a65a',
 };
 
-// The messages about what happened in the game, with the newest at the bottom.
+export const colorOf = (category: MessageCategory) => CATEGORY_COLORS[category];
+
+export interface LoggedMessage {
+  text: string;
+  category: MessageCategory;
+}
+
+// The messages about what happened in the game, with the newest at the bottom. The screen shows the
+// latest few, and the history keeps all of them until the log is cleared.
 export interface MessageLog {
   add(text: string, category?: MessageCategory): void;
   clear(): void;
+  history(): readonly LoggedMessage[];
 }
 
 export function createMessageLog(element: HTMLElement): MessageLog {
+  const history: LoggedMessage[] = [];
   return {
+    history: () => history,
     add(text, category = 'info') {
+      history.push({ text, category });
       const line = document.createElement('div');
       line.textContent = text;
-      line.style.color = CATEGORY_COLORS[category];
+      line.style.color = colorOf(category);
       element.append(line);
       while (element.children.length > VISIBLE_MESSAGES) {
         element.firstElementChild!.remove();
@@ -38,6 +50,7 @@ export function createMessageLog(element: HTMLElement): MessageLog {
       });
     },
     clear() {
+      history.length = 0;
       element.replaceChildren();
     },
   };
