@@ -613,6 +613,11 @@ const WEAKENED_TURNS = 10;
 const currentStrength = () =>
   heroStrength - (hasStatus(heroStatuses, 'weakened') ? WEAKENED_STRENGTH : 0);
 let heroHunger = createHunger();
+// Placeholder value. A hero who is not hungry heals 1 HP after this many turns. Shattered Pixel
+// Dungeon heals about 1 HP in 10 turns at the start, but also while hungry.
+const NATURAL_HEAL_TURNS = 10;
+// The turns the hero has gone hurt and not hungry since they last healed this way.
+let naturalHealProgress = 0;
 // Whether a hasted hero already took the first of their two actions in this turn.
 let hasActedOnce = false;
 // Whether the hero was hasted when the action in progress began. Haste speeds up the actions that
@@ -2115,6 +2120,21 @@ function applyRegeneration() {
   showHeroHp();
 }
 
+// A hero who is hurt and not hungry heals 1 HP every few turns. Being hungry or starving stops it,
+// and the count starts over when the HP is full.
+function healNaturally() {
+  if (heroHp === 0 || heroHp >= heroMaxHp || hungerState(heroHunger) !== 'fed') {
+    naturalHealProgress = 0;
+    return;
+  }
+  naturalHealProgress++;
+  if (naturalHealProgress >= NATURAL_HEAL_TURNS) {
+    naturalHealProgress = 0;
+    heroHp++;
+    showHeroHp();
+  }
+}
+
 // Fire sets alight whoever stands in it, poison gas hurts, paralyzing gas paralyzes, and fire cooks
 // raw meat. Water puts out those that burn in it.
 function applyHazards() {
@@ -2219,6 +2239,7 @@ function endTurn(onDone: () => void) {
 
   applyStatusDamage();
   applyRegeneration();
+  healNaturally();
   const hasteLeft = heroStatuses.haste;
   tickStatuses(heroStatuses);
   // The action that gave the haste was not hasted, so that turn does not count against it.
@@ -3288,6 +3309,7 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   heroGold = 0;
   heroStatuses = {};
   heroHunger = createHunger();
+  naturalHealProgress = 0;
   hasActedOnce = false;
   wasHasted = false;
   skippingThisTurn.clear();
