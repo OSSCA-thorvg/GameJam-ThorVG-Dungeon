@@ -36,7 +36,7 @@ export interface EnemyStats {
 }
 
 // Same as the crab of Shattered Pixel Dungeon, which leaves mystery meat a sixth of the time. The
-// dummies have it for now, standing in for enemies with flesh such as rats.
+// Enemies with flesh have it.
 const MEAT_CHANCE = 1 / 6;
 
 // An enemy that appears at random on the floors.
@@ -48,13 +48,13 @@ interface EnemyKindStats extends EnemyStats {
 }
 
 // Placeholder values, worked out from how many hits the hero needs to defeat each enemy with the
-// starting sword, about 2, 3 and 4.5, and how many hits each needs to defeat a hero with 20 HP in
-// cloth armor, about 13, 8 and 13. The strong enemy lands its 13 hits in 6.5 turns, as it acts
-// twice.
+// starting sword, about 2, 3 and 2, and how many hits the first two need to defeat a hero with 20
+// HP in cloth armor, about 13 and 8. The strong one, a bat, has few HP and evades half of the
+// hero's swings, and acts twice a turn with weak bites.
 // The weak one has the accuracy and evasion of a rat in Shattered Pixel Dungeon.
 export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
   weak: {
-    name: 'small dummy',
+    name: 'rat',
     maxHp: 11,
     damage: [1, 4],
     accuracy: 8,
@@ -66,7 +66,7 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
     meatChance: MEAT_CHANCE,
   },
   medium: {
-    name: 'dummy',
+    name: 'crab',
     maxHp: 16,
     damage: [2, 5],
     accuracy: 9,
@@ -78,16 +78,15 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
     meatChance: MEAT_CHANCE,
   },
   strong: {
-    name: 'big dummy',
-    maxHp: 25,
-    damage: [1, 4],
-    accuracy: 12,
-    evasion: 6,
+    name: 'bat',
+    maxHp: 10,
+    damage: [1, 3],
+    accuracy: 9,
+    evasion: 10,
     actions: 2,
     experience: 4,
     firstFloor: 3,
     weight: 1,
-    meatChance: MEAT_CHANCE,
   },
 };
 

@@ -228,7 +228,7 @@ const ENEMY_LOOKS: Record<
   { color: Color; scale: number }
 > = {
   weak: { color: [176, 112, 96], scale: 0.8 },
-  medium: { color: [196, 64, 64], scale: 1 },
+  medium: { color: [104, 60, 116], scale: 1 },
   strong: { color: [130, 50, 150], scale: 1.2 },
   ghoul: { color: [128, 150, 112], scale: 1 },
   ghost: { color: [176, 196, 220], scale: 1 },
