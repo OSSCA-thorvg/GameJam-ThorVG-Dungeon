@@ -2,6 +2,8 @@
 export interface Settings {
   // How many times larger everything but the map is drawn.
   uiScale: number;
+  // How loud the sound is, from 0 to 1.
+  volume: number;
 }
 
 // The steps of display scaling in Windows, from 100% to 200%.
@@ -23,7 +25,8 @@ export function uiScaleFor(settings: Settings, windowWidth: number): number {
   return available.includes(settings.uiScale) ? settings.uiScale : available[available.length - 1];
 }
 
-const DEFAULT_SETTINGS: Settings = { uiScale: 1 };
+// The sounds were judged by ear at full volume, so that is the default.
+const DEFAULT_SETTINGS: Settings = { uiScale: 1, volume: 1 };
 const STORAGE_KEY = 'thorvg-dungeon.settings';
 
 // Storage can be blocked, as in a private window. Then the defaults stand in.
@@ -31,7 +34,11 @@ export function loadSettings(): Settings {
   try {
     const saved: Partial<Settings> = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
     const uiScale = Number(saved.uiScale);
-    return { uiScale: UI_SCALES.includes(uiScale) ? uiScale : DEFAULT_SETTINGS.uiScale };
+    const volume = saved.volume === undefined ? NaN : Number(saved.volume);
+    return {
+      uiScale: UI_SCALES.includes(uiScale) ? uiScale : DEFAULT_SETTINGS.uiScale,
+      volume: volume >= 0 && volume <= 1 ? volume : DEFAULT_SETTINGS.volume,
+    };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

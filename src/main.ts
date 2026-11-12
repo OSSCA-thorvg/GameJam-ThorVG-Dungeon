@@ -72,6 +72,7 @@ import {
   createStartingEquipment,
   createStartingInventory,
   equip,
+  EQUIPMENT_SLOTS,
   evasionFactor,
   rollArmor,
   rollDamage,
@@ -84,6 +85,7 @@ import {
   unequip,
   weaponReach,
   type Equipment,
+  type EquipmentKind,
   type EquipmentSlot,
   ITEMS,
   removeItem,
@@ -173,6 +175,7 @@ import {
   type Statuses,
 } from './status';
 import { campfireRoom, catacombRooms, normalRooms, startRooms } from './roomSources';
+import { createSound, type MusicName } from './sound';
 import { playSplash } from './splash';
 import {
   createSurface,
@@ -188,6 +191,8 @@ const MAX_ZOOM = 3;
 
 // Same as DEFAULT_MOVE_INTERVAL in Shattered Pixel Dungeon.
 const STEP_INTERVAL_MS = 100;
+// Placeholder value. How far the pitch of a footstep may be off, so the steps do not sound alike.
+const STEP_PITCH_VARIANCE = 0.08;
 
 // How far an attacker moves toward its target, as a fraction of the distance between tiles.
 const LUNGE_DISTANCE = 0.5;
@@ -273,10 +278,19 @@ const heroHealthBar = createHeroHealthBar(TVG, renderCanvas);
 canvas.add(heroHealthBar.scene);
 
 let settings = loadSettings();
+const sound = createSound(settings.volume);
+
+// Any button makes the click sound, which is also the first click that lets the browser start audio.
+document.addEventListener('click', (event) => {
+  if (event.target instanceof Element && event.target.closest('button')) {
+    sound.play('click');
+  }
+});
 
 // The CSS zooms the HTML by the UI scale. The hero health bar is on the canvas, so it is scaled
 // here to stay under its text.
 function applySettings() {
+  sound.setVolume(settings.volume);
   const scale = uiScaleFor(settings, window.innerWidth);
   document.documentElement.style.setProperty('--ui-scale', String(scale));
   heroHealthBar.scene.scale(scale);
@@ -854,6 +868,7 @@ function levelUp() {
   showHeroHp();
   showHeroStats();
   playLevelUp(TVG, roomView, heroPosition, renderCanvas);
+  sound.play('level-up');
   messageLog.add('Level up! Your max HP, accuracy, and evasion went up.', 'good');
 }
 
@@ -1136,6 +1151,9 @@ function pickUpItems(tile: Point): boolean {
   }
   inventoryPanel.refresh();
   showHeroStats();
+  if (hasPickedUp) {
+    sound.play('pickup');
+  }
   return hasPickedUp;
 }
 
@@ -1324,6 +1342,21 @@ function placeEnemy(enemy: Enemy, tile: Point) {
 }
 
 // Sets up the current level's scene and state.
+// The surface has the music of the menu, as the run starts from it. Each stage has a track, and its
+// boss floor, the last of the stage, has another.
+const STAGE_MUSIC: { floor: MusicName; boss: MusicName }[] = [
+  { floor: 'bgm-floor1', boss: 'bgm-boss1' },
+  { floor: 'bgm-floor2', boss: 'bgm-boss2' },
+];
+
+function musicOf(floor: number): MusicName {
+  if (floor === 0) {
+    return 'bgm-menu';
+  }
+  const tracks = STAGE_MUSIC[Math.floor((floor - 1) / FLOORS_PER_STAGE)];
+  return floor % FLOORS_PER_STAGE === 0 ? tracks.boss : tracks.floor;
+}
+
 function startLevel() {
   visionState = '';
   groundItems = [];
@@ -1379,6 +1412,7 @@ function startLevel() {
 
   gameOverScreen.hidden = true;
   floorLabel.textContent = floor === 0 ? 'Surface' : `Floor ${floor}`;
+  sound.playMusic(musicOf(floor));
   canvas.update().render();
 }
 
@@ -1395,6 +1429,7 @@ function canGoDownStairs() {
 function goDownStairs() {
   const wasSurface = floor === 0;
   floor++;
+  sound.play('stairs');
   replaceLevel();
   if (wasSurface) {
     markSurfaceFinished();
@@ -1431,6 +1466,7 @@ const greet = () =>
     floor === 0 ? 'You arrived at the entrance of the dungeon.' : 'You entered an unknown dungeon.',
   );
 
+sound.playMusic('bgm-menu');
 await showMainMenu(() => document.querySelector<HTMLButtonElement>('#settings-button')!.click());
 // The window may have been resized while the menu was open.
 canvas.resize(window.innerWidth, window.innerHeight);
@@ -1590,6 +1626,7 @@ function showTrap(trap: Trap) {
 function findTrap(trap: Trap) {
   trap.state = 'known';
   showTrap(trap);
+  sound.play('trap-found');
   messageLog.add(`You found ${TRAP_LABELS[trap.kind]}.`, 'warning');
   stopWalking();
 }
@@ -1688,6 +1725,7 @@ function landArrow(target: ArrowTarget, damage: number) {
   if (target === 'hero') {
     if (!isGameOver) {
       messageLog.add('An arrow hits you!', 'danger');
+      sound.play('hurt');
       damageHero(damage);
     }
     return;
@@ -1738,6 +1776,9 @@ function setOffTrap(trap: Trap, by: TrapTrigger) {
     stopWalking();
   }
   const tellsOf = isHero || isInView(trap.position);
+  if (tellsOf) {
+    sound.play('trap-trigger');
+  }
   const label = TRAP_LABELS[trap.kind];
   const lead = isHero
     ? `You stepped on ${label}!`
@@ -1839,6 +1880,7 @@ function smashCoffin(coffin: Coffin, skipsTurn: boolean): Enemy | null {
   if (skipsTurn) {
     skippingThisTurn.add(enemy);
   }
+  sound.play('coffin');
   messageLog.add(`A ${enemy.stats.name} smashes its way out of a coffin!`, 'warning');
   damageNumbers.show(roomView, createNoticeMark(TVG), position);
   stopWalking();
@@ -1911,6 +1953,7 @@ function showEndScreen(title: string, text: string | null, buttonLabel: string) 
 function endGame() {
   isGameOver = true;
   roomView.remove(hero);
+  sound.play('death');
   showEndScreen('You died', null, 'Try again');
 }
 
@@ -1980,6 +2023,10 @@ function killEnemy(part: Enemy) {
     seenEnemies.delete(piece);
   }
   killCount++;
+  if (enemy.stats === centipedeStats || enemy.stats === necromancerStats) {
+    sound.playMusic(null);
+    sound.play('boss-clear');
+  }
   if (enemy.loot) {
     dropThing(enemy.loot, enemy.position);
   }
@@ -1998,6 +2045,7 @@ function killEnemy(part: Enemy) {
 function hitHero(enemy: Enemy, damage: number) {
   const armor = rollArmor(equipment, currentStrength());
   const dealt = Math.min(heroHp, Math.max(0, damage - armor));
+  sound.play('hurt');
   damageHero(dealt);
   healFromBite(enemy, dealt);
   if (enemy.stats.weakens) {
@@ -2022,6 +2070,7 @@ function shootAtHero(enemy: Enemy) {
         renderCanvas();
       }, HIT_FLASH_MS);
     } else {
+      sound.play('miss');
       damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
     }
     // Being shot stops the walk, even by a miss, so the player can decide again.
@@ -2064,6 +2113,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
           : normalIntRange(Math.random, ...enemy.stats.damage);
         hitHero(enemy, damage);
       } else {
+        sound.play('miss');
         damageNumbers.show(roomView, createEvadeText(TVG), heroPosition);
       }
       // Being attacked stops the walk, even by a miss, so the player can decide again.
@@ -2476,6 +2526,7 @@ function playHeroAttack(enemy: Enemy) {
     render: () => canvas.update().render(),
     onHit: () => {
       if (isHit) {
+        sound.play(isSurprise ? 'crit' : 'hit');
         if (isSurprise) {
           damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
         }
@@ -2484,6 +2535,7 @@ function playHeroAttack(enemy: Enemy) {
         roomView.remove(enemy.sleepMark);
         showDamage(damage, enemy.position, 'enemy');
       } else {
+        sound.play('miss');
         alertEnemy(enemy, heroPosition);
         roomView.remove(enemy.sleepMark);
         damageNumbers.show(roomView, createEvadeText(TVG), enemy.position);
@@ -2595,6 +2647,7 @@ function walk() {
   // Seeing a new enemy on this step empties the path, which must not count as arriving.
   const hasArrived = path.length === 0;
   placeHero(next);
+  sound.play('step', STEP_PITCH_VARIANCE);
   triggerTrapAt(next);
   // As in Shattered Pixel Dungeon, items are only picked up on the tile the player chose.
   const hasPickedUp = hasArrived && !attackTarget && !useTarget && pickUpItems(next);
@@ -2931,6 +2984,7 @@ function dropFromBag(name: ItemName) {
 function shatterPotion(name: ItemName, tile: Point) {
   const { color } = potionLore.lookOf(name);
   const { shatter } = ITEMS[name];
+  sound.play('shatter');
   if (color) {
     playShatter(TVG, roomView, tile, color, renderCanvas);
   }
@@ -3252,6 +3306,7 @@ function cookMeat() {
     () => {
       if (inventory.some(({ name }) => name === 'raw-meat')) {
         replaceInBag('raw-meat', 'cooked-meat');
+        sound.play('cook');
         messageLog.add('The raw meat is cooked through.');
       }
       openCampfire();
@@ -3260,24 +3315,27 @@ function cookMeat() {
 }
 
 // Equipping or taking off an item takes a turn, as in Shattered Pixel Dungeon.
-function changeEquipment(change: () => boolean) {
+function changeEquipment(kind: EquipmentKind | undefined, change: () => boolean) {
   if (cannotAct()) {
     return;
   }
   stopWalking();
   // The bag stays open, so that more equipment can be changed in a row.
   if (change()) {
+    sound.play(kind === 'weapon' ? 'equip-weapon' : 'equip-cloth');
     inventoryPanel.refresh();
     passTurn(() => {});
   }
 }
 
 function equipItem(name: ItemName) {
-  changeEquipment(() => equip(equipment, inventory, name));
+  changeEquipment(ITEMS[name].equipKind, () => equip(equipment, inventory, name));
 }
 
 function unequipItem(slot: EquipmentSlot) {
-  changeEquipment(() => unequip(equipment, inventory, slot));
+  changeEquipment(EQUIPMENT_SLOTS.find((entry) => entry.slot === slot)?.kind, () =>
+    unequip(equipment, inventory, slot),
+  );
 }
 
 // Drinking a potion tells the player what it is. A harmful one breaks at the hero's feet.
@@ -3298,6 +3356,7 @@ function useItem(name: ItemName) {
   if (shatter) {
     shatterPotion(name, heroPosition);
   } else {
+    sound.play(ITEMS[name].useLabel === 'Eat' ? 'eat' : 'drink');
     use?.(createItemContext());
   }
   updateVision();

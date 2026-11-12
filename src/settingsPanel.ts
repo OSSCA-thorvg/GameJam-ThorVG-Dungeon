@@ -20,6 +20,7 @@ export function createSettingsPanel({
   const button = document.querySelector<HTMLButtonElement>('#settings-button')!;
   const overlay = document.querySelector<HTMLElement>('#settings')!;
   const uiScale = document.querySelector<HTMLSelectElement>('#ui-scale')!;
+  const volume = document.querySelector<HTMLInputElement>('#volume')!;
 
   const refresh = () => {
     uiScale.replaceChildren(
@@ -28,10 +29,14 @@ export function createSettingsPanel({
       ),
     );
     uiScale.value = String(uiScaleFor(getSettings(), window.innerWidth));
+    volume.value = String(Math.round(getSettings().volume * 100));
   };
 
   uiScale.addEventListener('change', () => {
     onChange({ ...getSettings(), uiScale: Number(uiScale.value) });
+  });
+  volume.addEventListener('input', () => {
+    onChange({ ...getSettings(), volume: Number(volume.value) / 100 });
   });
 
   const close = () => {
