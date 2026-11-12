@@ -1736,11 +1736,12 @@ function setOffTrap(trap: Trap, by: TrapTrigger) {
     stopWalking();
   }
   const tellsOf = isHero || isInView(trap.position);
+  const label = TRAP_LABELS[trap.kind];
   const lead = isHero
-    ? 'You stepped on a plate!'
+    ? `You stepped on ${label}!`
     : by === 'item'
-      ? 'Something set off a plate!'
-      : `The ${by.stats.name} stepped on a plate!`;
+      ? `Something set off ${label}!`
+      : `The ${by.stats.name} stepped on ${label}!`;
   const damage = normalIntRange(Math.random, ...TRAP_DAMAGE[trap.kind]);
   const hurtSteppingEnemy = () => {
     if (typeof by === 'object') {
