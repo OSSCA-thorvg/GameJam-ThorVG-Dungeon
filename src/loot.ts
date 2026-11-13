@@ -54,25 +54,27 @@ const STAGE_ARMORS: EquipmentPool[] = [
   { common: ['leather-armor', 'chain-mail'], rare: 'plate-armor' },
 ];
 
-// Placeholder values. How likely a floor is to have a pile of throwing weapons, on which floors each
-// kind lies, and how many are in a pile. A floor with a pile picks a rare kind that lies on it with
+// Placeholder values. How likely a floor is to have throwing weapons, on which floors each kind
+// lies, and how many can lie together. A floor with them picks a rare kind that lies on it with
 // THROWN_RARE_CHANCE, as melee weapons of the highest tier are rare, and otherwise one of the
-// common kinds that lie on it.
-const THROWN_WEAPON_CHANCE_PER_FLOOR = 0.5;
+// common kinds that lie on it. There is one, and each one more comes with THROWN_EXTRA_CHANCE up
+// to the most of the kind, so a pile of 4 darts comes up 1 time in 8.
+const THROWN_WEAPON_CHANCE_PER_FLOOR = 0.3;
 const THROWN_RARE_CHANCE = 0.2;
+const THROWN_EXTRA_CHANCE = 0.5;
 const THROWN_WEAPON_DROPS: {
   name: ItemName;
   firstFloor: number;
   lastFloor: number;
-  count: [min: number, max: number];
+  maxCount: number;
   isRare?: boolean;
 }[] = [
-  { name: 'dart', firstFloor: 1, lastFloor: 4, count: [2, 4] },
-  { name: 'javelin', firstFloor: 3, lastFloor: 9, count: [2, 3] },
-  { name: 'throwing-axe', firstFloor: 6, lastFloor: 9, count: [1, 3], isRare: true },
+  { name: 'dart', firstFloor: 1, lastFloor: 4, maxCount: 4 },
+  { name: 'javelin', firstFloor: 3, lastFloor: 9, maxCount: 3 },
+  { name: 'throwing-axe', firstFloor: 6, lastFloor: 9, maxCount: 3, isRare: true },
 ];
 
-// Rolls the pile of throwing weapons lying on a floor, or none.
+// Rolls the throwing weapons lying on a floor, or none.
 export function rollThrownWeapons(random: Random, floor: number): Loot[] {
   const kinds = THROWN_WEAPON_DROPS.filter(
     ({ firstFloor, lastFloor }) => floor >= firstFloor && floor <= lastFloor,
@@ -82,9 +84,13 @@ export function rollThrownWeapons(random: Random, floor: number): Loot[] {
   }
   const rare = kinds.filter(({ isRare }) => isRare);
   const common = kinds.filter(({ isRare }) => !isRare);
-  const { name, count } =
+  const { name, maxCount } =
     rare.length > 0 && random() < THROWN_RARE_CHANCE ? pick(random, rare) : pick(random, common);
-  return [{ kind: 'item', name, count: randomInt(random, ...count) }];
+  let count = 1;
+  while (count < maxCount && random() < THROWN_EXTRA_CHANCE) {
+    count++;
+  }
+  return [{ kind: 'item', name, count }];
 }
 
 export const GOLD_ICON = ITEM_ICONS.gold;
