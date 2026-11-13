@@ -1,6 +1,7 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
+import { FONT_BOLD } from './fonts';
 import { STATUS_LABELS, type StatusName } from './status';
 
 type Color = [r: number, g: number, b: number];
@@ -123,15 +124,19 @@ const HERO_HEALTH_BAR_HEIGHT = 23;
 const HEALTH_TRAIL_HOLD_MS = 300;
 const HEALTH_TRAIL_SHRINK_MS = 250;
 
-// Placeholder values for the size of a damage number's digits.
-const DIGIT_SCALE = 0.75;
-const DIGIT_WIDTH = 10 * DIGIT_SCALE;
-const DIGIT_HEIGHT = 16 * DIGIT_SCALE;
-const DIGIT_GAP = 2;
-const DIGIT_STROKE_WIDTH = 2.5;
+// Placeholder values for the text that floats over characters. Galmuri11 is drawn at twice its own
+// size, so a pixel of the letters is as big as a pixel of the art. A letter is about this share of
+// the size wide.
+const FLOATING_TEXT_SIZE = 22;
+// The text has a dark copy of itself one art pixel below it, so that it reads over light floors. An
+// outline would do the same, but ThorVG's GL renderer now and then draws outlined text as a hole.
+const FLOATING_TEXT_SHADOW = 2;
+const FLOATING_TEXT_SHADOW_COLOR: Color = [20, 20, 28];
+const FLOATING_TEXT_LETTER_WIDTH = 0.55;
+const FLOATING_TEXT_GAP = 2;
 
 // The height one number takes up, with a gap to the next number.
-export const DAMAGE_NUMBER_HEIGHT = DIGIT_HEIGHT + DIGIT_STROKE_WIDTH + DIGIT_GAP;
+export const DAMAGE_NUMBER_HEIGHT = FLOATING_TEXT_SIZE + FLOATING_TEXT_SHADOW + FLOATING_TEXT_GAP;
 // One character height, like the one tile that numbers rise in Shattered Pixel Dungeon.
 export const DAMAGE_NUMBER_RISE = CHARACTER_SIZE;
 
@@ -1163,241 +1168,53 @@ export function createFrostPaint(TVG: ThorVGNamespace): Shape {
   return shape;
 }
 
-// Each digit is one path in a 10 by 16 box, before DIGIT_SCALE. The first point of a path is a
-// move, a point with 2 values is a line, and a point with 6 values is a cubic curve.
-const DIGIT_PATHS: number[][][] = [
-  [[5, 0], [8, 0, 10, 3, 10, 8], [10, 13, 8, 16, 5, 16], [2, 16, 0, 13, 0, 8], [0, 3, 2, 0, 5, 0]],
-  [[2, 3], [5.5, 0], [5.5, 16]],
-  [[0.5, 4], [0.5, 1.5, 2.5, 0, 5, 0], [7.5, 0, 9.5, 1.5, 9.5, 4], [9.5, 7, 6, 9, 0, 16], [10, 16]],
-  [
-    [0.5, 2.5],
-    [1.5, 0.8, 3, 0, 5, 0],
-    [7.5, 0, 9.5, 1.5, 9.5, 4],
-    [9.5, 6.2, 7.5, 7.5, 4.5, 7.5],
-    [7.5, 7.5, 10, 9, 10, 11.8],
-    [10, 14.5, 7.5, 16, 5, 16],
-    [3, 16, 1, 15.2, 0, 13.2],
-  ],
-  [[7.5, 16], [7.5, 0], [0, 10.5], [10, 10.5]],
-  [
-    [9, 0],
-    [1.5, 0],
-    [0.8, 7],
-    [2, 6, 3.5, 5.5, 5, 5.5],
-    [8, 5.5, 10, 7.5, 10, 10.7],
-    [10, 14, 7.8, 16, 5, 16],
-    [3, 16, 1.2, 15, 0, 13],
-  ],
-  [
-    [8.5, 0.5],
-    [4, 1.5, 0, 5, 0, 10.5],
-    [0, 14, 2, 16, 5, 16],
-    [8, 16, 10, 14, 10, 11],
-    [10, 8, 8, 6, 5, 6],
-    [2.5, 6, 0.5, 7.8, 0, 10.5],
-  ],
-  [[0, 0], [10, 0], [3.5, 16]],
-  [
-    [5, 7.5],
-    [2.5, 7.5, 0.8, 6, 0.8, 3.8],
-    [0.8, 1.5, 2.7, 0, 5, 0],
-    [7.3, 0, 9.2, 1.5, 9.2, 3.8],
-    [9.2, 6, 7.5, 7.5, 5, 7.5],
-    [2.2, 7.5, 0, 9.2, 0, 11.7],
-    [0, 14.3, 2.2, 16, 5, 16],
-    [7.8, 16, 10, 14.3, 10, 11.7],
-    [10, 9.2, 7.8, 7.5, 5, 7.5],
-  ],
-  [
-    [1.5, 15.5],
-    [6, 14.5, 10, 11, 10, 5.5],
-    [10, 2, 8, 0, 5, 0],
-    [2, 0, 0, 2, 0, 5],
-    [0, 8, 2, 10, 5, 10],
-    [7.5, 10, 9.5, 8.2, 10, 5.5],
-  ],
-];
-
-// Letters drawn in the same box and style as the digits, each made of one or more paths.
-const LETTER_PATHS: Record<string, number[][][]> = {
-  A: [
-    [[0, 16], [5, 0], [10, 16]],
-    [[1.7, 10.5], [8.3, 10.5]],
-  ],
-  B: [
-    [
-      [0, 8],
-      [6, 8],
-      [8.5, 8, 10, 9.5, 10, 12],
-      [10, 14.5, 8.5, 16, 6, 16],
-      [0, 16],
-      [0, 0],
-      [5.5, 0],
-      [7.8, 0, 9.2, 1.4, 9.2, 4],
-      [9.2, 6.6, 7.8, 8, 5.5, 8],
-    ],
-  ],
-  C: [
-    [
-      [10, 3],
-      [8.8, 1, 7, 0, 5, 0],
-      [2, 0, 0, 3, 0, 8],
-      [0, 13, 2, 16, 5, 16],
-      [7, 16, 8.8, 15, 10, 13],
-    ],
-  ],
-  D: [[[0, 0], [4, 0], [8, 0, 10, 3.5, 10, 8], [10, 12.5, 8, 16, 4, 16], [0, 16], [0, 0]]],
-  E: [
-    [[10, 0], [0, 0], [0, 16], [10, 16]],
-    [[0, 8], [8, 8]],
-  ],
-  F: [
-    [[10, 0], [0, 0], [0, 16]],
-    [[0, 8], [8, 8]],
-  ],
-  G: [
-    [
-      [10, 3],
-      [8.8, 1, 7, 0, 5, 0],
-      [2, 0, 0, 3, 0, 8],
-      [0, 13, 2, 16, 5, 16],
-      [8, 16, 10, 14, 10, 10],
-      [10, 9],
-      [5.5, 9],
-    ],
-  ],
-  H: [
-    [[0, 0], [0, 16]],
-    [[10, 0], [10, 16]],
-    [[0, 8], [10, 8]],
-  ],
-  I: [
-    [[2, 0], [8, 0]],
-    [[5, 0], [5, 16]],
-    [[2, 16], [8, 16]],
-  ],
-  J: [
-    [[2, 0], [10, 0]],
-    [[8, 0], [8, 12], [8, 14.5, 6.5, 16, 4.5, 16], [2.5, 16, 0.8, 14.6, 0.3, 12.5]],
-  ],
-  K: [
-    [[0, 0], [0, 16]],
-    [[10, 0], [0, 9]],
-    [[3, 6.5], [10, 16]],
-  ],
-  L: [[[0, 0], [0, 16], [10, 16]]],
-  M: [[[0, 16], [0, 0], [5, 10], [10, 0], [10, 16]]],
-  N: [[[0, 16], [0, 0], [10, 16], [10, 0]]],
-  O: [
-    [[5, 0], [8, 0, 10, 3, 10, 8], [10, 13, 8, 16, 5, 16], [2, 16, 0, 13, 0, 8], [0, 3, 2, 0, 5, 0]],
-  ],
-  P: [[[0, 16], [0, 0], [6, 0], [8.5, 0, 10, 1.8, 10, 4.5], [10, 7.2, 8.5, 9, 6, 9], [0, 9]]],
-  Q: [
-    [[5, 0], [8, 0, 10, 3, 10, 8], [10, 13, 8, 16, 5, 16], [2, 16, 0, 13, 0, 8], [0, 3, 2, 0, 5, 0]],
-    [[6, 11], [10, 16]],
-  ],
-  R: [
-    [[0, 16], [0, 0], [6, 0], [8.5, 0, 10, 1.8, 10, 4.5], [10, 7.2, 8.5, 9, 6, 9], [0, 9]],
-    [[5, 9], [10, 16]],
-  ],
-  S: [
-    [
-      [9.5, 2.5],
-      [8.5, 0.8, 7, 0, 5, 0],
-      [2.5, 0, 0.5, 1.5, 0.5, 4],
-      [0.5, 6.5, 2.5, 7.3, 5, 8],
-      [7.5, 8.7, 10, 9.5, 10, 12],
-      [10, 14.5, 7.8, 16, 5, 16],
-      [3, 16, 1.2, 15.2, 0, 13.5],
-    ],
-  ],
-  T: [
-    [[0, 0], [10, 0]],
-    [[5, 0], [5, 16]],
-  ],
-  U: [[[0, 0], [0, 11], [0, 14, 2, 16, 5, 16], [8, 16, 10, 14, 10, 11], [10, 0]]],
-  V: [[[0, 0], [5, 16], [10, 0]]],
-  W: [[[0, 0], [2.5, 16], [5, 6], [7.5, 16], [10, 0]]],
-  X: [
-    [[0, 0], [10, 16]],
-    [[10, 0], [0, 16]],
-  ],
-  Y: [
-    [[0, 0], [5, 8], [10, 0]],
-    [[5, 8], [5, 16]],
-  ],
-  Z: [[[0, 0], [10, 0], [0, 16], [10, 16]]],
-  '!': [
-    [[5, 0], [5, 11]],
-    [[5, 15.5], [5, 16]],
-  ],
-};
-
-function appendGlyph(shape: Shape, character: string, left: number, top: number) {
-  const paths = /\d/.test(character) ? [DIGIT_PATHS[Number(character)]] : LETTER_PATHS[character];
-  for (const path of paths) {
-    for (const [index, point] of path.entries()) {
-      const [a, b, c, d, e, f] = point.map((value) => value * DIGIT_SCALE);
-      if (index === 0) {
-        shape.moveTo(left + a, top + b);
-      } else if (point.length === 2) {
-        shape.lineTo(left + a, top + b);
-      } else {
-        shape.cubicTo(left + a, top + b, left + c, top + d, left + e, top + f);
-      }
-    }
-  }
-}
-
-// Text just above the head of a character standing on the scene's local origin.
-// It is drawn from paths because ThorVG needs a font file to draw text.
-function createFloatingText(TVG: ThorVGNamespace, text: string, color: Color): Shape {
-  const characters = [...text];
-  const totalWidth = characters.length * (DIGIT_WIDTH + DIGIT_GAP) - DIGIT_GAP;
-  const top = -CHARACTER_SIZE - DIGIT_HEIGHT;
-
-  const shape = new TVG.Shape();
-  characters.forEach((character, index) => {
-    appendGlyph(shape, character, -totalWidth / 2 + index * (DIGIT_WIDTH + DIGIT_GAP), top);
-  });
-  shape.stroke({
-    width: DIGIT_STROKE_WIDTH,
-    color,
-    cap: TVG.StrokeCap.Round,
-    join: TVG.StrokeJoin.Round,
-  });
-  return shape;
+// Text just above the head of a character standing on the scene's local origin, in the font that
+// ThorVG draws text with. It is in a scene, so that the paint that moves it can place the scene
+// without losing the height of the text.
+function createFloatingText(TVG: ThorVGNamespace, text: string, color: Color): Scene {
+  const label = (fill: Color, offset: number) =>
+    new TVG.Text()
+      .font(FONT_BOLD)
+      .fontSize(FLOATING_TEXT_SIZE)
+      .text(text)
+      .fill(...fill)
+      .align(0.5, 1)
+      .translate(0, -CHARACTER_SIZE + offset);
+  const scene = new TVG.Scene();
+  scene.add(label(FLOATING_TEXT_SHADOW_COLOR, FLOATING_TEXT_SHADOW));
+  scene.add(label(color, 0));
+  return scene;
 }
 
 export function createDamageNumber(
   TVG: ThorVGNamespace,
   amount: number,
   target: DamageTarget,
-): Shape {
+): Scene {
   return createFloatingText(TVG, String(amount), DAMAGE_NUMBER_COLORS[target]);
 }
 
 // The name of an effect, shown over a character when the effect starts.
-export function createStatusText(TVG: ThorVGNamespace, name: StatusName): Shape {
-  return createFloatingText(TVG, STATUS_LABELS[name].toUpperCase(), STATUS_COLORS[name]);
+export function createStatusText(TVG: ThorVGNamespace, name: StatusName): Scene {
+  return createFloatingText(TVG, STATUS_LABELS[name], STATUS_COLORS[name]);
 }
 
 // The word shown over a character that evaded an attack.
-export function createEvadeText(TVG: ThorVGNamespace): Shape {
-  return createFloatingText(TVG, 'EVADE', ATTACK_TEXT_COLOR);
+export function createEvadeText(TVG: ThorVGNamespace): Scene {
+  return createFloatingText(TVG, 'Evade', ATTACK_TEXT_COLOR);
 }
 
 // The mark shown over an enemy that was surprised, like the one in Shattered Pixel Dungeon.
-export function createSurpriseMark(TVG: ThorVGNamespace): Shape {
+export function createSurpriseMark(TVG: ThorVGNamespace): Scene {
   return createFloatingText(TVG, '!', ATTACK_TEXT_COLOR);
 }
 
 // Text in a speech bubble over a character standing on the scene's local origin.
 function createSpeechBubble(TVG: ThorVGNamespace, text: string, color: Color): Scene {
-  const textWidth = text.length * (DIGIT_WIDTH + DIGIT_GAP) - DIGIT_GAP;
+  const textWidth = text.length * FLOATING_TEXT_SIZE * FLOATING_TEXT_LETTER_WIDTH;
   const width = textWidth + NOTICE_BUBBLE_PADDING * 2;
-  const height = DIGIT_HEIGHT + NOTICE_BUBBLE_PADDING * 2;
-  const top = -CHARACTER_SIZE - DIGIT_HEIGHT - NOTICE_BUBBLE_PADDING;
+  const height = FLOATING_TEXT_SIZE + NOTICE_BUBBLE_PADDING * 2;
+  const top = -CHARACTER_SIZE - FLOATING_TEXT_SIZE - NOTICE_BUBBLE_PADDING;
   const bottom = top + height;
 
   const bubble = new TVG.Shape();
@@ -1420,8 +1237,8 @@ function createSpeechBubble(TVG: ThorVGNamespace, text: string, color: Color): S
 
 // The mark shown over an enemy that just noticed the hero.
 // Shown over the hero when something has marked them as the target of an attack.
-export function createTargetedText(TVG: ThorVGNamespace): Shape {
-  return createFloatingText(TVG, 'TARGETED', [255, 70, 60]);
+export function createTargetedText(TVG: ThorVGNamespace): Scene {
+  return createFloatingText(TVG, 'Targeted', [255, 70, 60]);
 }
 
 export function createNoticeMark(TVG: ThorVGNamespace): Scene {

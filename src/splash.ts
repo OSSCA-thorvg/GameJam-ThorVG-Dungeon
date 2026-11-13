@@ -1,5 +1,6 @@
 import type { Canvas, ThorVGNamespace } from '@thorvg/webcanvas';
 import splashJson from '../assets/splash/powred.by.thorvg.1.json?raw';
+import { fitCanvas, pixelRatio } from './screen';
 
 // Longest frame time that counts toward playback, so the splash still plays in full
 // after the browser pauses requestAnimationFrame in a background tab.
@@ -18,16 +19,15 @@ export async function playSplash(TVG: ThorVGNamespace, canvas: Canvas): Promise<
   const { totalFrames, fps } = animation.info()!;
 
   const fitToWindow = () => {
-    const scale = Math.min(window.innerWidth / width, window.innerHeight / height);
+    const screenWidth = window.innerWidth * pixelRatio();
+    const screenHeight = window.innerHeight * pixelRatio();
+    const scale = Math.min(screenWidth / width, screenHeight / height);
     picture.size(width * scale, height * scale);
-    picture.translate(
-      (window.innerWidth - width * scale) / 2,
-      (window.innerHeight - height * scale) / 2,
-    );
+    picture.translate((screenWidth - width * scale) / 2, (screenHeight - height * scale) / 2);
   };
 
   const onResize = () => {
-    canvas.resize(window.innerWidth, window.innerHeight);
+    fitCanvas(canvas);
     fitToWindow();
   };
 

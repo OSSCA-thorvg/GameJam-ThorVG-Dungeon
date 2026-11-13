@@ -14,3 +14,8 @@ SPDX-License-Identifier = "CC-BY-3.0"
 path = "assets/splash/**"
 SPDX-FileCopyrightText = "ThorVG project"
 SPDX-License-Identifier = "LicenseRef-ThorVG-Splash"
+
+[[annotations]]
+path = "assets/fonts/**"
+SPDX-FileCopyrightText = "2019-2025 Lee Minseo (quiple)"
+SPDX-License-Identifier = "OFL-1.1"

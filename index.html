@@ -5,6 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ThorVG Dungeon</title>
     <style>
+      @font-face {
+        font-family: 'Galmuri9';
+        src: url('./assets/fonts/Galmuri9.woff2') format('woff2');
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'Galmuri11';
+        src: url('./assets/fonts/Galmuri11.woff2') format('woff2');
+        font-weight: 400;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'Galmuri11';
+        src: url('./assets/fonts/Galmuri11-Bold.woff2') format('woff2');
+        font-weight: 700;
+        font-display: swap;
+      }
+      body,
+      button,
+      input,
+      select {
+        font-family: 'Galmuri11', sans-serif;
+      }
+      /* A game has nothing to select, and dragging the camera or pressing Ctrl+A would paint the text blue. */
+      body {
+        -webkit-user-select: none;
+        user-select: none;
+      }
       html,
       body {
         height: 100%;
@@ -25,38 +53,20 @@
         position: fixed;
         right: 8px;
         bottom: 6px;
-        font: 11px sans-serif;
+        font: 9px 'Galmuri9', sans-serif;
         color: #7a7d86;
       }
       footer a {
         color: inherit;
       }
-      /* Sits on the hero health bar drawn in render.ts. The text at the top left is 17px, where
-         the default sans-serif is 18px from its highest ascender to its lowest descender: the
-         minimum for PC in Xbox Accessibility Guideline 101. The bar is 4/3 as tall as the text. */
-      #hp {
-        position: fixed;
-        top: 12px;
-        left: 12px;
-        width: 200px;
-        font: bold 17px/23px sans-serif;
-        text-align: center;
-        color: #fff;
-        text-shadow: 0 1px 2px #000;
-        pointer-events: none;
-      }
-      /* Below the hero health bar. */
-      #stats,
+      /* Below the hero health bar and the line of numbers that ThorVG draws under it. */
       #status {
         position: fixed;
         left: 12px;
-        font: 17px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #c8cad2;
         text-shadow: 0 1px 2px #000;
         pointer-events: none;
-      }
-      #stats {
-        top: 41px;
       }
       /* 1.5 lines of text below the stats. */
       #status {
@@ -71,7 +81,7 @@
         align-items: center;
         gap: 4px;
         padding: 0;
-        font: bold 17px sans-serif;
+        font: bold 22px 'Galmuri11', sans-serif;
         color: inherit;
         text-shadow: 0 1px 2px #000;
         background: none;
@@ -90,7 +100,7 @@
         position: fixed;
         max-width: 220px;
         padding: 8px 10px;
-        font: 13px/1.4 sans-serif;
+        font: 18px/1.4 'Galmuri9', sans-serif;
         color: #e8e8ec;
         background: #1f2027;
         border: 1px solid #4a4d58;
@@ -116,7 +126,7 @@
         left: 12px;
         bottom: 84px;
         width: min(360px, calc(100vw / var(--ui-scale, 1) - 24px));
-        font: 15px/1.4 sans-serif;
+        font: 22px/1.4 'Galmuri11', sans-serif;
         color: #e8e8ec;
         text-shadow: 0 1px 2px #000;
         pointer-events: none;
@@ -130,7 +140,7 @@
         gap: 10px;
       }
       #floor {
-        font: 16px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #c8cad2;
       }
       #settings-button {
@@ -171,7 +181,7 @@
       #inventory-button {
         min-width: 72px;
         min-height: 44px;
-        font: 16px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
         background: #2c2e36;
         border: 1px solid #4a4d58;
@@ -216,7 +226,7 @@
         width: min(340px, calc(100vw / var(--ui-scale, 1) - 24px));
         box-sizing: border-box;
         padding: 12px;
-        font: 14px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
         background: #1f2027;
         border: 1px solid #4a4d58;
@@ -230,7 +240,7 @@
         align-items: center;
         justify-content: space-between;
         margin-bottom: 10px;
-        font-size: 16px;
+        font-size: 22px;
       }
       #inventory-close,
       #log-close,
@@ -238,7 +248,7 @@
       #dialog-close {
         width: 36px;
         height: 36px;
-        font-size: 20px;
+        font-size: 22px;
         color: inherit;
         background: none;
         border: none;
@@ -247,7 +257,7 @@
       #log-lines {
         height: 60vh;
         overflow-y: scroll;
-        font-size: 15px;
+        font-size: 22px;
         line-height: 1.5;
       }
       #log-lines div {
@@ -262,7 +272,7 @@
       #settings-panel select {
         min-height: 36px;
         padding: 0 8px;
-        font: 14px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
         background: #3a3d48;
         border: 1px solid #5a5d68;
@@ -285,7 +295,7 @@
         gap: 2px;
         min-height: 44px;
         padding: 8px 12px;
-        font: 14px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         text-align: left;
         color: #e8e8ec;
         background: #3a3d48;
@@ -294,7 +304,7 @@
         cursor: pointer;
       }
       .dialog-action span {
-        font-size: 13px;
+        font-size: 18px;
         color: #b8bac2;
       }
       .dialog-action:disabled,
@@ -349,7 +359,7 @@
         position: absolute;
         right: 4px;
         bottom: 2px;
-        font: bold 12px sans-serif;
+        font: bold 18px 'Galmuri9', sans-serif;
         color: #fff;
         text-shadow: 0 1px 2px #000;
       }
@@ -364,7 +374,7 @@
       #inventory-details button {
         min-width: 72px;
         min-height: 40px;
-        font: 14px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
         background: #3a3d48;
         border: 1px solid #5a5d68;
@@ -401,7 +411,7 @@
         align-items: center;
         gap: 12px;
         padding: 6px 6px 6px 14px;
-        font: 15px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
         background: #1f2027;
         border: 1px solid #5a8fd0;
@@ -414,7 +424,7 @@
       #target-prompt button {
         min-height: 36px;
         padding: 0 12px;
-        font: 14px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
         background: #3a3d48;
         border: 1px solid #5a5d68;
@@ -430,7 +440,7 @@
         justify-content: center;
         gap: 16px;
         background: rgb(0 0 0 / 60%);
-        font: 28px sans-serif;
+        font: 33px 'Galmuri11', sans-serif;
         color: #e8e8ec;
       }
       #game-over[hidden] {
@@ -439,7 +449,7 @@
       #game-over-text {
         max-width: 360px;
         margin: 0;
-        font: 16px/1.5 sans-serif;
+        font: 22px/1.5 'Galmuri11', sans-serif;
         text-align: center;
         color: #c8cad2;
       }
@@ -447,13 +457,13 @@
         margin: 0;
         padding: 0;
         list-style: none;
-        font: 16px/1.6 sans-serif;
+        font: 22px/1.6 'Galmuri11', sans-serif;
         text-align: center;
         color: #c8cad2;
       }
       #game-over button {
         padding: 8px 20px;
-        font: 16px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         cursor: pointer;
       }
       #main-menu {
@@ -480,13 +490,13 @@
       }
       #main-menu h1 {
         margin: 0 0 24px;
-        font: bold 44px sans-serif;
+        font: bold 44px 'Galmuri11', sans-serif;
         letter-spacing: 2px;
       }
       #main-menu button {
         width: 200px;
         padding: 10px 20px;
-        font: 18px sans-serif;
+        font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
         background: #2c2e36;
         border: 1px solid #4a4d58;
@@ -498,8 +508,6 @@
   </head>
   <body>
     <canvas id="canvas"></canvas>
-    <div id="hp"></div>
-    <div id="stats"></div>
     <div id="status"></div>
     <div id="status-tooltip" hidden></div>
     <div id="log" aria-live="polite"></div>

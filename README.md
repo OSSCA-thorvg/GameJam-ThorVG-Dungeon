@@ -19,6 +19,7 @@ npm run dev
 | --- | --- | --- | --- | --- |
 | Swordman icon | Cathelineau | [game-icons.net](https://game-icons.net/1x1/cathelineau/swordman.html) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | Removed the black background |
 | ThorVG splash | ThorVG project | [OSSCA ThorVG GameJam](https://ossca-thorvg.github.io/site/project/#event) | [Terms](LICENSES/LicenseRef-ThorVG-Splash.txt) | None, the file is used as provided |
+| Galmuri fonts (Galmuri9, Galmuri11, Galmuri11 Bold) | Lee Minseo (quiple) | [GitHub](https://github.com/quiple/galmuri) | [OFL 1.1](LICENSES/OFL-1.1.txt) | None, the woff2 and ttf files are used as provided |
 
 ### References
 

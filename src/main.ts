@@ -176,6 +176,9 @@ import {
   type Statuses,
 } from './status';
 import { campfireRoom, catacombRooms, normalRooms, startRooms } from './roomSources';
+import { loadFonts } from './fonts';
+import { createHud } from './hud';
+import { fitCanvas, pixelRatio } from './screen';
 import { createSound, type MusicName } from './sound';
 import { playSplash } from './splash';
 import {
@@ -246,10 +249,13 @@ const scalePoint = (point: Point, factor: number): Point => ({
 
 // Without locateFile, the package fetches the WASM file from unpkg.
 const TVG = await ThorVG.init({ renderer: 'gl', locateFile: () => wasmUrl });
+await loadFonts(TVG);
 const canvas = new TVG.Canvas('#canvas', {
   width: window.innerWidth,
   height: window.innerHeight,
+  enableDevicePixelRatio: false,
 });
+fitCanvas(canvas);
 
 await playSplash(TVG, canvas);
 document.querySelector('footer')!.hidden = false;
@@ -261,8 +267,6 @@ examineButton.hidden = false;
 
 const gameOverScreen = document.querySelector<HTMLElement>('#game-over')!;
 const floorLabel = document.querySelector<HTMLElement>('#floor')!;
-const hpLabel = document.querySelector<HTMLElement>('#hp')!;
-const statsLabel = document.querySelector<HTMLElement>('#stats')!;
 const messageLog = createMessageLog(document.querySelector<HTMLElement>('#log')!);
 const statusBar = createStatusBar(
   document.querySelector<HTMLElement>('#status')!,
@@ -277,6 +281,8 @@ const mapScene = new TVG.Scene();
 canvas.add(mapScene);
 const heroHealthBar = createHeroHealthBar(TVG, renderCanvas);
 canvas.add(heroHealthBar.scene);
+const hud = createHud(TVG, renderCanvas);
+canvas.add(hud.scene);
 
 let settings = loadSettings();
 const sound = createSound({ sfx: settings.sfxVolume, music: settings.musicVolume });
@@ -295,7 +301,9 @@ function applySettings() {
   sound.setVolume('music', settings.musicVolume);
   const scale = uiScaleFor(settings, window.innerWidth);
   document.documentElement.style.setProperty('--ui-scale', String(scale));
-  heroHealthBar.scene.scale(scale);
+  mapScene.scale(pixelRatio());
+  heroHealthBar.scene.scale(scale * pixelRatio());
+  hud.scene.scale(scale * pixelRatio());
 }
 
 applySettings();
@@ -894,7 +902,7 @@ function gainExperience(amount: number) {
 function showHeroStats() {
   const experience = `XP ${heroExperience}/${experienceToLevelUp()}`;
   const strength = `Str ${currentStrength()}`;
-  statsLabel.textContent = `Lv ${heroLevel} · ${experience} · ${strength} · ${heroGold}G`;
+  hud.setStats(`Lv ${heroLevel} · ${experience} · ${strength} · ${heroGold}G`);
   statusBar.show(heroStatuses, heroHunger);
 }
 
@@ -1212,7 +1220,7 @@ function followHero() {
 
 function showHeroHp(options?: { jump: boolean }) {
   heroHealthBar.show(heroHp / heroMaxHp, options);
-  hpLabel.textContent = `${heroHp}/${heroMaxHp}`;
+  hud.setHealth(heroHp, heroMaxHp);
 }
 
 // Computes what the hero sees, and shows it on the map.
@@ -1479,7 +1487,7 @@ const greet = () =>
 sound.playMusic('bgm-menu');
 await showMainMenu(() => document.querySelector<HTMLButtonElement>('#settings-button')!.click());
 // The window may have been resized while the menu was open.
-canvas.resize(window.innerWidth, window.innerHeight);
+fitCanvas(canvas);
 applySettings();
 settingsPanel.refresh();
 
@@ -1487,7 +1495,7 @@ startLevel();
 greet();
 
 window.addEventListener('resize', () => {
-  canvas.resize(window.innerWidth, window.innerHeight);
+  fitCanvas(canvas);
   applySettings();
   settingsPanel.refresh();
   applyCamera();
