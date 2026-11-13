@@ -2,8 +2,9 @@ import { pixelSvg } from './pixelSprite';
 
 type Color = [r: number, g: number, b: number];
 
-// Pixel art of the items and the objects that lie on the floor. An item is 16 by 16 art pixels, and
-// the chest is 24 by 24, about as big as a coffin. k is the outline.
+// Pixel art of the items and the objects that lie on the floor. An item is 16 by 16 art pixels, the
+// chest is 24 by 24, about as big as a coffin, and the campfire is 32 by 32, as wide as a tile. k is
+// the outline.
 const PALETTE: Record<string, Color> = {
   '1': [207, 232, 240],
   '2': [44, 44, 52],
@@ -402,22 +403,38 @@ const GOLD = [
 ];
 
 const CAMPFIRE = [
-  '................',
-  '.......kk.......',
-  '......k44k......',
-  '.....k444k......',
-  '.....k4444k.....',
-  '....k445544k....',
-  '....k445544k....',
-  '...k4455554k....',
-  '...k44556544k...',
-  '...k44566444k...',
-  '..kkk445644kkkk.',
-  '.kvvvk4444kkvvvk',
-  '..kkbvbbbbvvbkk.',
-  '..kkbBBBBBBBbkk.',
-  '.kvvBkkkkkkkBvvk',
-  '..kkk.......kkk.',
+  '................................',
+  '................................',
+  '...............kk...............',
+  '..............k44k..............',
+  '.............k4444k.............',
+  '.............k4444k...k.........',
+  '............k444444k.k4k........',
+  '.........k.k44444444kk4k........',
+  '........k4kk44444444kk44k.......',
+  '........k444444554444k44k.......',
+  '........k444445554444k444k......',
+  '.......k44444455554444444k......',
+  '.......k44444555555444444k......',
+  '.......k4444455555544444k.......',
+  '........k44445555554444k........',
+  '.......k444455566554444k........',
+  '.......k4444555665554444k.......',
+  '.......k4444556666554444k.......',
+  '.......k4444556666554444k.......',
+  '..kk....k44445666654444k...kk...',
+  '.kvvkkkkk44445566554444kkkkvvk..',
+  'kvvbvvvvv4444556655444bvvvvbbvk.',
+  'kBvbbbbbbbbbb45555bbbbbbbbbbBvk.',
+  '.kkBBBBBbbbbbbbbbbbbbbbBBBBBkk..',
+  '...kkkkkbbbbbbbbbbbbbbbkkkkk....',
+  '..kkvvvvbbbbbbBBBbbbbbbvvvvkk...',
+  '.kvvbbbbbbBBBBkkkBBBBbbbbbbvvk..',
+  '.kvbbBBBBBkkkk...kkkkBBBBBbbvvk.',
+  '.kvBBkkkkk...........kkkkkBBkk..',
+  '..kkk.....................kk....',
+  '................................',
+  '................................',
 ];
 
 const SIGN = [

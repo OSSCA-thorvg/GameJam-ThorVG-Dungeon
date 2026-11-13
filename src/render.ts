@@ -865,6 +865,19 @@ export function createItemPaint(TVG: ThorVGNamespace, svg: string): Paint {
   return picture;
 }
 
+// A campfire is 32 by 32 art pixels, as wide as a tile, with the middle of its logs, 24.5 pixels
+// down, on the paint's local origin.
+const CAMPFIRE_PIXELS = 32;
+const CAMPFIRE_LOGS = 24.5;
+
+export function createCampfirePaint(TVG: ThorVGNamespace, svg: string): Paint {
+  const picture = new TVG.Picture();
+  picture.load(svg, { type: 'svg' });
+  picture.size(CAMPFIRE_PIXELS * ART_PIXEL, CAMPFIRE_PIXELS * ART_PIXEL);
+  picture.origin(0.5, CAMPFIRE_LOGS / CAMPFIRE_PIXELS);
+  return picture;
+}
+
 // A placeholder enemy with its feet on the scene's local origin.
 // It is a Scene because scene effects, such as the hit flash, only apply to scenes.
 // Placeholder look of the giant centipede: a low, round body segment, and a head with eyes that is

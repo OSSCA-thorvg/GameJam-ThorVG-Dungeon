@@ -144,6 +144,7 @@ import {
 } from './random';
 import {
   createCharacter,
+  createCampfirePaint,
   createChest,
   createDamageNumber,
   createEvadeText,
@@ -1446,9 +1447,10 @@ function startLevel() {
   }
   room.tiles.forEach((row, y) =>
     row.forEach((tile, x) => {
-      if (tile === 'campfire' || tile === 'sign') {
-        const icon = tile === 'campfire' ? CAMPFIRE_ICON : SIGN_ICON;
-        roomView.place(createItemPaint(TVG, icon), x, y);
+      if (tile === 'campfire') {
+        roomView.place(createCampfirePaint(TVG, CAMPFIRE_ICON), x, y);
+      } else if (tile === 'sign') {
+        roomView.place(createItemPaint(TVG, SIGN_ICON), x, y);
       }
     }),
   );
