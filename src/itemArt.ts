@@ -5,7 +5,8 @@ type Color = [r: number, g: number, b: number];
 // Pixel art of the items and the objects that lie on the floor. An item is 16 by 16 art pixels, the
 // chest is 24 by 24, about as big as a coffin, and the campfire is 32 by 32, as wide as a tile. k is
 // the outline.
-const PALETTE: Record<string, Color> = {
+// The colors the art was drawn in, before muted() below fits them to the tiles.
+const DRAWN_PALETTE: Record<string, Color> = {
   '1': [207, 232, 240],
   '2': [44, 44, 52],
   '3': [138, 142, 154],
@@ -502,6 +503,35 @@ const CHEST = [
   '..kkkkkkkkkkkkkkkkkkkk..',
 ];
 
+// Placeholder values, set by eye against the floor. The art was drawn more saturated and with more
+// contrast than the tiles, so on the floor it stood out from them. Each color loses part of its
+// saturation, toward its own luma, and then part of its distance from a middle value near the
+// lighter tiles.
+const SATURATION = 0.7;
+const CONTRAST = 0.85;
+const MIDDLE = 110;
+
+// Luma with the Rec. 601 weights.
+const lumaOf = ([r, g, b]: Color) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+export function muted(color: Color): Color {
+  const luma = lumaOf(color);
+  return color.map((value) => {
+    const desaturated = luma + (value - luma) * SATURATION;
+    return Math.min(255, Math.max(0, Math.round(MIDDLE + (desaturated - MIDDLE) * CONTRAST)));
+  }) as Color;
+}
+
+// The flames of the campfire give off light, so they keep their own colors.
+const GLOWING = new Set(['4', '5', '6']);
+
+const PALETTE = Object.fromEntries(
+  Object.entries(DRAWN_PALETTE).map(([key, color]) => [
+    key,
+    GLOWING.has(key) ? color : muted(color),
+  ]),
+);
+
 const icon = (rows: string[]) => pixelSvg(rows, PALETTE);
 
 export const ITEM_ICONS = {
@@ -536,4 +566,9 @@ const darker = (color: Color): Color => color.map((value) => Math.round(value * 
 
 // A flask holding a liquid of a color, whose top is lit and whose bottom is shaded.
 export const flaskIcon = (liquid: Color) =>
-  pixelSvg(FLASK, { ...PALETTE, '+': lighter(liquid), '=': liquid, '-': darker(liquid) });
+  pixelSvg(FLASK, {
+    ...PALETTE,
+    '+': muted(lighter(liquid)),
+    '=': muted(liquid),
+    '-': muted(darker(liquid)),
+  });
