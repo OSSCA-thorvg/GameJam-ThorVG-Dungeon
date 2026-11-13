@@ -3299,7 +3299,7 @@ function describeTerrain({ x, y }: Point): Phrase {
 
 const EXAMINE_REQUEST: TargetRequest = {
   get prompt() {
-    return t('Examine which tile?');
+    return t('Examine which tile?\nPress Examine again to search the area.');
   },
   canPick: isExplored,
   onSelect: examine,

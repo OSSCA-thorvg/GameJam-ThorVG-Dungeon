@@ -57,7 +57,8 @@ export const ko: Record<string, string> = {
     '던전으로 가는 길은 이 잠긴 문 뒤에 있다. 열쇠를 찾아 문을 클릭해 열고, 문간으로 들어가 계단으로 내려가자. 아래에서는 적을 클릭하면 공격한다. 대기를 누르면 한 턴이 지나간다.',
   'Examine tells you about a tile or an enemy you point at. Press Examine again to search the area around you, which takes a turn and may uncover something useful.':
     '살펴보기는 가리킨 타일이나 적에 대해 알려 준다. 살펴보기를 한 번 더 누르면 주변을 수색하는데, 한 턴이 걸리고 쓸 만한 것이 나올 수도 있다.',
-  'Examine which tile?': '어느 타일을 살펴볼까?',
+  'Examine which tile?\nPress Examine again to search the area.':
+    '어느 타일을 살펴볼까?\n살펴보기를 한 번 더 누르면 주변을 수색한다.',
   Search: '수색',
 
   // The enemies.

@@ -106,7 +106,7 @@
         position: fixed;
         left: 12px;
         bottom: 100px;
-        width: min(360px, calc(100vw / var(--ui-scale, 1) - 24px));
+        width: min(640px, calc(100vw / var(--ui-scale, 1) - 24px));
         font: 22px/1.4 'Galmuri11', sans-serif;
         color: #e8e8ec;
         text-shadow: 0 1px 2px #000;
@@ -177,6 +177,9 @@
         font-size: 22px;
         border-bottom: 2px solid #14151a;
       }
+      #log-panel {
+        width: min(720px, calc(100vw / var(--ui-scale, 1) - 24px));
+      }
       #log-lines {
         height: 60vh;
         overflow-y: scroll;
@@ -185,6 +188,64 @@
       }
       #log-lines div {
         padding: 2px 0;
+      }
+      /* Each message starts with a square in its own color, 3 by 3 art pixels, so that the start
+         of a message that wraps onto more lines can be told apart. */
+      #log div,
+      #log-lines div {
+        position: relative;
+        padding-left: 16px;
+      }
+      #log div::before,
+      #log-lines div::before {
+        content: '';
+        position: absolute;
+        left: 2px;
+        top: calc(0.5lh - 3px);
+        width: 6px;
+        height: 6px;
+        background: currentColor;
+      }
+      #log div::before {
+        box-shadow: 0 1px 2px #000;
+      }
+      #log-lines div::before {
+        top: calc(2px + 0.5lh - 3px);
+      }
+      /* The scroll bar of the log is a groove like the track of a slider, with a button for its
+         thumb. A scroll bar takes no border image, so the thumb is drawn with a border and inset
+         shadows in the colors of a button in uiArt.ts. Firefox has no way to style the parts, so
+         it gets the colors only. */
+      #log-lines::-webkit-scrollbar {
+        width: 16px;
+      }
+      #log-lines::-webkit-scrollbar-track {
+        border: 2px solid #15161c;
+        background: #23242c;
+      }
+      #log-lines::-webkit-scrollbar-thumb {
+        border: 2px solid #15161c;
+        background: #2c2e36;
+        box-shadow:
+          inset 2px 2px 0 #5a5e6c,
+          inset -2px -2px 0 #1c1d24;
+      }
+      #log-lines::-webkit-scrollbar-thumb:hover {
+        background: #3a3e4a;
+        box-shadow:
+          inset 2px 2px 0 #7a7e8e,
+          inset -2px -2px 0 #1c1d24;
+      }
+      #log-lines::-webkit-scrollbar-thumb:active {
+        background: #24262e;
+        box-shadow:
+          inset 2px 2px 0 #1c1d24,
+          inset -2px -2px 0 #5a5e6c;
+      }
+      @supports (-moz-appearance: none) {
+        #log-lines {
+          scrollbar-color: #6a6e7c #23242c;
+        }
       }
       #settings-panel label {
         display: flex;
@@ -391,6 +452,10 @@
       }
       #target-prompt[hidden] {
         display: none;
+      }
+      /* A prompt can hold a second line, which tells another way to answer it. */
+      #target-prompt-text {
+        white-space: pre-line;
       }
       #target-prompt button {
         min-height: 36px;
