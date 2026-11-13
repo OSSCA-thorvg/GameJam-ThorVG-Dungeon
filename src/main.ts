@@ -1741,6 +1741,10 @@ function landArrow(target: ArrowTarget, damage: number) {
     return;
   }
   if (enemies.includes(target)) {
+    // Like the damage number, the sound is only for an enemy in view.
+    if (seenEnemies.has(target)) {
+      sound.play('hit');
+    }
     hurtEnemy(target, damage);
     if (target.hp === 0) {
       killEnemy(target);
@@ -3049,6 +3053,7 @@ function throwAtEnemy(name: ItemName, enemy: Enemy): boolean {
 
   let isBroken = false;
   if (isHit) {
+    sound.play(isSurprise ? 'crit' : 'hit');
     if (isSurprise) {
       damageNumbers.show(roomView, createSurpriseMark(TVG), enemy.position);
     }
@@ -3063,6 +3068,7 @@ function throwAtEnemy(name: ItemName, enemy: Enemy): boolean {
       killEnemy(enemy);
     }
   } else {
+    sound.play('miss');
     alertEnemy(enemy, heroPosition);
     damageNumbers.show(roomView, createEvadeText(TVG), enemy.position);
   }
