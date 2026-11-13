@@ -119,6 +119,8 @@ export interface ItemDefinition {
   shatter?(context: ItemContext, tile: Point): void;
   // The log line when the hero drinks or eats it. {item} in it is the name of the item.
   useMessage?: string;
+  // The color of that log line, plain news when not set.
+  useCategory?: MessageCategory;
   // Set for items that fire can burn in the bag of a burning hero. A burned one turns into this
   // item, as raw meat cooks, or burns up when it is null.
   burnsInto?: ItemName | null;
@@ -233,6 +235,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
       regenerate(Math.round(maxHp * HEALING_POTION_LATER), HEALING_POTION_TURNS);
     },
     useMessage: 'Your wounds healed!',
+    useCategory: 'good',
     enemyEffect: {
       heal: THROWN_HEALING_HP,
       message: "The {enemy}'s wounds healed!",
@@ -243,12 +246,14 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     description: 'Raises your strength by 1, which makes all your attacks a little stronger.',
     use: ({ gainStrength }) => gainStrength(),
     useMessage: 'Your strength rose by 1!',
+    useCategory: 'good',
   }),
   'experience-potion': potion('helpful', {
     displayName: 'Experience potion',
     description: 'Raises your level by one.',
     use: ({ gainLevel }) => gainLevel(),
     useMessage: 'Your level rose by 1!',
+    useCategory: 'good',
   }),
   'haste-potion': potion('helpful', {
     displayName: 'Haste potion',

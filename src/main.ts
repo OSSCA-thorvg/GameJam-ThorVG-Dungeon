@@ -3446,12 +3446,15 @@ function unequipItem(slot: EquipmentSlot) {
 
 // Drinking a potion tells the player what it is. A harmful one breaks at the hero's feet.
 function useItem(name: ItemName) {
-  const { use, shatter, useMessage } = ITEMS[name];
+  const { use, shatter, useMessage, useCategory } = ITEMS[name];
   if (cannotAct() || (!use && !shatter)) {
     return;
   }
   if (useMessage) {
-    messageLog.add(phrase(useMessage, { item: lowerCase(phrase(ITEMS[name].displayName)) }));
+    messageLog.add(
+      phrase(useMessage, { item: lowerCase(phrase(ITEMS[name].displayName)) }),
+      useCategory,
+    );
   }
 
   stopWalking();
