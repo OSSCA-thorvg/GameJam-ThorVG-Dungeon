@@ -6,10 +6,13 @@ const FADE_DELAY_MS = 200;
 export function showMainMenu(openSettings: () => void): Promise<void> {
   const menu = document.querySelector<HTMLElement>('#main-menu')!;
   const play = document.querySelector<HTMLButtonElement>('#menu-play')!;
-  menu.classList.add('faded');
+  // A hidden page shows the menu at once, as its fade would only play once the page shows again.
+  if (!document.hidden) {
+    menu.classList.add('faded');
+    setTimeout(() => menu.classList.remove('faded'), FADE_DELAY_MS);
+  }
   menu.hidden = false;
   play.focus();
-  setTimeout(() => menu.classList.remove('faded'), FADE_DELAY_MS);
   document.querySelector('#menu-settings')!.addEventListener('click', openSettings);
   return new Promise((resolve) => {
     play.addEventListener(
