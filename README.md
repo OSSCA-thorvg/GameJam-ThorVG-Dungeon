@@ -42,10 +42,10 @@ Whether copyright applies to work made with an AI tool is unsettled, so this rep
 
 ## Art
 
-The pixel art of the map tiles, items, objects and characters is made by code. It is not drawn from or traced over existing images, and no outside art is used in it.
+The pixel art of the map tiles, items, objects, characters and interface is made by code. It is not drawn from or traced over existing images, and no outside art is used in it.
 
 - [`src/tileArt.ts`](src/tileArt.ts) draws the floor, walls, water, doors and stairs of each stage pixel by pixel when a floor is built, from rules for flagstones, bricks and ripples. It draws the traps and coffins the same way.
-- [`src/itemArt.ts`](src/itemArt.ts) holds the items, the chest, the campfire and the signs as rows of pixels, and [`src/characterArt.ts`](src/characterArt.ts) holds the hero and the enemies the same way. A script outside this repository drew them from lines and shapes and wrote out the rows.
+- [`src/itemArt.ts`](src/itemArt.ts) holds the items, the chest, the campfire and the signs as rows of pixels, and [`src/characterArt.ts`](src/characterArt.ts) holds the hero and the enemies the same way, as [`src/uiArt.ts`](src/uiArt.ts) holds the icons and frames of the interface. A script outside this repository drew them from lines and shapes and wrote out the rows.
 - The code was written with Claude Code (Anthropic). The developer chose the look from sheets of drafts and gave the directions to change it.
 
 Whether copyright applies to work made with an AI tool is unsettled, so this repository claims nothing beyond this: to the extent any rights exist in this art, it is licensed under [MIT](LICENSE) like the code.

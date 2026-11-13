@@ -178,6 +178,7 @@ import {
 import { campfireRoom, catacombRooms, normalRooms, startRooms } from './roomSources';
 import { loadFonts } from './fonts';
 import { createHud } from './hud';
+import { applyUiArt } from './uiArt';
 import { fitCanvas, pixelRatio } from './screen';
 import {
   lowerCase,
@@ -292,6 +293,7 @@ canvas.add(heroHealthBar.scene);
 const hud = createHud(TVG, renderCanvas);
 canvas.add(hud.scene);
 
+applyUiArt();
 let settings = loadSettings();
 setLanguage(settings.language);
 translatePage();
@@ -932,13 +934,13 @@ function showFloorLabel() {
 }
 
 function showHeroStats() {
-  hud.setStats(t('Lv {level} · XP {experience}/{needed} · Str {strength} · {gold}G', {
+  hud.setStats({
     level: heroLevel,
     experience: heroExperience,
     needed: experienceToLevelUp(),
     strength: currentStrength(),
     gold: heroGold,
-  }));
+  });
   statusBar.show(heroStatuses, heroHunger);
 }
 
@@ -2784,7 +2786,9 @@ function canTarget(tile: Point | null): tile is Point {
 
 // While examining, the second press of the button searches.
 function showExamineLabel() {
-  examineButton.textContent = t(targeting?.request === EXAMINE_REQUEST ? 'Search' : 'Examine');
+  const isExamining = targeting?.request === EXAMINE_REQUEST;
+  examineButton.classList.toggle('active', isExamining);
+  examineButton.setAttribute('aria-label', t(isExamining ? 'Search' : 'Examine'));
 }
 
 function requestTarget(request: TargetRequest) {
@@ -3465,21 +3469,12 @@ function useItem(name: ItemName) {
   passTurn(() => {});
 }
 
+// The hourglass on the button turns over.
 function playWaitEffect() {
-  const timing = { duration: WAIT_EFFECT_MS };
-  const spin = (selector: string, degrees: number) =>
-    document
-      .querySelector(selector)!
-      .animate({ transform: ['rotate(0deg)', `rotate(${degrees}deg)`] }, timing);
-
-  spin('#wait-minute-hand', 360);
-  spin('#wait-hour-hand', 30);
-  document
-    .querySelector('#wait-clock')!
-    .animate({ opacity: [0, 1, 1, 0], offset: [0, 0.15, 0.75, 1] }, timing);
-  document
-    .querySelector('#wait-label')!
-    .animate({ opacity: [1, 0, 0, 1], offset: [0, 0.15, 0.75, 1] }, timing);
+  waitButton.animate(
+    { transform: ['rotate(0deg)', 'rotate(180deg)'] },
+    { duration: WAIT_EFFECT_MS, easing: 'ease-in-out', pseudoElement: '::before' },
+  );
 }
 
 // A second press while choosing a tile to examine stops choosing and searches the area, which takes

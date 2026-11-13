@@ -14,14 +14,11 @@ export const ko: Record<string, string> = {
   'Sound effects': '효과음',
   Music: '배경음',
   Mute: '음소거',
-  On: '켜짐',
-  Off: '꺼짐',
 
   // The top of the screen.
   Surface: '지상',
   'Floor {floor}': '{floor}층',
-  'Lv {level} · XP {experience}/{needed} · Str {strength} · {gold}G':
-    '레벨 {level} · 경험치 {experience}/{needed} · 힘 {strength} · {gold}골드',
+  'Lv {level}': '레벨 {level}',
 
   // The bag.
   Damage: '피해량',

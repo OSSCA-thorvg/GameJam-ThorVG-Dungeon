@@ -60,7 +60,7 @@
       }
       /* 1.5 lines of text below the stats. */
       #status {
-        top: 67px;
+        top: 88px;
         display: flex;
         gap: 8px;
         /* So that hovering an icon shows its name. */
@@ -79,12 +79,14 @@
         cursor: pointer;
       }
       /* Twice as tall as the number beside it. */
+      /* The icon is 11 art pixels on a 15 pixel badge, 2 screen pixels to an art pixel. */
       .status-effect svg {
-        width: 34px;
-        height: 34px;
+        width: 30px;
+        height: 30px;
         padding: 4px;
-        border-radius: 50%;
-        background: rgb(20 21 26 / 80%);
+        box-sizing: border-box;
+        background: var(--badge) center / 100% 100% no-repeat;
+        image-rendering: pixelated;
       }
       #status-tooltip {
         position: fixed;
@@ -92,29 +94,18 @@
         padding: 8px 10px;
         font: 18px/1.4 'Galmuri9', sans-serif;
         color: #e8e8ec;
-        background: #1f2027;
-        border: 1px solid #4a4d58;
-        border-radius: 6px;
+        border: 8px solid transparent;
+        border-image: var(--window) 4 fill / 8px;
         pointer-events: none;
       }
       #status-tooltip p {
         margin: 4px 0 0;
       }
-      .status-effect .line {
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.5;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-      .status-effect .fill {
-        fill: currentColor;
-      }
       /* Above the wait button. */
       #log {
         position: fixed;
         left: 12px;
-        bottom: 84px;
+        bottom: 100px;
         width: min(360px, calc(100vw / var(--ui-scale, 1) - 24px));
         font: 22px/1.4 'Galmuri11', sans-serif;
         color: #e8e8ec;
@@ -133,23 +124,6 @@
         font: 22px 'Galmuri11', sans-serif;
         color: #c8cad2;
       }
-      #settings-button {
-        width: 36px;
-        height: 36px;
-        padding: 6px;
-        color: #c8cad2;
-        background: #2c2e36;
-        border: 1px solid #4a4d58;
-        border-radius: 6px;
-        cursor: pointer;
-        touch-action: manipulation;
-      }
-      #settings-button svg {
-        display: block;
-        width: 100%;
-        height: 100%;
-        fill: currentColor;
-      }
       #bottom-left {
         position: fixed;
         left: 12px;
@@ -157,40 +131,10 @@
         display: flex;
         gap: 8px;
       }
-      #wait {
-        position: relative;
-      }
       #inventory-button {
         position: fixed;
         right: 12px;
         bottom: 28px;
-      }
-      #wait,
-      #examine,
-      #log-button,
-      #inventory-button {
-        min-width: 72px;
-        min-height: 44px;
-        font: 22px 'Galmuri11', sans-serif;
-        color: #e8e8ec;
-        background: #2c2e36;
-        border: 1px solid #4a4d58;
-        border-radius: 6px;
-        cursor: pointer;
-        touch-action: manipulation;
-      }
-      #wait-clock {
-        position: absolute;
-        inset: 0;
-        width: 30px;
-        height: 30px;
-        margin: auto;
-        opacity: 0;
-        pointer-events: none;
-        fill: none;
-        stroke: #e8e8ec;
-        stroke-width: 1.6;
-        stroke-linecap: round;
       }
       #inventory,
       #log-window,
@@ -218,9 +162,8 @@
         padding: 12px;
         font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
-        background: #1f2027;
-        border: 1px solid #4a4d58;
-        border-radius: 8px;
+        border: 8px solid transparent;
+        border-image: var(--window) 4 fill / 8px;
       }
       #inventory-header,
       #log-header,
@@ -230,19 +173,9 @@
         align-items: center;
         justify-content: space-between;
         margin-bottom: 10px;
+        padding-bottom: 6px;
         font-size: 22px;
-      }
-      #inventory-close,
-      #log-close,
-      #settings-close,
-      #dialog-close {
-        width: 36px;
-        height: 36px;
-        font-size: 22px;
-        color: inherit;
-        background: none;
-        border: none;
-        cursor: pointer;
+        border-bottom: 2px solid #14151a;
       }
       #log-lines {
         height: 60vh;
@@ -259,15 +192,72 @@
         justify-content: space-between;
         min-height: 40px;
       }
-      #settings-panel select,
-      #mute {
+      #settings-panel select {
         min-height: 36px;
-        padding: 0 8px;
+        padding: 0 30px 0 10px;
         font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
-        background: #3a3d48;
-        border: 1px solid #5a5d68;
-        border-radius: 6px;
+        appearance: none;
+        border: 4px solid transparent;
+        border-image: var(--button) 2 / 4px;
+        background: #2c2e36 var(--select-arrow) no-repeat right 8px center / 14px 8px;
+        image-rendering: pixelated;
+      }
+      /* The switch is 26 by 14 art pixels, with its knob at the right while muted. */
+      #mute {
+        width: 52px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        background: var(--switch-off) center / 100% 100% no-repeat;
+        image-rendering: pixelated;
+        cursor: pointer;
+      }
+      #mute[aria-pressed='true'] {
+        background-image: var(--switch-on);
+      }
+      /* A slider fills its track in the blue of the experience bar up to its value, which
+         settingsPanel.ts sets as --fill. */
+      #settings-panel input[type='range'] {
+        width: 120px;
+        height: 24px;
+        margin: 0;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+      }
+      #settings-panel input[type='range']::-webkit-slider-runnable-track {
+        box-sizing: border-box;
+        height: 8px;
+        border: 2px solid #15161c;
+        background:
+          linear-gradient(to right, transparent var(--fill, 100%), #23242c var(--fill, 100%)),
+          linear-gradient(#9ab4f4 50%, #5a78d0 50%);
+      }
+      #settings-panel input[type='range']::-moz-range-track {
+        box-sizing: border-box;
+        height: 8px;
+        border: 2px solid #15161c;
+        background:
+          linear-gradient(to right, transparent var(--fill, 100%), #23242c var(--fill, 100%)),
+          linear-gradient(#9ab4f4 50%, #5a78d0 50%);
+      }
+      #settings-panel input[type='range']::-webkit-slider-thumb {
+        width: 14px;
+        height: 24px;
+        margin-top: -10px;
+        appearance: none;
+        border: none;
+        background: var(--slider-knob) center / 100% 100% no-repeat;
+        image-rendering: pixelated;
+      }
+      #settings-panel input[type='range']::-moz-range-thumb {
+        width: 14px;
+        height: 24px;
+        border: none;
+        border-radius: 0;
+        background: var(--slider-knob) center / 100% 100% no-repeat;
+        image-rendering: pixelated;
       }
       #dialog-panel p {
         margin: 0 0 10px;
@@ -288,11 +278,6 @@
         padding: 8px 12px;
         font: 22px 'Galmuri11', sans-serif;
         text-align: left;
-        color: #e8e8ec;
-        background: #3a3d48;
-        border: 1px solid #5a5d68;
-        border-radius: 6px;
-        cursor: pointer;
       }
       .dialog-action span {
         font-size: 18px;
@@ -319,27 +304,28 @@
         grid-template-columns: repeat(5, 1fr);
         gap: 6px;
       }
+      /* A slot is a frame 3 art pixels wide on each side. */
       .inventory-slot {
         position: relative;
         aspect-ratio: 1;
-        padding: 6px;
-        background: #2c2e36;
-        border: 1px solid #3a3c46;
-        border-radius: 6px;
+        padding: 0;
+        border: 6px solid transparent;
+        border-image: var(--slot) 3 fill / 6px;
+        background: none;
+        image-rendering: pixelated;
         cursor: pointer;
         touch-action: manipulation;
       }
       .inventory-slot:disabled {
-        background: #25262d;
+        filter: brightness(0.8);
         cursor: default;
       }
       /* Every item that is not identified yet looks like this, whatever it is. */
       .inventory-slot.unidentified {
-        background: #3a3352;
-        border-color: #54497a;
+        border-image-source: var(--slot-unknown);
       }
       .inventory-slot.selected {
-        border-color: #f5cd46;
+        border-image-source: var(--slot-selected);
       }
       .inventory-slot svg {
         display: block;
@@ -366,11 +352,6 @@
         min-width: 72px;
         min-height: 40px;
         font: 22px 'Galmuri11', sans-serif;
-        color: #e8e8ec;
-        background: #3a3d48;
-        border: 1px solid #5a5d68;
-        border-radius: 6px;
-        cursor: pointer;
       }
       #inventory-details button:disabled {
         color: #7a7d86;
@@ -404,9 +385,8 @@
         padding: 6px 6px 6px 14px;
         font: 22px 'Galmuri11', sans-serif;
         color: #e8e8ec;
-        background: #1f2027;
-        border: 1px solid #5a8fd0;
-        border-radius: 6px;
+        border: 8px solid transparent;
+        border-image: var(--window) 4 fill / 8px;
         transform: translateX(-50%);
       }
       #target-prompt[hidden] {
@@ -416,11 +396,6 @@
         min-height: 36px;
         padding: 0 12px;
         font: 22px 'Galmuri11', sans-serif;
-        color: #e8e8ec;
-        background: #3a3d48;
-        border: 1px solid #5a5d68;
-        border-radius: 6px;
-        cursor: pointer;
       }
       #game-over {
         position: fixed;
@@ -455,7 +430,6 @@
       #game-over button {
         padding: 8px 20px;
         font: 22px 'Galmuri11', sans-serif;
-        cursor: pointer;
       }
       #main-menu {
         position: fixed;
@@ -488,12 +462,137 @@
         width: 200px;
         padding: 10px 20px;
         font: 22px 'Galmuri11', sans-serif;
+      }
+      /* Every button wears a pixel frame, 2 art pixels on each side, which uiArt.ts hands over as
+         custom properties with the icons. */
+      #wait,
+      #examine,
+      #log-button,
+      #inventory-button,
+      #settings-button,
+      #inventory-close,
+      #log-close,
+      #settings-close,
+      #dialog-close,
+      #main-menu button,
+      #game-over button,
+      #target-prompt button,
+      .dialog-action,
+      #inventory-details button {
         color: #e8e8ec;
-        background: #2c2e36;
-        border: 1px solid #4a4d58;
-        border-radius: 6px;
+        border: 4px solid transparent;
+        border-image: var(--button) 2 fill / 4px;
+        background: none;
+        image-rendering: pixelated;
         cursor: pointer;
         touch-action: manipulation;
+      }
+      :is(#wait, #examine, #log-button, #inventory-button, #settings-button, #inventory-close,
+        #log-close, #settings-close, #dialog-close, #main-menu button, #game-over button,
+        #target-prompt button, .dialog-action, #inventory-details button):hover:not(:disabled) {
+        border-image-source: var(--button-hover);
+      }
+      :is(#wait, #examine, #log-button, #inventory-button, #settings-button, #inventory-close,
+        #log-close, #settings-close, #dialog-close, #main-menu button, #game-over button,
+        #target-prompt button, .dialog-action, #inventory-details button):active:not(:disabled),
+      #examine.active {
+        border-image-source: var(--button-pressed);
+      }
+      .dialog-action:disabled,
+      #inventory-details button:disabled {
+        cursor: default;
+      }
+      /* The buttons of the game show 12 by 12 icons instead of words. */
+      #wait,
+      #examine,
+      #log-button,
+      #inventory-button,
+      #settings-button,
+      #inventory-close,
+      #log-close,
+      #settings-close,
+      #dialog-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+      /* The buttons on the screen are drawn at 3 screen pixels to an art pixel, frame and icon
+         alike, so that they are easy to hit. */
+      #wait,
+      #examine,
+      #log-button,
+      #inventory-button,
+      #settings-button {
+        border-width: 6px;
+        border-image-width: 6px;
+      }
+      #wait,
+      #examine,
+      #log-button,
+      #inventory-button {
+        width: 96px;
+        height: 60px;
+      }
+      #settings-button {
+        width: 60px;
+        height: 60px;
+      }
+      #inventory-close,
+      #log-close,
+      #settings-close,
+      #dialog-close {
+        width: 36px;
+        height: 36px;
+      }
+      #wait::before,
+      #examine::before,
+      #log-button::before,
+      #inventory-button::before,
+      #settings-button::before,
+      #inventory-close::before,
+      #log-close::before,
+      #settings-close::before,
+      #dialog-close::before {
+        content: '';
+        width: 24px;
+        height: 24px;
+        background: center / 100% 100% no-repeat;
+        image-rendering: pixelated;
+      }
+      #wait::before,
+      #examine::before,
+      #log-button::before,
+      #inventory-button::before,
+      #settings-button::before {
+        width: 36px;
+        height: 36px;
+      }
+      #wait::before {
+        background-image: var(--icon-wait);
+      }
+      #examine::before {
+        background-image: var(--icon-examine);
+      }
+      #log-button::before {
+        background-image: var(--icon-log);
+      }
+      #inventory-button::before {
+        background-image: var(--icon-bag);
+      }
+      #inventory-button:hover::before {
+        background-image: var(--icon-bag-open);
+      }
+      #settings-button::before {
+        background-image: var(--icon-settings);
+      }
+      #inventory-close::before,
+      #log-close::before,
+      #settings-close::before,
+      #dialog-close::before {
+        width: 16px;
+        height: 16px;
+        background-image: var(--icon-close);
       }
     </style>
   </head>
@@ -504,33 +603,19 @@
     <div id="log" aria-live="polite"></div>
     <div id="top-right">
       <div id="floor"></div>
-      <button id="settings-button" aria-label="Settings" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            fill-rule="evenodd"
-            d="M10.071 4.236L10.276 1.642L13.724 1.642L13.929 4.236L16.126 5.146L18.105 3.457L20.543 5.895L18.854 7.874L19.764 10.071L22.358 10.276L22.358 13.724L19.764 13.929L18.854 16.126L20.543 18.105L18.105 20.543L16.126 18.854L13.929 19.764L13.724 22.358L10.276 22.358L10.071 19.764L7.874 18.854L5.895 20.543L3.457 18.105L5.146 16.126L4.236 13.929L1.642 13.724L1.642 10.276L4.236 10.071L5.146 7.874L3.457 5.895L5.895 3.457L7.874 5.146ZM15.500 12A3.500 3.500 0 1 0 8.500 12A3.500 3.500 0 1 0 15.500 12Z"
-          />
-        </svg>
-      </button>
+      <button id="settings-button" aria-label="Settings" data-i18n-aria="Settings" hidden></button>
     </div>
     <div id="bottom-left">
-      <button id="wait" hidden>
-        <span id="wait-label" data-i18n="Wait">Wait</span>
-        <svg id="wait-clock" viewBox="-12 -12 24 24" aria-hidden="true">
-          <circle r="10.5" />
-          <line id="wait-minute-hand" y2="-8" />
-          <line id="wait-hour-hand" y2="-5" />
-        </svg>
-      </button>
-      <button id="examine" data-i18n="Examine" hidden>Examine</button>
-      <button id="log-button" data-i18n="Log" hidden>Log</button>
+      <button id="wait" aria-label="Wait" data-i18n-aria="Wait" hidden></button>
+      <button id="examine" aria-label="Examine" data-i18n-aria="Examine" hidden></button>
+      <button id="log-button" aria-label="Log" data-i18n-aria="Log" hidden></button>
     </div>
-    <button id="inventory-button" data-i18n="Bag" hidden>Bag</button>
+    <button id="inventory-button" aria-label="Bag" data-i18n-aria="Bag" hidden></button>
     <div id="inventory" hidden>
       <div id="inventory-panel" role="dialog" aria-label="Bag" data-i18n-aria="Bag">
         <div id="inventory-header">
           <span data-i18n="Bag">Bag</span>
-          <button id="inventory-close" aria-label="Close" data-i18n-aria="Close">×</button>
+          <button id="inventory-close" aria-label="Close" data-i18n-aria="Close"></button>
         </div>
         <div id="equipment-slots"></div>
         <div id="inventory-slots"></div>
@@ -546,7 +631,7 @@
       <div id="log-panel" role="dialog" aria-label="Log" data-i18n-aria="Log">
         <div id="log-header">
           <span data-i18n="Log">Log</span>
-          <button id="log-close" aria-label="Close" data-i18n-aria="Close">×</button>
+          <button id="log-close" aria-label="Close" data-i18n-aria="Close"></button>
         </div>
         <div id="log-lines"></div>
       </div>
@@ -555,7 +640,7 @@
       <div id="settings-panel" role="dialog" aria-label="Settings" data-i18n-aria="Settings">
         <div id="settings-header">
           <span data-i18n="Settings">Settings</span>
-          <button id="settings-close" aria-label="Close" data-i18n-aria="Close">×</button>
+          <button id="settings-close" aria-label="Close" data-i18n-aria="Close"></button>
         </div>
         <label>
           <span data-i18n="Language">Language</span>
@@ -575,7 +660,7 @@
         </label>
         <label>
           <span data-i18n="Mute">Mute</span>
-          <button id="mute" aria-pressed="false">Off</button>
+          <button id="mute" aria-pressed="false" aria-label="Mute" data-i18n-aria="Mute"></button>
         </label>
       </div>
     </div>
@@ -583,7 +668,7 @@
       <div id="dialog-panel" role="dialog" aria-labelledby="dialog-title">
         <div id="dialog-header">
           <span id="dialog-title"></span>
-          <button id="dialog-close" aria-label="Close" data-i18n-aria="Close">×</button>
+          <button id="dialog-close" aria-label="Close" data-i18n-aria="Close"></button>
         </div>
         <p id="dialog-text"></p>
         <div id="dialog-actions"></div>

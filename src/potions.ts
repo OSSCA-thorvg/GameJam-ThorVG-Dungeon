@@ -3,8 +3,6 @@ import { flaskIcon } from './itemArt';
 import { ITEMS, itemDescription, type ItemName, type PotionName } from './items';
 import { shuffle, type Random } from './random';
 import { STATUS_COLORS } from './render';
-import type { StatusName } from './status';
-import { STATUS_ICONS } from './statusIcons';
 
 type Color = [r: number, g: number, b: number];
 
@@ -87,63 +85,21 @@ export function planStagePotions(random: Random): PotionName[][] {
   return floors;
 }
 
-// The mark of each potion, drawn in a 10 by 10 box. It is the icon of the status effect the potion
-// causes, in the color of that effect. A potion that causes none has a mark of its own, with a
-// placeholder color.
-interface PotionMark {
-  icon: string;
-  color: Color;
-}
-
-const ofStatus = (name: StatusName): PotionMark => ({
-  icon: STATUS_ICONS[name],
-  color: STATUS_COLORS[name],
-});
-
-const POTION_MARKS: Record<PotionName, PotionMark> = {
-  'healing-potion': ofStatus('regenerating'),
-  'strength-potion': {
-    // A triangle pointing up.
-    icon: '<path class="fill" d="M5 1L9 9H1Z"/>',
-    color: [255, 150, 90],
-  },
-  'experience-potion': {
-    // A star.
-    icon: '<path class="fill" d="M5 0L6.3 3.7L10 5L6.3 6.3L5 10L3.7 6.3L0 5L3.7 3.7Z"/>',
-    color: [100, 210, 190],
-  },
-  'haste-potion': ofStatus('haste'),
-  'invisibility-potion': ofStatus('invisible'),
-  'levitation-potion': ofStatus('levitating'),
-  'telepathy-potion': ofStatus('telepathy'),
-  'fire-potion': ofStatus('burning'),
-  'frost-potion': ofStatus('frozen'),
-  'poison-gas-potion': ofStatus('poisoned'),
-  'paralysis-potion': ofStatus('paralyzed'),
+// The color of the mark of each potion: the color of the status effect it causes, or a placeholder
+// color of its own for a potion that causes none.
+const POTION_MARKS: Record<PotionName, Color> = {
+  'healing-potion': STATUS_COLORS.regenerating,
+  'strength-potion': [255, 150, 90],
+  'experience-potion': [100, 210, 190],
+  'haste-potion': STATUS_COLORS.haste,
+  'invisibility-potion': STATUS_COLORS.invisible,
+  'levitation-potion': STATUS_COLORS.levitating,
+  'telepathy-potion': STATUS_COLORS.telepathy,
+  'fire-potion': STATUS_COLORS.burning,
+  'frost-potion': STATUS_COLORS.frozen,
+  'poison-gas-potion': STATUS_COLORS.poisoned,
+  'paralysis-potion': STATUS_COLORS.paralyzed,
 };
-
-// The icons style their parts by class, which a picture drawn outside the page does not have.
-const markStyled = ({ icon, color: [r, g, b] }: PotionMark) =>
-  icon
-    .replaceAll(
-      'class="line"',
-      `fill="none" stroke="rgb(${r},${g},${b})" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"`,
-    )
-    .replaceAll('class="fill"', `fill="rgb(${r},${g},${b})"`);
-
-// A flask of the color of its liquid. Once the potion is known, its mark sits in a corner. The
-// badge is drawn in a 24 by 24 box, scaled to the 16 art pixels of the flask.
-function potionIcon(color: Color, mark?: PotionMark): string {
-  const flask = flaskIcon(color);
-  if (!mark) {
-    return flask;
-  }
-  const badge = `<g transform="scale(${16 / 24})" shape-rendering="auto">
-    <circle cx="19" cy="5" r="5" fill="#1e2027" stroke="#6a6e7c" stroke-width="0.7"/>
-    <g transform="translate(15.500 1.500) scale(0.700)">${markStyled(mark)}</g>
-  </g>`;
-  return flask.replace('</svg>', `${badge}</svg>`);
-}
 
 // How an item looks to the player. A potion shows only its color until it is identified.
 export interface ItemLook {
@@ -186,7 +142,7 @@ export function createPotionLore(random: Random): PotionLore {
         description: isKnown
           ? itemDescription(name)
           : phrase('You do not know what this potion does. Drinking it will tell you.'),
-        icon: potionIcon(appearance.color, isKnown ? POTION_MARKS[name as PotionName] : undefined),
+        icon: flaskIcon(appearance.color, isKnown ? POTION_MARKS[name as PotionName] : undefined),
         isKnown,
         color: appearance.color,
       };

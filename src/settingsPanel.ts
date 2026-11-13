@@ -1,4 +1,4 @@
-import { LANGUAGES, t, type Language } from './i18n';
+import { LANGUAGES, type Language } from './i18n';
 import { availableUiScales, uiScaleFor, type Settings } from './settings';
 
 export interface SettingsPanelOptions {
@@ -28,6 +28,10 @@ export function createSettingsPanel({
 
   language.replaceChildren(...LANGUAGES.map(({ code, name }) => new Option(name, code)));
 
+  // How far a slider is filled, which the page's style sheet reads.
+  const showFill = (slider: HTMLInputElement) =>
+    slider.style.setProperty('--fill', `${slider.value}%`);
+
   const refresh = () => {
     language.value = getSettings().language;
     uiScale.replaceChildren(
@@ -38,7 +42,8 @@ export function createSettingsPanel({
     uiScale.value = String(uiScaleFor(getSettings(), window.innerWidth));
     sfxVolume.value = String(Math.round(getSettings().sfxVolume * 100));
     musicVolume.value = String(Math.round(getSettings().musicVolume * 100));
-    mute.textContent = getSettings().muted ? t('On') : t('Off');
+    showFill(sfxVolume);
+    showFill(musicVolume);
     mute.setAttribute('aria-pressed', String(getSettings().muted));
   };
 
@@ -50,9 +55,11 @@ export function createSettingsPanel({
     onChange({ ...getSettings(), uiScale: Number(uiScale.value) });
   });
   sfxVolume.addEventListener('input', () => {
+    showFill(sfxVolume);
     onChange({ ...getSettings(), sfxVolume: Number(sfxVolume.value) / 100 });
   });
   musicVolume.addEventListener('input', () => {
+    showFill(musicVolume);
     onChange({ ...getSettings(), musicVolume: Number(musicVolume.value) / 100 });
   });
 

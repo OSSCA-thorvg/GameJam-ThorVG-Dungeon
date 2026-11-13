@@ -121,7 +121,7 @@ export function createStatusBar(element: HTMLElement, tooltip: HTMLElement): Sta
             'aria-label',
             turns === null ? t(label) : `${t(label)}, ${t('{turns} turns', { turns })}`,
           );
-          const svg = `<svg viewBox="-1 -1 12 12" aria-hidden="true">${STATUS_ICONS[name]}</svg>`;
+          const svg = `<svg viewBox="0 0 11 11" shape-rendering="crispEdges" aria-hidden="true">${STATUS_ICONS[name]}</svg>`;
           item.innerHTML = svg;
           item.style.color = `rgb(${r} ${g} ${b})`;
           if (turns !== null) {

@@ -4,6 +4,7 @@ import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
 import { ART_PIXEL, drawTilePart, tileThemeOf, WALL_PIXELS, type TilePart } from './tileArt';
 import { FONT_BOLD } from './fonts';
+import { BAR_LEFT, BAR_TOP } from './hud';
 import { createPixelSprite } from './pixelSprite';
 import { t } from './i18n';
 import { STATUS_LABELS, type StatusName } from './status';
@@ -116,15 +117,8 @@ const LIT_WALL_TOP_SCALE = 1 + (2 * LIGHT_BLUR_SIGMA) / LIGHT_MAP_TILE_LENGTH;
 // floor beside them. Two sigmas hold nearly all of the blur, and stay within a wall's thickness.
 const LIGHT_UNDER_WALLS = (2 * LIGHT_BLUR_SIGMA) / LIGHT_MAP_TILE_LENGTH;
 
-const ENEMY_HEALTH_BAR_WIDTH = CHARACTER_SIZE * 0.8;
-const ENEMY_HEALTH_BAR_HEIGHT = 5;
+// Placeholder value. The gap between an enemy's feet and its health bar.
 const ENEMY_HEALTH_BAR_GAP = 4;
-
-// Placeholder values for the health bar at the top left of the screen. Its height is the line
-// height of #hp in index.html, whose text sits on it.
-const HERO_HEALTH_BAR_MARGIN = 12;
-const HERO_HEALTH_BAR_WIDTH = 200;
-const HERO_HEALTH_BAR_HEIGHT = 23;
 
 // No standard exists for these. Lost health stays visible briefly, then catches up.
 const HEALTH_TRAIL_HOLD_MS = 300;
@@ -243,11 +237,6 @@ const HAZARD_COLORS: Record<HazardKind, [...Color, number]> = {
   poison: [110, 200, 70, 120],
   paralysis: [235, 215, 80, 120],
 };
-const HEALTH_BAR_BACKGROUND: Color = [30, 30, 36];
-const ENEMY_HEALTH_BAR_FILL: Color = [90, 200, 90];
-const ENEMY_HEALTH_BAR_TRAIL: Color = [220, 80, 60];
-const HERO_HEALTH_BAR_FILL: Color = [210, 60, 55];
-const HERO_HEALTH_BAR_TRAIL: Color = [245, 200, 120];
 
 function mapToScreen(x: number, y: number): Point {
   return {
@@ -1048,39 +1037,62 @@ export function createSleepMark(TVG: ThorVGNamespace): Scene {
   return createSpeechBubble(TVG, SLEEP_BUBBLE, SLEEP_MARK_COLOR);
 }
 
+// A bar of art pixels with a dark rim. Each row of its inside has a color of its own, lit at the top
+// and shaded at the bottom, and lost health trails behind in rows of another set of colors.
 interface HealthBarStyle {
   left: number;
   top: number;
+  // How many art pixels the inside is wide.
   width: number;
-  height: number;
-  fillColor: Color;
-  trailColor: Color;
+  fillRows: Color[];
+  trailRows: Color[];
 }
+
+const HEALTH_BAR_RIM: Color = [21, 22, 28];
+const HEALTH_BAR_EMPTY: Color = [35, 35, 43];
 
 // A hidden, full bar.
 function createHealthBar(
   TVG: ThorVGNamespace,
   render: () => void,
-  { left, top, width, height, fillColor, trailColor }: HealthBarStyle,
+  { left, top, width, fillRows, trailRows }: HealthBarStyle,
 ): HealthBar {
-  const background = new TVG.Shape();
-  const trail = new TVG.Shape();
-  const fill = new TVG.Shape();
+  const rim = new TVG.Shape();
+  rim.appendRect(left, top, (width + 2) * ART_PIXEL, (fillRows.length + 2) * ART_PIXEL);
+  rim.fill(...HEALTH_BAR_RIM);
+  const empty = new TVG.Shape();
+  const insideHeight = fillRows.length * ART_PIXEL;
+  empty.appendRect(left + ART_PIXEL, top + ART_PIXEL, width * ART_PIXEL, insideHeight);
+  empty.fill(...HEALTH_BAR_EMPTY);
 
   const scene = new TVG.Scene();
-  scene.add(background);
-  scene.add(trail);
-  scene.add(fill);
+  scene.add(rim);
+  scene.add(empty);
+  const rowsOf = (colors: Color[]) =>
+    colors.map(() => {
+      const shape = new TVG.Shape();
+      scene.add(shape);
+      return shape;
+    });
+  const trail = rowsOf(trailRows);
+  const fill = rowsOf(fillRows);
   scene.visible(false);
 
-  const drawBar = (shape: Shape, ratio: number, color: Color) => {
-    const radius = height / 2;
-    shape.reset();
-    shape.appendRect(left, top, width * ratio, height, { rx: radius, ry: radius });
-    shape.fill(...color);
+  const drawBar = (shapes: Shape[], colors: Color[], ratio: number) => {
+    const pixels = Math.round(width * ratio);
+    shapes.forEach((shape, row) => {
+      shape.reset();
+      if (pixels > 0) {
+        shape.appendRect(
+          left + ART_PIXEL,
+          top + (1 + row) * ART_PIXEL,
+          pixels * ART_PIXEL,
+          ART_PIXEL,
+        );
+      }
+      shape.fill(...colors[row]);
+    });
   };
-
-  drawBar(background, 1, HEALTH_BAR_BACKGROUND);
 
   let trailRatio = 1;
   let trailFrame = 0;
@@ -1088,16 +1100,16 @@ function createHealthBar(
   return {
     scene,
     show(ratio, options) {
-      drawBar(fill, ratio, fillColor);
+      drawBar(fill, fillRows, ratio);
       scene.visible(true);
 
       cancelAnimationFrame(trailFrame);
       if (options?.jump || ratio >= trailRatio) {
         trailRatio = ratio;
-        drawBar(trail, trailRatio, trailColor);
+        drawBar(trail, trailRows, trailRatio);
         return;
       }
-      drawBar(trail, trailRatio, trailColor);
+      drawBar(trail, trailRows, trailRatio);
 
       // Each hit restarts the wait, from wherever the trail is now.
       const startRatio = trailRatio;
@@ -1109,7 +1121,7 @@ function createHealthBar(
 
         if (progress > 0) {
           trailRatio = startRatio + (ratio - startRatio) * Math.min(1, progress);
-          drawBar(trail, trailRatio, trailColor);
+          drawBar(trail, trailRows, trailRatio);
           render();
         }
         if (progress < 1) {
@@ -1122,26 +1134,48 @@ function createHealthBar(
   };
 }
 
+const rows = (...runs: [count: number, color: Color][]) =>
+  runs.flatMap(([count, color]) => Array.from({ length: count }, () => color));
+
+// Placeholder values. An enemy's bar is 18 by 3 art pixels inside its rim, green over a red trail,
+// and the hero's is 100 by 12, red over a yellow trail.
+const ENEMY_HEALTH_BAR_WIDTH = 18;
+const ENEMY_HEALTH_FILL = rows([1, [154, 240, 154]], [1, [90, 200, 90]], [1, [58, 154, 66]]);
+const ENEMY_HEALTH_TRAIL = rows([1, [240, 136, 112]], [1, [220, 80, 60]], [1, [168, 56, 40]]);
+const HERO_HEALTH_BAR_WIDTH = 100;
+const HERO_HEALTH_FILL = rows(
+  [1, [240, 116, 104]],
+  [1, [224, 76, 70]],
+  [7, [210, 60, 55]],
+  [1, [184, 48, 48]],
+  [1, [160, 40, 40]],
+  [1, [122, 30, 30]],
+);
+const HERO_HEALTH_TRAIL = rows(
+  [1, [250, 220, 160]],
+  [9, [245, 200, 120]],
+  [1, [216, 170, 98]],
+  [1, [184, 142, 76]],
+);
+
 // Centered below the scene's local origin, which stands on the enemy's tile.
 export function createEnemyHealthBar(TVG: ThorVGNamespace, render: () => void): HealthBar {
   return createHealthBar(TVG, render, {
-    left: -ENEMY_HEALTH_BAR_WIDTH / 2,
+    left: -((ENEMY_HEALTH_BAR_WIDTH + 2) * ART_PIXEL) / 2,
     top: ENEMY_HEALTH_BAR_GAP,
     width: ENEMY_HEALTH_BAR_WIDTH,
-    height: ENEMY_HEALTH_BAR_HEIGHT,
-    fillColor: ENEMY_HEALTH_BAR_FILL,
-    trailColor: ENEMY_HEALTH_BAR_TRAIL,
+    fillRows: ENEMY_HEALTH_FILL,
+    trailRows: ENEMY_HEALTH_TRAIL,
   });
 }
 
 // At the top left of the screen, because it is not part of the map.
 export function createHeroHealthBar(TVG: ThorVGNamespace, render: () => void): HealthBar {
   return createHealthBar(TVG, render, {
-    left: HERO_HEALTH_BAR_MARGIN,
-    top: HERO_HEALTH_BAR_MARGIN,
+    left: BAR_LEFT,
+    top: BAR_TOP,
     width: HERO_HEALTH_BAR_WIDTH,
-    height: HERO_HEALTH_BAR_HEIGHT,
-    fillColor: HERO_HEALTH_BAR_FILL,
-    trailColor: HERO_HEALTH_BAR_TRAIL,
+    fillRows: HERO_HEALTH_FILL,
+    trailRows: HERO_HEALTH_TRAIL,
   });
 }

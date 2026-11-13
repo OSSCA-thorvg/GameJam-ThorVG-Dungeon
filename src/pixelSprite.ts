@@ -59,7 +59,10 @@ export function pixelSvg(rows: string[], palette: Record<string, Color>): string
   const body = [...paths]
     .map(([key, d]) => `<path fill="${hex(palette[key])}" d="${d}"/>`)
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${rows.length}" shape-rendering="crispEdges">${body}</svg>`;
+  // The size in the units of the view box gives the picture an intrinsic size, which a border image
+  // needs to cut its slices in art pixels.
+  const size = `width="${width}" height="${rows.length}" viewBox="0 0 ${width} ${rows.length}"`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" ${size} shape-rendering="crispEdges">${body}</svg>`;
 }
 
 // A picture of art pixels, written as rows of characters. Each character names a color in the

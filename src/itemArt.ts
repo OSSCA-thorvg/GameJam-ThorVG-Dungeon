@@ -538,11 +538,39 @@ const lighter = (color: Color): Color =>
   color.map((value) => Math.min(255, Math.round(value * 1.2 + 24))) as Color;
 const darker = (color: Color): Color => color.map((value) => Math.round(value * 0.7)) as Color;
 
-// A flask holding a liquid of a color, whose top is lit and whose bottom is shaded.
-export const flaskIcon = (liquid: Color) =>
-  pixelSvg(FLASK, {
+// A gem in the corner of a flask, in the color of what the potion does, once it is known. M is the
+// color and z its shine.
+const MARK = [
+  '...k...',
+  '..kMk..',
+  '.kMzMk.',
+  'kMMMMMk',
+  '.kMMMk.',
+  '..kMk..',
+  '...k...',
+];
+const MARK_LEFT = 9;
+
+// A flask holding a liquid of a color, whose top is lit and whose bottom is shaded, with the gem of
+// a mark color when there is one.
+export function flaskIcon(liquid: Color, mark?: Color): string {
+  const rows = mark
+    ? FLASK.map((row, y) =>
+        MARK[y]
+          ? [...row]
+              .map((pixel, x) => {
+                const markPixel = MARK[y][x - MARK_LEFT] ?? '.';
+                return markPixel === '.' ? pixel : markPixel;
+              })
+              .join('')
+          : row,
+      )
+    : FLASK;
+  return pixelSvg(rows, {
     ...PALETTE,
     '+': muted(lighter(liquid)),
     '=': muted(liquid),
     '-': muted(darker(liquid)),
+    M: mark ? muted(mark) : PALETTE.k,
   });
+}
