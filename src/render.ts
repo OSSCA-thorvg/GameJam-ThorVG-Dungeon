@@ -3,6 +3,7 @@ import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
 import { ART_PIXEL, drawTilePart, tileThemeOf, WALL_PIXELS, type TilePart } from './tileArt';
 import { FONT_BOLD } from './fonts';
+import { createPixelSprite } from './pixelSprite';
 import { t } from './i18n';
 import { STATUS_LABELS, type StatusName } from './status';
 
@@ -126,14 +127,12 @@ const HEALTH_TRAIL_HOLD_MS = 300;
 const HEALTH_TRAIL_SHRINK_MS = 250;
 
 // Placeholder values for the text that floats over characters. Galmuri11 is drawn at twice its own
-// size, so a pixel of the letters is as big as a pixel of the art. A letter is about this share of
-// the size wide.
+// size, so a pixel of the letters is as big as a pixel of the art.
 const FLOATING_TEXT_SIZE = 22;
 // The text has a dark copy of itself one art pixel below it, so that it reads over light floors. An
 // outline would do the same, but ThorVG's GL renderer now and then draws outlined text as a hole.
 const FLOATING_TEXT_SHADOW = 2;
 const FLOATING_TEXT_SHADOW_COLOR: Color = [20, 20, 28];
-const FLOATING_TEXT_LETTER_WIDTH = 0.55;
 const FLOATING_TEXT_GAP = 2;
 
 // The height one number takes up, with a gap to the next number.
@@ -166,11 +165,44 @@ const ATTACK_TEXT_COLOR: Color = [245, 205, 70];
 const NOTICE_MARK_COLOR: Color = [235, 60, 50];
 // Placeholder color for the mark of a sleeping enemy, calm against the red of the notice mark.
 const SLEEP_MARK_COLOR: Color = [70, 100, 170];
-// Placeholder values for the speech bubble behind that mark, so it stands out on a dark map.
-const NOTICE_BUBBLE_COLOR: Color = [245, 245, 245];
-const NOTICE_BUBBLE_PADDING = 3;
-const NOTICE_BUBBLE_RADIUS = 3;
-const NOTICE_BUBBLE_TAIL = 4;
+// Placeholder pictures of those marks in a speech bubble, so they stand out on a dark map. W is the
+// bubble, S its shaded bottom, K its outline, and M the mark. The tail ends on the character's head.
+const BUBBLE_PALETTE: Record<string, Color> = {
+  W: [245, 245, 245],
+  S: [200, 202, 212],
+  K: [20, 20, 28],
+};
+const NOTICE_BUBBLE = [
+  '.KKKKKKKK.',
+  'KWWWWWWWWK',
+  'KWWWMMWWWK',
+  'KWWWMMWWWK',
+  'KWWWMMWWWK',
+  'KWWWMMWWWK',
+  'KWWWWWWWWK',
+  'KWWWMMWWWK',
+  'KSSSSSSSSK',
+  '.KKKSSKKK.',
+  '...KSSK...',
+  '....KK....',
+];
+const SLEEP_BUBBLE = [
+  '.KKKKKKKKKKKK.',
+  'KWWWWWWWWWWWWK',
+  'KWWWWWWWMMMMWK',
+  'KWWWWWWWWWMWWK',
+  'KWMMMMMWWMWWWK',
+  'KWWWWMWWMMMMWK',
+  'KWWWMWWWWWWWWK',
+  'KWWMWWWWWWWWWK',
+  'KWMMMMMWWWWWWK',
+  'KSSSSSSSSSSSSK',
+  '.KKKKKSSKKKKK.',
+  '.....KSSK.....',
+  '......KK......',
+];
+// How far the tip of the tail is above the character's feet.
+const BUBBLE_TAIL_HEIGHT = CHARACTER_SIZE - 4;
 const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   enemy: [255, 255, 255],
   hero: [255, 80, 70],
@@ -1049,30 +1081,12 @@ export function createSurpriseMark(TVG: ThorVGNamespace): Scene {
   return createFloatingText(TVG, '!', ATTACK_TEXT_COLOR);
 }
 
-// Text in a speech bubble over a character standing on the scene's local origin.
-function createSpeechBubble(TVG: ThorVGNamespace, text: string, color: Color): Scene {
-  const textWidth = text.length * FLOATING_TEXT_SIZE * FLOATING_TEXT_LETTER_WIDTH;
-  const width = textWidth + NOTICE_BUBBLE_PADDING * 2;
-  const height = FLOATING_TEXT_SIZE + NOTICE_BUBBLE_PADDING * 2;
-  const top = -CHARACTER_SIZE - FLOATING_TEXT_SIZE - NOTICE_BUBBLE_PADDING;
-  const bottom = top + height;
-
-  const bubble = new TVG.Shape();
-  bubble.appendRect(-width / 2, top, width, height, {
-    rx: NOTICE_BUBBLE_RADIUS,
-    ry: NOTICE_BUBBLE_RADIUS,
+// A speech bubble over a character standing on the scene's local origin, with a mark of a color.
+function createSpeechBubble(TVG: ThorVGNamespace, rows: string[], color: Color): Scene {
+  return createPixelSprite(TVG, rows, { ...BUBBLE_PALETTE, M: color }, {
+    x: 0,
+    y: -BUBBLE_TAIL_HEIGHT,
   });
-  bubble
-    .moveTo(-NOTICE_BUBBLE_TAIL / 2, bottom)
-    .lineTo(NOTICE_BUBBLE_TAIL / 2, bottom)
-    .lineTo(0, bottom + NOTICE_BUBBLE_TAIL)
-    .close();
-  bubble.fill(...NOTICE_BUBBLE_COLOR);
-
-  const scene = new TVG.Scene();
-  scene.add(bubble);
-  scene.add(createFloatingText(TVG, text, color));
-  return scene;
 }
 
 // The mark shown over an enemy that just noticed the hero.
@@ -1082,12 +1096,12 @@ export function createTargetedText(TVG: ThorVGNamespace): Scene {
 }
 
 export function createNoticeMark(TVG: ThorVGNamespace): Scene {
-  return createSpeechBubble(TVG, '!', NOTICE_MARK_COLOR);
+  return createSpeechBubble(TVG, NOTICE_BUBBLE, NOTICE_MARK_COLOR);
 }
 
 // The mark shown over a sleeping enemy.
 export function createSleepMark(TVG: ThorVGNamespace): Scene {
-  return createSpeechBubble(TVG, 'ZZZ', SLEEP_MARK_COLOR);
+  return createSpeechBubble(TVG, SLEEP_BUBBLE, SLEEP_MARK_COLOR);
 }
 
 interface HealthBarStyle {
