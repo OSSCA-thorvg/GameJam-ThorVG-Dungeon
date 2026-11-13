@@ -1,13 +1,15 @@
 import type { ThorVGNamespace } from '@thorvg/webcanvas';
-import { createSearchPaint, type RoomView } from './render';
+import { drawFloorEffect } from './effectArt';
+import type { RoomView } from './render';
 import type { Point } from './room';
 import { SEARCH_RADIUS } from './search';
 
 // Placeholder values. A search lights the tiles ring by ring, outwards from the hero, and each
-// tile fades out after its flash.
+// tile fades out after its flash. The light covers half of the pixels of a tile, so it is shown
+// stronger than a light over all of them would be.
 const RING_DELAY_MS = 130;
 const FLASH_MS = 350;
-const PEAK_OPACITY = 0.5;
+const PEAK_OPACITY = 0.7;
 // The share of a flash that it takes to reach its peak.
 const RISE = 0.25;
 
@@ -25,7 +27,7 @@ export interface Search {
 // immediately.
 export function playSearch({ TVG, view, center, tiles, render, onEnd }: Search): () => void {
   const flashes = tiles.map((tile) => {
-    const paint = createSearchPaint(TVG);
+    const paint = drawFloorEffect(TVG, 'search');
     paint.opacity(0);
     view.placeOverlay(paint, tile.x, tile.y);
     const ring = Math.max(Math.abs(tile.x - center.x), Math.abs(tile.y - center.y));

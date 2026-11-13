@@ -42,9 +42,9 @@ Whether copyright applies to work made with an AI tool is unsettled, so this rep
 
 ## Art
 
-The pixel art of the map tiles, items, objects, characters and interface is made by code. It is not drawn from or traced over existing images, and no outside art is used in it.
+The pixel art of the map tiles, items, objects, characters, interface and effects is made by code. It is not drawn from or traced over existing images, and no outside art is used in it.
 
-- [`src/tileArt.ts`](src/tileArt.ts) draws the floor, walls, water, doors and stairs of each stage pixel by pixel when a floor is built, from rules for flagstones, bricks and ripples. It draws the traps and coffins the same way.
+- [`src/tileArt.ts`](src/tileArt.ts) draws the floor, walls, water, doors and stairs of each stage pixel by pixel when a floor is built, from rules for flagstones, bricks and ripples. It draws the traps and coffins the same way, and [`src/effectArt.ts`](src/effectArt.ts) draws the effects: fire, gas, frost and the other things that cover a floor from noise and dithering, and the light over the stairs, the rings, the sparks and the arrows from their shapes.
 - [`src/itemArt.ts`](src/itemArt.ts) holds the items, the chest, the campfire and the signs as rows of pixels, and [`src/characterArt.ts`](src/characterArt.ts) holds the hero and the enemies the same way, as [`src/uiArt.ts`](src/uiArt.ts) holds the icons and frames of the interface. A script outside this repository drew them from lines and shapes and wrote out the rows.
 - The code was written with Claude Code (Anthropic). The developer chose the look from sheets of drafts and gave the directions to change it.
 

@@ -632,6 +632,7 @@ function finishLevel(
       isOpen: isOpenTile,
       isFlammable: isFlammableTile,
       burnUp: burnUpTile,
+      render: renderCanvas,
     }),
     hero: createHero(TVG),
     enemies,
@@ -1508,6 +1509,7 @@ function goDownStairs() {
 
 function replaceLevel() {
   stopChargeWarning();
+  hazards.stop();
   damageNumbers.clear();
   mapScene.remove(roomView.scene);
   ({

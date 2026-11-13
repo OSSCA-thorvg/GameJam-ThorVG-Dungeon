@@ -91,7 +91,7 @@ const lighter = (color: Color): Color =>
 const tinted = (color: Color, tint: Color): Color =>
   color.map((value, index) => Math.min(255, Math.round(value * tint[index]))) as Color;
 
-const hash = (a: number, b: number, c: number) => {
+export const hash = (a: number, b: number, c: number) => {
   let h = Math.imul(a, 73856093) ^ Math.imul(b, 19349663) ^ Math.imul(c, 83492791);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
@@ -100,7 +100,7 @@ const hash = (a: number, b: number, c: number) => {
 const modulo = (value: number, size: number) => ((value % size) + size) % size;
 
 // Points are in art pixels from the center of the tile's floor.
-const diamond = (lift = 0, half = 16): Point[] => [
+export const diamond = (lift = 0, half = 16): Point[] => [
   { x: 0, y: -half / 2 - lift },
   { x: half, y: -lift },
   { x: 0, y: half / 2 - lift },
@@ -126,17 +126,20 @@ const isInside = (points: Point[], x: number, y: number) => {
   return inside;
 };
 
+// A color with an alpha at the end, for art that lets the floor show through.
+export type ClearColor = [r: number, g: number, b: number, a: number];
+
 // A grid of art pixels around a tile. Each pixel is a whole square, so the edges of the tile step
 // along its 2:1 lines.
-function createRaster() {
-  const pixels = new Map<string, { x: number; y: number; color: Color }>();
+export function createRaster() {
+  const pixels = new Map<string, { x: number; y: number; color: Color | ClearColor }>();
   return {
-    set(x: number, y: number, color: Color) {
+    set(x: number, y: number, color: Color | ClearColor) {
       pixels.set(`${x},${y}`, { x, y, color });
     },
     // Colors the pixels whose centers are inside the polygon. The pick gets the center of a pixel
     // and may leave it as it is by returning null.
-    fill(points: Point[], pick: (x: number, y: number) => Color | null) {
+    fill(points: Point[], pick: (x: number, y: number) => Color | ClearColor | null) {
       const xs = points.map(({ x }) => x);
       const ys = points.map(({ y }) => y);
       for (let y = Math.floor(Math.min(...ys)); y < Math.ceil(Math.max(...ys)); y++) {
@@ -153,12 +156,12 @@ function createRaster() {
     // One shape for each color, made of runs of pixels along the rows.
     toScene(TVG: ThorVGNamespace, center: Point): Scene {
       const shapes = new Map<string, Shape>();
-      const shapeOf = (color: Color) => {
+      const shapeOf = (color: Color | ClearColor) => {
         const key = color.join(',');
         let shape = shapes.get(key);
         if (!shape) {
           shape = new TVG.Shape();
-          shape.fill(...color);
+          shape.fill(color[0], color[1], color[2], color[3] ?? 255);
           shapes.set(key, shape);
         }
         return shape;

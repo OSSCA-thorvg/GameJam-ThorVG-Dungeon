@@ -1,5 +1,6 @@
-import type { Paint, ThorVGNamespace } from '@thorvg/webcanvas';
-import { createHazardPaint, type GasKind, type HazardKind, type RoomView } from './render';
+import type { ThorVGNamespace } from '@thorvg/webcanvas';
+import { createMovingFloorEffect, type MovingEffect } from './effectArt';
+import type { GasKind, HazardKind, RoomView } from './render';
 import type { Point } from './room';
 
 // Placeholder value. Fire fades out over its last turns.
@@ -69,6 +70,8 @@ export interface HazardField {
   spreadGas(): void;
   // Fire burns down by one turn.
   burnDown(): void;
+  // Stops the fire and gas from moving, when the floor is left.
+  stop(): void;
 }
 
 export interface HazardWorld {
@@ -78,45 +81,77 @@ export interface HazardWorld {
   isFlammable(tile: Point): boolean;
   // Called when fire on a flammable tile burns out, which destroys what was there.
   burnUp(tile: Point): void;
+  // Draws the canvas again, as the fire and gas move.
+  render(): void;
 }
 
 export function createHazardField(
   TVG: ThorVGNamespace,
   view: RoomView,
-  { isOpen, isFlammable, burnUp }: HazardWorld,
+  { isOpen, isFlammable, burnUp, render }: HazardWorld,
 ): HazardField {
   const key = ({ x, y }: Point) => `${x},${y}`;
-  const fires = new Map<string, { tile: Point; turns: number; paint: Paint }>();
+  const fires = new Map<string, { tile: Point; turns: number; effect: MovingEffect }>();
   const gases: Record<GasKind, Map<string, { tile: Point; amount: number }>> = {
     poison: new Map(),
     paralysis: new Map(),
   };
-  const gasPaints: Record<GasKind, Map<string, Paint>> = { poison: new Map(), paralysis: new Map() };
+  const gasPaints: Record<GasKind, Map<string, MovingEffect>> = {
+    poison: new Map(),
+    paralysis: new Map(),
+  };
 
-  const fadeFire = (fire: { turns: number; paint: Paint }) => {
-    fire.paint.opacity(Math.round(255 * Math.min(1, fire.turns / FIRE_FADE_TURNS)));
+  // The fire and gas move for as long as any lies on the floor.
+  let frame = 0;
+  const move = (time: number) => {
+    const effects = [
+      ...[...fires.values()].map(({ effect }) => effect),
+      ...GAS_KINDS.flatMap((kind) => [...gasPaints[kind].values()]),
+    ];
+    if (effects.length === 0) {
+      frame = 0;
+      return;
+    }
+    let hasChanged = false;
+    for (const effect of effects) {
+      hasChanged = effect.showAt(time) || hasChanged;
+    }
+    if (hasChanged) {
+      render();
+    }
+    frame = requestAnimationFrame(move);
+  };
+  const startMoving = () => {
+    if (frame === 0) {
+      frame = requestAnimationFrame(move);
+    }
+  };
+
+  const fadeFire = (fire: { turns: number; effect: MovingEffect }) => {
+    fire.effect.paint.opacity(Math.round(255 * Math.min(1, fire.turns / FIRE_FADE_TURNS)));
   };
 
   // Draws each tile of a gas by how thick the gas is there.
   const drawGas = (kind: GasKind) => {
     const paints = gasPaints[kind];
-    for (const [name, paint] of paints) {
+    for (const [name, effect] of paints) {
       if (!gases[kind].has(name)) {
-        view.remove(paint);
+        view.remove(effect.paint);
         paints.delete(name);
       }
     }
     for (const [name, { tile, amount }] of gases[kind]) {
-      let paint = paints.get(name);
-      if (!paint) {
-        paint = createHazardPaint(TVG, kind);
-        view.placeOnFloor(paint, tile.x, tile.y);
-        paints.set(name, paint);
+      let effect = paints.get(name);
+      if (!effect) {
+        effect = createMovingFloorEffect(TVG, kind);
+        view.placeOnFloor(effect.paint, tile.x, tile.y);
+        paints.set(name, effect);
       }
       const thickness = Math.min(1, amount / THICK_GAS);
       const opacity = THINNEST_GAS_OPACITY + (1 - THINNEST_GAS_OPACITY) * thickness;
-      paint.opacity(Math.round(255 * opacity));
+      effect.paint.opacity(Math.round(255 * opacity));
     }
+    startMoving();
   };
 
   // Each tile becomes the average of itself and the open tiles around it, less 1, as in
@@ -157,14 +192,15 @@ export function createHazardField(
     for (const tile of tiles) {
       let fire = fires.get(key(tile));
       if (!fire) {
-        const paint = createHazardPaint(TVG, 'fire');
-        view.placeOnFloor(paint, tile.x, tile.y);
-        fire = { tile, turns: 0, paint };
+        const effect = createMovingFloorEffect(TVG, 'fire');
+        view.placeOnFloor(effect.paint, tile.x, tile.y);
+        fire = { tile, turns: 0, effect };
         fires.set(key(tile), fire);
       }
       fire.turns = Math.max(fire.turns, turns);
       fadeFire(fire);
     }
+    startMoving();
   };
 
   return {
@@ -173,7 +209,7 @@ export function createHazardField(
       for (const tile of tiles) {
         const fire = fires.get(key(tile));
         if (fire) {
-          view.remove(fire.paint);
+          view.remove(fire.effect.paint);
           fires.delete(key(tile));
         }
       }
@@ -211,7 +247,7 @@ export function createHazardField(
         if (fire.turns > 0) {
           fadeFire(fire);
         } else {
-          view.remove(fire.paint);
+          view.remove(fire.effect.paint);
           fires.delete(name);
           if (isFlammable(fire.tile)) {
             burnUp(fire.tile);
@@ -219,6 +255,14 @@ export function createHazardField(
         }
       }
       setFire([...catching.values()], CATCH_FIRE_TURNS);
+    },
+    stop() {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      fires.clear();
+      for (const kind of GAS_KINDS) {
+        gasPaints[kind].clear();
+      }
     },
   };
 }

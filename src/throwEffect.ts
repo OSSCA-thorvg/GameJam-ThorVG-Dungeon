@@ -1,12 +1,6 @@
 import type { Paint, ThorVGNamespace } from '@thorvg/webcanvas';
-import {
-  CHARACTER_WAIST_HEIGHT,
-  createArrowPaint,
-  createDarkPaint,
-  createFrostPaint,
-  tileDistance,
-  type RoomView,
-} from './render';
+import { drawArrow, drawFloorEffect, drawRing } from './effectArt';
+import { CHARACTER_WAIST_HEIGHT, tileDistance, type RoomView } from './render';
 import type { Point } from './room';
 
 // Same as MissileSprite in Shattered Pixel Dungeon: 240 pixels per second on 16 pixel tiles,
@@ -17,7 +11,8 @@ const SPIN_DEGREES_PER_SECOND = 720;
 const SPLASH_MS = 300;
 // Placeholder value for how long an item that could not be picked up takes to rise and fall back.
 const BOUNCE_MS = 400;
-const SPLASH_RADIUS = 18;
+// In art pixels.
+const SPLASH_RADIUS = 9;
 // Placeholder value. How long the frost from a frost potion takes to fade.
 const FROST_MS = 700;
 // Placeholder value. How long the dark magic of the necromancer takes to fade.
@@ -120,22 +115,27 @@ export function playShatter(
   color: [number, number, number],
   render: () => void,
 ): void {
-  const ring = new TVG.Shape();
-  view.placeOverlay(ring, tile.x, tile.y);
+  const holder = new TVG.Scene();
+  view.placeOverlay(holder, tile.x, tile.y);
+  let drawnRadius = 0;
 
   let startTime: number | null = null;
   const step = (time: number) => {
     startTime ??= time;
     const progress = (time - startTime) / SPLASH_MS;
     if (progress >= 1) {
-      view.remove(ring);
+      view.remove(holder);
       render();
       return;
     }
-    const radius = SPLASH_RADIUS * (0.3 + progress);
-    ring.reset();
-    ring.appendCircle(0, 0, radius, radius / 2);
-    ring.stroke({ width: 2, color: [...color, Math.round(255 * (1 - progress))] });
+    // The ring is drawn again only when it grows by a whole art pixel.
+    const radius = Math.round(SPLASH_RADIUS * (0.3 + progress));
+    if (radius !== drawnRadius) {
+      drawnRadius = radius;
+      holder.clear();
+      holder.add(drawRing(TVG, radius, color));
+    }
+    holder.opacity(Math.round(255 * (1 - progress)));
     render();
     requestAnimationFrame(step);
   };
@@ -150,7 +150,7 @@ export function playFrost(
   render: () => void,
 ): void {
   const paints = tiles.map((tile) => {
-    const paint = createFrostPaint(TVG);
+    const paint = drawFloorEffect(TVG, 'frost');
     view.placeOnFloor(paint, tile.x, tile.y);
     return paint;
   });
@@ -185,9 +185,8 @@ export function playArrow(
   render: () => void,
   onLand: () => void,
 ): void {
-  const arrow = createArrowPaint(TVG);
   const offset = tileDistance(from, to);
-  const angle = (Math.atan2(offset.y, offset.x) * 180) / Math.PI;
+  const arrow = drawArrow(TVG, (Math.atan2(offset.y, offset.x) * 180) / Math.PI);
   const distance = Math.hypot(to.x - from.x, to.y - from.y);
   const durationMs = Math.max(1, (1000 * distance) / ARROW_TILES_PER_SECOND);
   view.placeOverlay(arrow, from.x, from.y);
@@ -206,7 +205,6 @@ export function playArrow(
       x: offset.x * progress,
       y: offset.y * progress - CHARACTER_WAIST_HEIGHT,
     });
-    arrow.rotate(angle);
     render();
     requestAnimationFrame(step);
   };
@@ -221,7 +219,7 @@ export function playDark(
   render: () => void,
 ): void {
   const paints = tiles.map((tile) => {
-    const paint = createDarkPaint(TVG);
+    const paint = drawFloorEffect(TVG, 'dark');
     view.placeOverlay(paint, tile.x, tile.y);
     return paint;
   });

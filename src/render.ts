@@ -6,6 +6,7 @@ import { ART_PIXEL, drawTilePart, tileThemeOf, WALL_PIXELS, type TilePart } from
 import { FONT_BOLD } from './fonts';
 import { BAR_LEFT, BAR_TOP } from './hud';
 import { createPixelSprite } from './pixelSprite';
+import { drawStairsBeam, drawTileOutline } from './effectArt';
 import { t } from './i18n';
 import { STATUS_LABELS, type StatusName } from './status';
 
@@ -100,8 +101,6 @@ const CUTAWAY_OPEN_FRACTION = 0.7;
 // Placeholder value. A closed door inside a hole stays visible at this opacity, while walls are cut.
 const DOOR_IN_HOLE_OPACITY = 110;
 
-const CURSOR_OUTLINE_WIDTH = 2;
-
 // Placeholder values. How opaque the darkness is over places that were lit before,
 // and the fraction of the light's radius that stays fully lit before it fades out.
 const REMEMBERED_DARKNESS_OPACITY = 170;
@@ -140,16 +139,6 @@ export const DAMAGE_NUMBER_RISE = CHARACTER_SIZE;
 
 // Same as the page background, so that places that were never lit look like empty space.
 const DARKNESS: Color = [20, 21, 26];
-// Placeholder look of the column of light over the stairs, which rises from the whole tile and
-// fades out toward its top, in screen pixels at zoom 1. It is lighter over the tile itself, so
-// the steps still show, and strongest just above the floor.
-const STAIRS_BEAM_COLOR: Color = [150, 205, 255];
-const STAIRS_BEAM_FOOT_ALPHA = 110;
-const STAIRS_BEAM_PEAK_ALPHA = 200;
-// How far up the column it is strongest, as a fraction of its height.
-const STAIRS_BEAM_PEAK = 0.25;
-const STAIRS_BEAM_HEIGHT = 96;
-const STAIRS_BEAM_BLUR = 3;
 const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
   floor: [255, 255, 255],
   enemy: [235, 60, 50],
@@ -229,15 +218,6 @@ const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {
   burning: [255, 120, 40, 130],
   shielded: [90, 160, 255, 140],
 };
-// Placeholder color of the frost that flashes over the floor where a frost potion breaks.
-const FROST_COLOR: [...Color, number] = [190, 230, 255, 210];
-// Placeholder colors of fire and gas on the floor, with the alpha at the end.
-const HAZARD_COLORS: Record<HazardKind, [...Color, number]> = {
-  fire: [255, 110, 30, 170],
-  poison: [110, 200, 70, 120],
-  paralysis: [235, 215, 80, 120],
-};
-
 function mapToScreen(x: number, y: number): Point {
   return {
     x: (x - y) * (TILE_WIDTH / 2),
@@ -322,8 +302,15 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
   // walls in front of its stairs after all walls are known.
   const stairsBeacons: { tile: Point; beacon: Scene }[] = [];
 
-  const cursorOutline = appendTileDiamond(new TVG.Shape());
-  cursorOutline.stroke({ width: CURSOR_OUTLINE_WIDTH, color: CURSOR_OUTLINES.floor });
+  // One outline for each kind of target, of which the one in use is shown.
+  const cursorOutline = new TVG.Scene();
+  const cursorOutlines = Object.fromEntries(
+    Object.entries(CURSOR_OUTLINES).map(([target, color]) => {
+      const outline = drawTileOutline(TVG, color);
+      cursorOutline.add(outline);
+      return [target, outline];
+    }),
+  ) as Record<CursorTarget, Scene>;
   cursorOutline.opacity(0);
   overlay.add(cursorOutline);
 
@@ -374,26 +361,8 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
         case 'stairs': {
           addPart('stairs-down');
 
-          // The column stands on the tile's diamond, so its foot is the near half of the diamond
-          // and its sides go straight up from the left and right corners.
-          const beamGradient = new TVG.LinearGradient(
-            center.x,
-            bottom.y,
-            center.x,
-            bottom.y - STAIRS_BEAM_HEIGHT,
-          );
-          beamGradient.addStop(0, [...STAIRS_BEAM_COLOR, STAIRS_BEAM_FOOT_ALPHA]);
-          beamGradient.addStop(STAIRS_BEAM_PEAK, [...STAIRS_BEAM_COLOR, STAIRS_BEAM_PEAK_ALPHA]);
-          beamGradient.addStop(1, [...STAIRS_BEAM_COLOR, 0]);
-          beamGradient.build();
-          const beam = new TVG.Shape();
-          beam.moveTo(left.x, left.y).lineTo(bottom.x, bottom.y).lineTo(right.x, right.y);
-          beam.lineTo(right.x, bottom.y - STAIRS_BEAM_HEIGHT);
-          beam.lineTo(left.x, bottom.y - STAIRS_BEAM_HEIGHT);
-          beam.close().fill(beamGradient);
           const beacon = new TVG.Scene();
-          beacon.add(beam);
-          beacon.gaussianBlur(STAIRS_BEAM_BLUR);
+          beacon.add(drawStairsBeam(TVG, center));
           beacon.visible(false);
           stairsBeacons.push({ tile: { x, y }, beacon });
           break;
@@ -783,7 +752,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
 
       cursorTile = next;
       cursorTarget = target;
-      cursorOutline.stroke({ width: CURSOR_OUTLINE_WIDTH, color: CURSOR_OUTLINES[target] });
+      for (const [kind, outline] of Object.entries(cursorOutlines)) {
+        outline.visible(kind === target);
+      }
       cursorOutline.opacity(next ? 255 : 0);
       if (next) {
         const center = tileCenter(next.x, next.y);
@@ -926,51 +897,6 @@ export function tintCharacter(scene: Scene, tint: CharacterTint | null): void {
   if (tint) {
     scene.fillEffect(...CHARACTER_TINTS[tint]);
   }
-}
-
-// Fire or gas covering a tile's floor, centered on the paint's local origin.
-export function createHazardPaint(TVG: ThorVGNamespace, kind: HazardKind): Shape {
-  const shape = appendTileDiamond(new TVG.Shape());
-  shape.fill(...HAZARD_COLORS[kind]);
-  return shape;
-}
-
-const SEARCH_COLOR: Color = [190, 225, 255];
-
-// The light of a search over a tile's floor, centered on the paint's local origin.
-export function createSearchPaint(TVG: ThorVGNamespace): Shape {
-  const shape = appendTileDiamond(new TVG.Shape());
-  shape.fill(...SEARCH_COLOR, 255);
-  return shape;
-}
-
-const ARROW_COLOR: Color = [214, 184, 132];
-
-// An arrow in flight, pointing right and centered on the paint's local origin.
-export function createArrowPaint(TVG: ThorVGNamespace): Shape {
-  const shape = new TVG.Shape();
-  shape.moveTo(-9, 0).lineTo(5, 0);
-  shape.moveTo(10, 0).lineTo(4, -3.5).lineTo(4, 3.5).close();
-  shape.fill(...ARROW_COLOR, 255);
-  shape.stroke({ width: 2, color: [...ARROW_COLOR, 255], join: TVG.StrokeJoin.Round });
-  return shape;
-}
-
-// Placeholder color of the dark magic that strikes a tile.
-const DARK_COLOR: [...Color, number] = [120, 40, 170, 230];
-
-// Dark magic covering a tile's floor, centered on the paint's local origin.
-export function createDarkPaint(TVG: ThorVGNamespace): Shape {
-  const shape = appendTileDiamond(new TVG.Shape());
-  shape.fill(...DARK_COLOR);
-  return shape;
-}
-
-// Frost covering a tile's floor, centered on the paint's local origin.
-export function createFrostPaint(TVG: ThorVGNamespace): Shape {
-  const shape = appendTileDiamond(new TVG.Shape());
-  shape.fill(...FROST_COLOR);
-  return shape;
 }
 
 // Text just above the head of a character standing on the scene's local origin, in the font that
