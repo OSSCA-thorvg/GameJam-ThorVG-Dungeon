@@ -61,7 +61,7 @@ import { createHazardField, spreadArea } from './hazards';
 import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
 import { showMainMenu } from './mainMenu';
-import { loadSettings, saveSettings, uiScaleFor } from './settings';
+import { loadSettings, saveSettings, uiScaleFor, volumeOf } from './settings';
 import { createLogPanel } from './logPanel';
 import { createSettingsPanel } from './settingsPanel';
 import { createStatusBar } from './statusBar';
@@ -295,7 +295,10 @@ canvas.add(hud.scene);
 let settings = loadSettings();
 setLanguage(settings.language);
 translatePage();
-const sound = createSound({ sfx: settings.sfxVolume, music: settings.musicVolume });
+const sound = createSound({
+  sfx: volumeOf(settings, 'sfx'),
+  music: volumeOf(settings, 'music'),
+});
 
 // Any button makes the click sound, which is also the first click that lets the browser start audio.
 document.addEventListener('click', (event) => {
@@ -307,8 +310,8 @@ document.addEventListener('click', (event) => {
 // The CSS zooms the HTML by the UI scale. The hero health bar is on the canvas, so it is scaled
 // here to stay under its text.
 function applySettings() {
-  sound.setVolume('sfx', settings.sfxVolume);
-  sound.setVolume('music', settings.musicVolume);
+  sound.setVolume('sfx', volumeOf(settings, 'sfx'));
+  sound.setVolume('music', volumeOf(settings, 'music'));
   const scale = uiScaleFor(settings, window.innerWidth);
   document.documentElement.style.setProperty('--ui-scale', String(scale));
   mapScene.scale(pixelRatio());

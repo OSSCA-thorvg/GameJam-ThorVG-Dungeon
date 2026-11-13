@@ -8,6 +8,8 @@ export interface Settings {
   // How loud the sound effects and the music are, from 0 to 1.
   sfxVolume: number;
   musicVolume: number;
+  // Silences every sound without moving the volumes.
+  muted: boolean;
 }
 
 // The steps of display scaling in Windows, from 100% to 200%.
@@ -30,7 +32,13 @@ export function uiScaleFor(settings: Settings, windowWidth: number): number {
 }
 
 // The sounds were judged by ear at full volume, so that is the default.
-const DEFAULT_SETTINGS: Settings = { language: 'en', uiScale: 1, sfxVolume: 1, musicVolume: 1 };
+const DEFAULT_SETTINGS: Settings = {
+  language: 'en',
+  uiScale: 1,
+  sfxVolume: 1,
+  musicVolume: 1,
+  muted: false,
+};
 const STORAGE_KEY = 'thorvg-dungeon.settings';
 
 // Storage can be blocked, as in a private window. Then the defaults stand in.
@@ -48,11 +56,16 @@ export function loadSettings(): Settings {
       uiScale: UI_SCALES.includes(uiScale) ? uiScale : DEFAULT_SETTINGS.uiScale,
       sfxVolume: volumeOf(saved.sfxVolume, DEFAULT_SETTINGS.sfxVolume),
       musicVolume: volumeOf(saved.musicVolume, DEFAULT_SETTINGS.musicVolume),
+      muted: saved.muted === true,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
 }
+
+// The volume a kind of sound plays at, which is none while muted.
+export const volumeOf = (settings: Settings, kind: 'sfx' | 'music') =>
+  settings.muted ? 0 : kind === 'sfx' ? settings.sfxVolume : settings.musicVolume;
 
 // When storage is blocked, the settings last only until the page closes.
 export function saveSettings(settings: Settings): void {

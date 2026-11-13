@@ -13,6 +13,9 @@ export const ko: Record<string, string> = {
   'UI scale': 'UI 크기',
   'Sound effects': '효과음',
   Music: '배경음',
+  Mute: '음소거',
+  On: '켜짐',
+  Off: '꺼짐',
 
   // The top of the screen.
   Surface: '지상',

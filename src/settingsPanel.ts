@@ -1,4 +1,4 @@
-import { LANGUAGES, type Language } from './i18n';
+import { LANGUAGES, t, type Language } from './i18n';
 import { availableUiScales, uiScaleFor, type Settings } from './settings';
 
 export interface SettingsPanelOptions {
@@ -24,6 +24,7 @@ export function createSettingsPanel({
   const uiScale = document.querySelector<HTMLSelectElement>('#ui-scale')!;
   const sfxVolume = document.querySelector<HTMLInputElement>('#sfx-volume')!;
   const musicVolume = document.querySelector<HTMLInputElement>('#music-volume')!;
+  const mute = document.querySelector<HTMLButtonElement>('#mute')!;
 
   language.replaceChildren(...LANGUAGES.map(({ code, name }) => new Option(name, code)));
 
@@ -37,10 +38,13 @@ export function createSettingsPanel({
     uiScale.value = String(uiScaleFor(getSettings(), window.innerWidth));
     sfxVolume.value = String(Math.round(getSettings().sfxVolume * 100));
     musicVolume.value = String(Math.round(getSettings().musicVolume * 100));
+    mute.textContent = getSettings().muted ? t('On') : t('Off');
+    mute.setAttribute('aria-pressed', String(getSettings().muted));
   };
 
   language.addEventListener('change', () => {
     onChange({ ...getSettings(), language: language.value as Language });
+    refresh();
   });
   uiScale.addEventListener('change', () => {
     onChange({ ...getSettings(), uiScale: Number(uiScale.value) });
@@ -50,6 +54,11 @@ export function createSettingsPanel({
   });
   musicVolume.addEventListener('input', () => {
     onChange({ ...getSettings(), musicVolume: Number(musicVolume.value) / 100 });
+  });
+
+  mute.addEventListener('click', () => {
+    onChange({ ...getSettings(), muted: !getSettings().muted });
+    refresh();
   });
 
   const close = () => {
