@@ -2,7 +2,14 @@ import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
 import { CHARACTER_ART, type CharacterArt } from './characterArt';
 import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
-import { ART_PIXEL, drawTilePart, tileThemeOf, WALL_PIXELS, type TilePart } from './tileArt';
+import {
+  ART_PIXEL,
+  drawTilePart,
+  drawWallCover,
+  tileThemeOf,
+  WALL_PIXELS,
+  type TilePart,
+} from './tileArt';
 import { FONT_BOLD } from './fonts';
 import { BAR_LEFT, BAR_TOP } from './hud';
 import { createPixelSprite } from './pixelSprite';
@@ -262,6 +269,20 @@ function lift(point: Point): Point {
   return { x: point.x, y: point.y - WALL_HEIGHT };
 }
 
+// A round hole for cutting walls open, solid in its middle and fading out to its edge.
+function createHole(TVG: ThorVGNamespace, radius: number): Shape {
+  const gradient = new TVG.RadialGradient(0, 0, radius);
+  gradient.addStop(0, [0, 0, 0, 255]);
+  gradient.addStop(CUTAWAY_OPEN_FRACTION, [0, 0, 0, 255]);
+  gradient.addStop(1, [0, 0, 0, 0]);
+  gradient.build();
+
+  const hole = new TVG.Shape();
+  hole.appendCircle(0, 0, radius);
+  hole.fill(gradient);
+  return hole;
+}
+
 // A gradient is round, but a circle on the floor is a 2:1 ellipse on the screen.
 // So the light map is drawn at twice the height, then squeezed back to the height of the map.
 const LIGHT_MAP_SQUEEZE = { e11: 1, e12: 0, e13: 0, e21: 0, e22: 0.5, e23: 0, e31: 0, e32: 0, e33: 1 };
@@ -301,6 +322,8 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
   // Above the darkness, so the stairs show from anywhere once they were seen. Each is masked by the
   // walls in front of its stairs after all walls are known.
   const stairsBeacons: { tile: Point; beacon: Scene }[] = [];
+  const beaconCovers: { wall: Wall; cover: Scene; solid: Scene; cut: Scene; isCut: boolean }[] = [];
+  const beaconHoles: { heroHole: Shape; cursorHole: Shape }[] = [];
 
   // One outline for each kind of target, of which the one in use is shown.
   const cursorOutline = new TVG.Scene();
@@ -312,7 +335,6 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
     }),
   ) as Record<CursorTarget, Scene>;
   cursorOutline.opacity(0);
-  overlay.add(cursorOutline);
 
   const walls: Wall[] = [];
   // Every wall's outline on the screen, whether it was seen or not.
@@ -409,29 +431,41 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
   }
 
   // The walls drawn after the stairs stand in front of them, so they hide the light over the stairs
-  // where they overlap it.
+  // where they overlap it. Each wall that can reach the light has a cover of its own, which steps
+  // along its art pixels as the wall does. A wall cut open near the hero or the cursor moves its
+  // cover under the same holes, so the light shows through where the wall does not.
   for (const { tile, beacon } of stairsBeacons) {
-    // Not appendLightOutline, which doubles the height for the light map.
-    const frontWalls = new TVG.Shape();
-    for (const wall of walls.filter((wall) => layerOf(wall.tile) > layerOf(tile))) {
-      const { x, y } = wall.center;
-      const top = { x, y: y - TILE_HEIGHT / 2 };
-      const right = { x: x + TILE_WIDTH / 2, y };
-      const bottom = { x, y: y + TILE_HEIGHT / 2 };
-      const left = { x: x - TILE_WIDTH / 2, y };
-      const outline = [lift(top), lift(right), right, bottom, left, lift(left)];
-      frontWalls.moveTo(outline[0].x, outline[0].y);
-      for (const point of outline.slice(1)) {
-        frontWalls.lineTo(point.x, point.y);
+    const center = tileCenter(tile.x, tile.y);
+    const solid = new TVG.Scene();
+    const cut = new TVG.Scene();
+    const heroHole = createHole(TVG, CUTAWAY_RADIUS);
+    const cursorHole = createHole(TVG, CURSOR_CUTAWAY_RADIUS);
+    const holes = new TVG.Scene();
+    holes.add(heroHole);
+    holes.add(cursorHole);
+    cut.mask(holes, TVG.MaskMethod.InvAlpha);
+    beaconHoles.push({ heroHole, cursorHole });
+    for (const wall of walls) {
+      const reaches =
+        layerOf(wall.tile) > layerOf(tile) &&
+        Math.abs(wall.center.x - center.x) < TILE_WIDTH &&
+        wall.center.y - TILE_HEIGHT / 2 - WALL_HEIGHT < center.y + TILE_HEIGHT / 2;
+      if (reaches) {
+        const cover = drawWallCover(TVG, [wall.center]);
+        solid.add(cover);
+        beaconCovers.push({ wall, cover, solid, cut, isCut: false });
       }
-      frontWalls.close();
     }
-    frontWalls.fill(255, 255, 255);
+    const covers = new TVG.Scene();
+    covers.add(solid);
+    covers.add(cut);
     const masked = new TVG.Scene();
     masked.add(beacon);
-    masked.mask(frontWalls, TVG.MaskMethod.InvAlpha);
+    masked.mask(covers, TVG.MaskMethod.InvAlpha);
     overlay.add(masked);
   }
+  // Over the light of the stairs, so the outline shows on the stairs too.
+  overlay.add(cursorOutline);
 
   // Added after the tiles of each layer, so what lies on the floor is drawn under the characters.
   const floorLayers = layers.map((layer) => {
@@ -507,25 +541,12 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
     paint.translate(center.x, center.y);
   };
 
-  const createHole = (radius: number) => {
-    const gradient = new TVG.RadialGradient(0, 0, radius);
-    gradient.addStop(0, [0, 0, 0, 255]);
-    gradient.addStop(CUTAWAY_OPEN_FRACTION, [0, 0, 0, 255]);
-    gradient.addStop(1, [0, 0, 0, 0]);
-    gradient.build();
-
-    const hole = new TVG.Shape();
-    hole.appendCircle(0, 0, radius);
-    hole.fill(gradient);
-    return hole;
-  };
-
   // A paint keeps its mask once set, so each layer gets one scene that always has the holes.
   const cutLayer = (index: number) => {
     let cut = cutLayers.get(index);
     if (!cut) {
-      const heroHole = createHole(CUTAWAY_RADIUS);
-      const cursorHole = createHole(CURSOR_CUTAWAY_RADIUS);
+      const heroHole = createHole(TVG, CUTAWAY_RADIUS);
+      const cursorHole = createHole(TVG, CURSOR_CUTAWAY_RADIUS);
 
       const holes = new TVG.Scene();
       holes.add(heroHole);
@@ -601,6 +622,25 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
       }
     }
     cutWalls = wanted;
+
+    for (const entry of beaconCovers) {
+      const isCut = wanted.has(entry.wall);
+      if (isCut !== entry.isCut) {
+        (isCut ? entry.solid : entry.cut).remove(entry.cover);
+        (isCut ? entry.cut : entry.solid).add(entry.cover);
+        entry.isCut = isCut;
+      }
+    }
+    for (const { heroHole, cursorHole } of beaconHoles) {
+      heroHole.opacity(heroHolePoint ? 255 : 0);
+      if (heroHolePoint) {
+        heroHole.translate(heroHolePoint.x, heroHolePoint.y);
+      }
+      cursorHole.opacity(cursorPoint ? 255 : 0);
+      if (cursorPoint) {
+        cursorHole.translate(cursorPoint.x, cursorPoint.y);
+      }
+    }
 
     // A hole only applies to the layers in front of its tile.
     for (const [index, cut] of cutLayers) {

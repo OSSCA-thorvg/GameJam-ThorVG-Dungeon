@@ -467,6 +467,20 @@ export function drawTilePart(
   return raster.toScene(TVG, center);
 }
 
+// The pixels that the walls with these centers cover, their tops and both sides, in white. The
+// centers are in screen pixels, on the grid of the art pixels.
+export function drawWallCover(TVG: ThorVGNamespace, centers: Point[]): Scene {
+  const raster = createRaster();
+  for (const center of centers) {
+    const shift = (points: Point[]) =>
+      points.map(({ x, y }) => ({ x: x + center.x / ART_PIXEL, y: y + center.y / ART_PIXEL }));
+    for (const part of [LEFT_SIDE, RIGHT_SIDE, diamond(WALL_PIXELS)]) {
+      raster.fill(shift(part), () => [255, 255, 255]);
+    }
+  }
+  return raster.toScene(TVG, { x: 0, y: 0 });
+}
+
 // Placeholder colors of a trap's plate and its edge, red while it is armed and gray once spent.
 const TRAP_COLORS = {
   known: { plate: [74, 40, 40], edge: [210, 90, 70], mark: [238, 200, 150], hole: [255, 90, 70] },

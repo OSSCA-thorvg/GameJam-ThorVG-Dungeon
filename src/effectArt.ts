@@ -165,11 +165,12 @@ export function drawTileOutline(TVG: ThorVGNamespace, color: [number, number, nu
   return raster.toScene(TVG, { x: 0, y: 0 });
 }
 
-// Placeholder look of the column of light over the stairs. It rises from the near half of the
-// tile, strongest a quarter of the way up, and fades in bands to nothing at its top. Its sides are
-// fainter.
+// Placeholder look of the column of light over the stairs. Over the tile itself it is faint, so the
+// steps show through. Above the tile it rises from the far edges, strongest a quarter of the way up,
+// and fades in bands to nothing at its top. Its sides are fainter.
 const BEAM_COLOR: [number, number, number] = [150, 205, 255];
 const BEAM_HEIGHT = 48;
+const BEAM_TILE_ALPHA = 40;
 const BEAM_FOOT_ALPHA = 110;
 const BEAM_PEAK_ALPHA = 200;
 const BEAM_PEAK = 0.25;
@@ -188,12 +189,16 @@ export function drawStairsBeam(TVG: ThorVGNamespace, center: Point): Scene {
   for (let x = -16; x < 16; x++) {
     const across = Math.abs(x + 0.5);
     const foot = 8 - across / 2;
-    for (let y = Math.floor(foot - BEAM_HEIGHT); y < foot; y++) {
-      const up = (foot - (y + 0.5)) / BEAM_HEIGHT;
+    const back = -8 + across / 2;
+    const top = foot - BEAM_HEIGHT;
+    for (let y = Math.floor(top); y < foot; y++) {
+      const up = (back - (y + 0.5)) / (back - top);
       let alpha =
-        up < BEAM_PEAK
-          ? BEAM_FOOT_ALPHA + ((BEAM_PEAK_ALPHA - BEAM_FOOT_ALPHA) * up) / BEAM_PEAK
-          : (BEAM_PEAK_ALPHA * (1 - up)) / (1 - BEAM_PEAK);
+        up < 0
+          ? BEAM_TILE_ALPHA
+          : up < BEAM_PEAK
+            ? BEAM_FOOT_ALPHA + ((BEAM_PEAK_ALPHA - BEAM_FOOT_ALPHA) * up) / BEAM_PEAK
+            : (BEAM_PEAK_ALPHA * (1 - up)) / (1 - BEAM_PEAK);
       if (across > BEAM_EDGE_HALF_WIDTH) {
         alpha *= BEAM_EDGE_FADE;
       }
