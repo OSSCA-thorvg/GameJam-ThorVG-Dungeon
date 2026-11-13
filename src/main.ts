@@ -3094,6 +3094,7 @@ function throwItem(name: ItemName) {
         paint: createItemPaint(TVG, potionLore.lookOf(name).icon),
         from: heroPosition,
         to: end,
+        isStraight: ITEMS[name].isStraightFlight,
         render: renderCanvas,
         onLand() {
           finishAttackEffect = null;

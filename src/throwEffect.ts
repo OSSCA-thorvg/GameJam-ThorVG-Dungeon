@@ -25,21 +25,36 @@ const DARK_MS = 700;
 // Placeholder value. How fast the arrow of a trap flies.
 const ARROW_TILES_PER_SECOND = 20;
 
+// The icons of the items that fly straight point to the upper right, which is this angle in degrees
+// on the screen, where positive turns clockwise.
+const STRAIGHT_ICON_ANGLE = -45;
+
 export interface Throw {
   view: RoomView;
   paint: Paint;
   from: Point;
   to: Point;
+  // The paint flies point first, along its path, instead of spinning.
+  isStraight?: boolean;
   render(): void;
   onLand(): void;
 }
 
 // Flies a paint in a straight line between two tiles, then calls onLand.
 // Returns a function that lands it immediately.
-export function playThrow({ view, paint, from, to, render, onLand }: Throw): () => void {
+export function playThrow({
+  view,
+  paint,
+  from,
+  to,
+  isStraight = false,
+  render,
+  onLand,
+}: Throw): () => void {
   const distance = Math.hypot(to.x - from.x, to.y - from.y);
   const durationMs = (1000 * distance) / TILES_PER_SECOND;
   const offset = tileDistance(from, to);
+  const heading = (Math.atan2(offset.y, offset.x) * 180) / Math.PI;
   view.placeOverlay(paint, from.x, from.y);
 
   let startTime: number | null = null;
@@ -67,7 +82,11 @@ export function playThrow({ view, paint, from, to, render, onLand }: Throw): () 
     }
 
     view.nudge(paint, from, { x: offset.x * progress, y: offset.y * progress });
-    paint.rotate(((time - startTime) / 1000) * SPIN_DEGREES_PER_SECOND);
+    paint.rotate(
+      isStraight
+        ? heading - STRAIGHT_ICON_ANGLE
+        : ((time - startTime) / 1000) * SPIN_DEGREES_PER_SECOND,
+    );
     render();
     frame = requestAnimationFrame(step);
   };

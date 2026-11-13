@@ -92,6 +92,9 @@ export interface ItemDefinition {
   surpriseDamage?: [min: number, max: number];
   // Set for weapons that are thrown, with the damage of a hit.
   thrownDamage?: [min: number, max: number];
+  // Set for thrown weapons that fly point first, instead of spinning. Its icon must point to the
+  // upper right.
+  isStraightFlight?: boolean;
   // How many steps away a weapon hits. Without it, a weapon hits only the tiles next to the hero.
   reach?: number;
   // The strength needed to use a weapon or armor without a penalty.
@@ -435,6 +438,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     displayName: 'Dart',
     description: 'A small dart for throwing at an enemy from afar. Some break when they hit.',
     thrownDamage: [2, 4],
+    isStraightFlight: true,
     strength: strengthForTier(1) - 1,
     icon: DART_ICON,
   },
@@ -443,6 +447,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     description:
       'A light spear made for throwing. It hits harder than a dart. Some break when they hit.',
     thrownDamage: [4, 7],
+    isStraightFlight: true,
     strength: strengthForTier(2) - 1,
     icon: JAVELIN_ICON,
   },
