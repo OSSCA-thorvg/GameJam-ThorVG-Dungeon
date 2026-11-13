@@ -617,7 +617,7 @@ function finishLevel(
   trapSpecs: { position: Point; kind: TrapKind }[] = [],
   coffinSpecs: CoffinSpec[] = [],
 ) {
-  const roomView = createRoomView(TVG, room);
+  const roomView = createRoomView(TVG, room, currentStage());
   return {
     room,
     explored: room.tiles.map((row) => row.map(() => false)),

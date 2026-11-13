@@ -1,6 +1,7 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
+import { ART_PIXEL, drawTilePart, tileThemeOf, WALL_PIXELS, type TilePart } from './tileArt';
 import { FONT_BOLD } from './fonts';
 import { t } from './i18n';
 import { STATUS_LABELS, type StatusName } from './status';
@@ -79,8 +80,7 @@ export interface HealthBar {
 const TILE_WIDTH = 64;
 const TILE_HEIGHT = 32;
 
-// 0.6 times the height of a cube on this tile.
-const WALL_HEIGHT = 0.6 * Math.sqrt((TILE_WIDTH ** 2 - TILE_HEIGHT ** 2) / 2);
+const WALL_HEIGHT = WALL_PIXELS * ART_PIXEL;
 
 const CHARACTER_SIZE = TILE_WIDTH * 0.75;
 // Half of a character's height, above the floor.
@@ -143,55 +143,6 @@ export const DAMAGE_NUMBER_RISE = CHARACTER_SIZE;
 
 // Same as the page background, so that places that were never lit look like empty space.
 const DARKNESS: Color = [20, 21, 26];
-const FLOOR_LIGHT: Color = [96, 100, 110];
-const FLOOR_DARK: Color = [86, 90, 100];
-const WATER_LIGHT: Color = [66, 112, 150];
-const WATER_DARK: Color = [58, 100, 138];
-const DOOR: Color = [150, 104, 60];
-// Placeholder color of the floor left where a door burned down.
-const BURNT_DOORWAY: Color = [62, 54, 50];
-// Placeholder colors for a closed door, shaded like a wall.
-const CLOSED_DOOR_TOP: Color = [168, 118, 70];
-const CLOSED_DOOR_LEFT: Color = [120, 82, 46];
-const CLOSED_DOOR_RIGHT: Color = [96, 64, 36];
-// A locked door looks like a closed door with a padlock standing on top of it. Placeholder colors
-// and sizes of the padlock, in screen pixels at zoom 1.
-const LOCK_BODY: Color = [226, 184, 70];
-const LOCK_SHACKLE: Color = [200, 206, 216];
-const LOCK_KEYHOLE: Color = [70, 50, 20];
-const LOCK_BODY_WIDTH = 14;
-const LOCK_BODY_HEIGHT = 11;
-const LOCK_SHACKLE_WIDTH = 2.5;
-// Placeholder colors and sizes of the stairs: an opening in the floor with steps going down away
-// from the front of the tile, nearest step first. Each step lies lower by the depth, in screen
-// pixels at zoom 1, and its front edge is lit as a lighter strip, as a fraction of the tile.
-const STAIRS_OPENING: Color = [14, 15, 19];
-const STAIRS_TREADS: Color[] = [
-  [132, 136, 146],
-  [100, 104, 114],
-  [72, 75, 84],
-];
-const STAIRS_NOSINGS: Color[] = [
-  [190, 194, 204],
-  [150, 154, 164],
-  [110, 114, 123],
-];
-const STAIRS_STEP_DEPTH = 4;
-const STAIRS_NOSING = 0.1;
-// Placeholder colors and size of the steps going up where the hero came down, nearest step first.
-// Each step stands higher than the one before it by the height, in screen pixels at zoom 1.
-const ENTRANCE_TREADS: Color[] = [
-  [112, 116, 126],
-  [124, 128, 138],
-  [138, 142, 152],
-];
-const ENTRANCE_RISERS: Color[] = [
-  [64, 67, 76],
-  [72, 75, 84],
-  [80, 83, 92],
-];
-const ENTRANCE_SIDE: Color = [50, 53, 62];
-const ENTRANCE_STEP_HEIGHT = 4;
 // Placeholder look of the column of light over the stairs, which rises from the whole tile and
 // fades out toward its top, in screen pixels at zoom 1. It is lighter over the tile itself, so
 // the steps still show, and strongest just above the floor.
@@ -202,9 +153,6 @@ const STAIRS_BEAM_PEAK_ALPHA = 200;
 const STAIRS_BEAM_PEAK = 0.25;
 const STAIRS_BEAM_HEIGHT = 96;
 const STAIRS_BEAM_BLUR = 3;
-const WALL_TOP: Color = [130, 134, 144];
-const WALL_LEFT: Color = [70, 74, 84];
-const WALL_RIGHT: Color = [50, 54, 64];
 const CURSOR_OUTLINES: Record<CursorTarget, Color> = {
   floor: [255, 255, 255],
   enemy: [235, 60, 50],
@@ -294,7 +242,7 @@ export function tileDistance(from: Point, to: Point): Point {
 interface Wall {
   tile: Point;
   center: Point;
-  faces: Shape[];
+  faces: Paint[];
 }
 
 const layerOf = ({ x, y }: Point) => x + y;
@@ -340,8 +288,8 @@ function appendLightOutline(shape: Shape, points: Point[]) {
   shape.close();
 }
 
-// Builds a view with the room centered on the scene's local origin.
-export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
+// Builds a view with the room centered on the scene's local origin, with the tiles of a stage.
+export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number): RoomView {
   const scene = new TVG.Scene();
 
   // One layer per x + y value, because tiles with a larger sum are in front.
@@ -370,7 +318,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
   // Every wall's outline on the screen, whether it was seen or not.
   const wallArea = new TVG.Shape();
   // The padlock of a locked door is among its faces too, so it fades and hides with the door.
-  const doors: (Wall & { area: Shape; floor: Shape; lock: Shape[] })[] = [];
+  const doors: (Wall & { area: Shape; floor: Scene; lock: Paint[] })[] = [];
   let openDoors = new Set<number>();
   const tileKey = ({ x, y }: Point) => y * room.width + x;
   const cutLayers = new Map<number, { scene: Scene; heroHole: Shape; cursorHole: Shape }>();
@@ -388,52 +336,17 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
     return { x: screen.x + offsetX, y: screen.y + offsetY };
   };
 
-  // A padlock that faces the screen, its body centered on a point such as the top of a door.
-  const addPadlock = (layer: Scene, at: Point): Shape[] => {
-    const bodyTop = at.y - LOCK_BODY_HEIGHT / 2;
-    const shackleHalf = LOCK_BODY_WIDTH / 4;
-    const shackle = new TVG.Shape();
-    shackle.moveTo(at.x - shackleHalf, bodyTop);
-    shackle.lineTo(at.x - shackleHalf, bodyTop - 3);
-    shackle.cubicTo(
-      at.x - shackleHalf,
-      bodyTop - 8,
-      at.x + shackleHalf,
-      bodyTop - 8,
-      at.x + shackleHalf,
-      bodyTop - 3,
-    );
-    shackle.lineTo(at.x + shackleHalf, bodyTop);
-    shackle.stroke({ width: LOCK_SHACKLE_WIDTH, color: LOCK_SHACKLE });
-    const body = new TVG.Shape();
-    body.appendRect(at.x - LOCK_BODY_WIDTH / 2, bodyTop, LOCK_BODY_WIDTH, LOCK_BODY_HEIGHT, {
-      rx: 2,
-      ry: 2,
-    });
-    body.fill(...LOCK_BODY);
-    const keyhole = new TVG.Shape();
-    keyhole.appendCircle(at.x, bodyTop + LOCK_BODY_HEIGHT * 0.45, 1.6);
-    keyhole.fill(...LOCK_KEYHOLE);
-    const shapes = [shackle, body, keyhole];
-    for (const shape of shapes) {
-      layer.add(shape);
-    }
-    return shapes;
-  };
+  const theme = tileThemeOf(stage);
+  const drawPart = (part: TilePart, tile: Point) =>
+    drawTilePart(TVG, part, tileCenter(tile.x, tile.y), tile, theme);
 
   for (let y = 0; y < room.height; y++) {
     for (let x = 0; x < room.width; x++) {
       const layer = layers[x + y];
-
-      const addPolygon = (points: Point[], color: Color) => {
-        const shape = new TVG.Shape();
-        shape.moveTo(points[0].x, points[0].y);
-        for (const point of points.slice(1)) {
-          shape.lineTo(point.x, point.y);
-        }
-        shape.close().fill(...color);
-        layer.add(shape);
-        return shape;
+      const addPart = (part: TilePart) => {
+        const paint = drawPart(part, { x, y });
+        layer.add(paint);
+        return paint;
       };
 
       const center = tileCenter(x, y);
@@ -446,41 +359,7 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
         case 'void':
           break;
         case 'stairs': {
-          // A point on the tile, from the top corner along x by u and along y by v, lowered by a
-          // depth.
-          const at = (u: number, v: number, depth: number) => ({
-            x: top.x + (right.x - top.x) * u + (left.x - top.x) * v,
-            y: top.y + (right.y - top.y) * u + (left.y - top.y) * v + depth,
-          });
-          const opening = new TVG.Scene();
-          const addToOpening = (points: Point[], color: Color) => {
-            const shape = new TVG.Shape();
-            shape.moveTo(points[0].x, points[0].y);
-            for (const point of points.slice(1)) {
-              shape.lineTo(point.x, point.y);
-            }
-            shape.close().fill(...color);
-            opening.add(shape);
-          };
-          addToOpening([top, right, bottom, left], STAIRS_OPENING);
-          // The far steps first, so the nearer ones are drawn over them.
-          for (let step = STAIRS_TREADS.length - 1; step >= 0; step--) {
-            const near = 1 - step / STAIRS_TREADS.length;
-            const far = 1 - (step + 1) / STAIRS_TREADS.length;
-            const depth = (step + 1) * STAIRS_STEP_DEPTH;
-            const tread = [at(0, far, depth), at(1, far, depth), at(1, near, depth)];
-            addToOpening([...tread, at(0, near, depth)], STAIRS_TREADS[step]);
-            const edge = near - STAIRS_NOSING;
-            addToOpening(
-              [at(0, edge, depth), at(1, edge, depth), at(1, near, depth), at(0, near, depth)],
-              STAIRS_NOSINGS[step],
-            );
-          }
-          const outline = new TVG.Shape();
-          outline.moveTo(top.x, top.y).lineTo(right.x, right.y).lineTo(bottom.x, bottom.y);
-          outline.lineTo(left.x, left.y).close().fill(255, 255, 255);
-          opening.mask(outline, TVG.MaskMethod.Alpha);
-          layer.add(opening);
+          addPart('stairs-down');
 
           // The column stands on the tile's diamond, so its foot is the near half of the diamond
           // and its sides go straight up from the left and right corners.
@@ -510,24 +389,21 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
         case 'floor':
         case 'campfire':
         case 'sign':
-          addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
-          break;
-        case 'water':
-          addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? WATER_LIGHT : WATER_DARK);
-          break;
         // The coffin itself is placed on its floor like an item.
         case 'coffin':
-          addPolygon([top, right, bottom, left], (x + y) % 2 === 0 ? FLOOR_LIGHT : FLOOR_DARK);
+          addPart('floor');
+          break;
+        case 'water':
+          addPart('water');
           break;
         case 'door':
         case 'locked-door': {
-          const floor = addPolygon([top, right, bottom, left], DOOR);
-          const faces = [
-            addPolygon([left, bottom, lift(bottom), lift(left)], CLOSED_DOOR_LEFT),
-            addPolygon([right, bottom, lift(bottom), lift(right)], CLOSED_DOOR_RIGHT),
-            addPolygon([lift(top), lift(right), lift(bottom), lift(left)], CLOSED_DOOR_TOP),
-          ];
-          const lock = room.tiles[y][x] === 'locked-door' ? addPadlock(layer, lift(center)) : [];
+          // The floor is in a scene of its own, so that a burned door can swap it in its place.
+          const floor = new TVG.Scene();
+          floor.add(drawPart('door-floor', { x, y }));
+          layer.add(floor);
+          const faces = [addPart('door-left'), addPart('door-right'), addPart('door-top')];
+          const lock = room.tiles[y][x] === 'locked-door' ? [addPart('lock')] : [];
           const area = new TVG.Shape();
           appendLightOutline(area, [lift(top), lift(right), right, bottom, left, lift(left)]);
           area.fill(255, 255, 255);
@@ -540,9 +416,9 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
             tile: { x, y },
             center,
             faces: [
-              addPolygon([left, bottom, lift(bottom), lift(left)], WALL_LEFT),
-              addPolygon([right, bottom, lift(bottom), lift(right)], WALL_RIGHT),
-              addPolygon([lift(top), lift(right), lift(bottom), lift(left)], WALL_TOP),
+              addPart('wall-left'),
+              addPart('wall-right'),
+              addPart('wall-top'),
             ],
           });
           break;
@@ -782,7 +658,8 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
         layers[layerOf(tile)].remove(face);
       }
       solidArea.remove(door.area);
-      door.floor.fill(...BURNT_DOORWAY);
+      door.floor.clear();
+      door.floor.add(drawPart('burnt-doorway', tile));
       updateCuts();
     },
     unlockDoor(tile) {
@@ -797,46 +674,8 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room): RoomView {
       door.lock = [];
       updateCuts();
     },
-    markEntrance({ x, y }) {
-      const center = tileCenter(x, y);
-      const top = { x: center.x, y: center.y - TILE_HEIGHT / 2 };
-      const right = { x: center.x + TILE_WIDTH / 2, y: center.y };
-      const left = { x: center.x - TILE_WIDTH / 2, y: center.y };
-      // The same tile coordinates as the steps going down, raised by a height.
-      const at = (u: number, v: number, height: number) => ({
-        x: top.x + (right.x - top.x) * u + (left.x - top.x) * v,
-        y: top.y + (right.y - top.y) * u + (left.y - top.y) * v - height,
-      });
-      const add = (points: Point[], color: Color) => {
-        const shape = new TVG.Shape();
-        shape.moveTo(points[0].x, points[0].y);
-        for (const point of points.slice(1)) {
-          shape.lineTo(point.x, point.y);
-        }
-        shape.close().fill(...color);
-        floorLayers[x + y].add(shape);
-      };
-      const count = ENTRANCE_TREADS.length;
-      // The nearest step first, so that each higher step is drawn over the ones before it.
-      for (let step = 0; step < count; step++) {
-        const near = 1 - step / count;
-        const far = 1 - (step + 1) / count;
-        const low = step * ENTRANCE_STEP_HEIGHT;
-        const high = (step + 1) * ENTRANCE_STEP_HEIGHT;
-        // The side facing right goes down to the floor, so the step does not seem to float.
-        add(
-          [at(1, far, 0), at(1, near, 0), at(1, near, high), at(1, far, high)],
-          ENTRANCE_SIDE,
-        );
-        add(
-          [at(0, near, low), at(1, near, low), at(1, near, high), at(0, near, high)],
-          ENTRANCE_RISERS[step],
-        );
-        add(
-          [at(0, far, high), at(1, far, high), at(1, near, high), at(0, near, high)],
-          ENTRANCE_TREADS[step],
-        );
-      }
+    markEntrance(tile) {
+      floorLayers[layerOf(tile)].add(drawPart('stairs-up', tile));
     },
     revealStairs() {
       for (const { beacon } of stairsBeacons) {
