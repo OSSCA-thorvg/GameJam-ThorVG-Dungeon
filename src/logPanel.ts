@@ -1,3 +1,4 @@
+import { translate } from './i18n';
 import { colorOf, type LoggedMessage } from './messageLog';
 
 export interface LogPanelOptions {
@@ -18,9 +19,9 @@ export function createLogPanel({ getMessages, onOpen }: LogPanelOptions): void {
   button.addEventListener('click', () => {
     onOpen();
     lines.replaceChildren(
-      ...getMessages().map(({ text, category }) => {
+      ...getMessages().map(({ message, category }) => {
         const line = document.createElement('div');
-        line.textContent = text;
+        line.textContent = translate(message);
         line.style.color = colorOf(category);
         return line;
       }),

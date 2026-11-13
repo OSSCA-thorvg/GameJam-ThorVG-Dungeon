@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 // Same as Hunger of Shattered Pixel Dungeon. Hunger goes up by 1 every turn, so the hero gets
 // hungry 300 turns after a full meal and starts starving 150 turns later.
 export const HUNGRY = 300;
@@ -19,8 +21,10 @@ export const HUNGER_LABELS: Record<Exclude<HungerState, 'fed'>, string> = {
 // What the hero's hunger means for them, with the turns left until they start starving.
 export function describeHunger({ level }: Hunger): string {
   return level >= STARVING
-    ? 'You slowly lose HP until you eat something.'
-    : `You need to eat. In ${STARVING - level} turns without food, you start starving.`;
+    ? t('You slowly lose HP until you eat something.')
+    : t('You need to eat. In {turns} turns without food, you start starving.', {
+        turns: STARVING - level,
+      });
 }
 
 export function createHunger(): Hunger {

@@ -179,6 +179,15 @@ import { campfireRoom, catacombRooms, normalRooms, startRooms } from './roomSour
 import { loadFonts } from './fonts';
 import { createHud } from './hud';
 import { fitCanvas, pixelRatio } from './screen';
+import {
+  lowerCase,
+  phrase,
+  setLanguage,
+  t,
+  translate,
+  translatePage,
+  type Phrase,
+} from './i18n';
 import { createSound, type MusicName } from './sound';
 import { playSplash } from './splash';
 import {
@@ -285,6 +294,8 @@ const hud = createHud(TVG, renderCanvas);
 canvas.add(hud.scene);
 
 let settings = loadSettings();
+setLanguage(settings.language);
+translatePage();
 const sound = createSound({ sfx: settings.sfxVolume, music: settings.musicVolume });
 
 // Any button makes the click sound, which is also the first click that lets the browser start audio.
@@ -314,9 +325,13 @@ const settingsPanel = createSettingsPanel({
     cancelTargeting();
   },
   onChange(next) {
+    const hasChangedLanguage = next.language !== settings.language;
     settings = next;
     saveSettings(settings);
     applySettings();
+    if (hasChangedLanguage) {
+      refreshLanguage();
+    }
     renderCanvas();
   },
 });
@@ -727,7 +742,7 @@ function createItemContext(): ItemContext {
       satisfyHunger(heroHunger, amount);
       showHeroStats();
     },
-    log: (message, category) => messageLog.add(message, category),
+    log: (message, category) => messageLog.add(phrase(message), category),
     // Fire and frost also reach a closed door, without going through it.
     areaAround: (tile, steps) => spreadArea(tile, steps, isOpenTile, isFlammableTile),
     // Fire catches whoever stands in it at once, but does not burn on water, which puts out whoever
@@ -810,7 +825,7 @@ function setAlight(tiles: Point[]) {
 function putOutBurningInWater() {
   if (heroHp > 0 && hasStatus(heroStatuses, 'burning') && isInWater(heroPosition, heroStatuses)) {
     delete heroStatuses.burning;
-    messageLog.add('The water puts out the fire.');
+    messageLog.add(phrase('The water puts out the fire.'));
     updateHeroLook();
   }
   for (const enemy of enemies) {
@@ -887,7 +902,7 @@ function levelUp() {
   showHeroStats();
   playLevelUp(TVG, roomView, heroPosition, renderCanvas);
   sound.play('level-up');
-  messageLog.add('Level up! Your max HP, accuracy, and evasion went up.', 'good');
+  messageLog.add(phrase('Level up! Your max HP, accuracy, and evasion went up.'), 'good');
 }
 
 function gainExperience(amount: number) {
@@ -899,10 +914,29 @@ function gainExperience(amount: number) {
   showHeroStats();
 }
 
+// Puts the text that is not set by the page itself into the language that is now on.
+function refreshLanguage() {
+  setLanguage(settings.language);
+  translatePage();
+  showFloorLabel();
+  showHeroStats();
+  showExamineLabel();
+  messageLog.refresh();
+  inventoryPanel.refresh();
+}
+
+function showFloorLabel() {
+  floorLabel.textContent = floor === 0 ? t('Surface') : t('Floor {floor}', { floor });
+}
+
 function showHeroStats() {
-  const experience = `XP ${heroExperience}/${experienceToLevelUp()}`;
-  const strength = `Str ${currentStrength()}`;
-  hud.setStats(`Lv ${heroLevel} · ${experience} · ${strength} · ${heroGold}G`);
+  hud.setStats(t('Lv {level} · XP {experience}/{needed} · Str {strength} · {gold}G', {
+    level: heroLevel,
+    experience: heroExperience,
+    needed: experienceToLevelUp(),
+    strength: currentStrength(),
+    gold: heroGold,
+  }));
   statusBar.show(heroStatuses, heroHunger);
 }
 
@@ -935,12 +969,16 @@ const inventoryPanel = createInventoryPanel({
   getStrength: currentStrength,
   describeItem(name) {
     const look = potionLore.lookOf(name);
-    const blockedReason = look.isKnown
-      ? (ITEMS[name].blockedReason?.(createItemContext()) ?? null)
-      : null;
+    const reason = look.isKnown ? ITEMS[name].blockedReason?.(createItemContext()) : null;
     const tooHeavy = tooHeavyMessage(name, currentStrength());
-    const description = tooHeavy ? `${look.description} ${tooHeavy}` : look.description;
-    return { ...look, description, blockedReason };
+    const description = translate(look.description);
+    return {
+      displayName: translate(look.name),
+      description: tooHeavy ? `${description} ${t(tooHeavy)}` : description,
+      icon: look.icon,
+      isKnown: look.isKnown,
+      blockedReason: reason ? t(reason) : null,
+    };
   },
   onOpen() {
     stopWalking();
@@ -1032,14 +1070,14 @@ function isUsedFromBeside({ x, y }: Point): boolean {
 // A locked door opens with an iron key, which stays in the lock. Unlocking takes a turn.
 function unlockDoorAt(tile: Point) {
   if (!inventory.some(({ name }) => name === 'iron-key')) {
-    messageLog.add('The door is locked. You need a key to open it.');
+    messageLog.add(phrase('The door is locked. You need a key to open it.'));
     return;
   }
   removeItem(inventory, 'iron-key');
   inventoryPanel.refresh();
   room.tiles[tile.y][tile.x] = 'door';
   roomView.unlockDoor(tile);
-  messageLog.add('You unlocked the door with the iron key.');
+  messageLog.add(phrase('You unlocked the door with the iron key.'));
   passTurn(() => {});
 }
 
@@ -1052,7 +1090,7 @@ function signAt(tile: Point): Sign | undefined {
 }
 
 function readSign(sign: Sign) {
-  dialog.open({ title: 'Sign', text: sign.text, actions: [] });
+  dialog.open({ title: t('Sign'), text: t(sign.text), actions: [] });
 }
 
 function isEnemyInCampfireRoom(): boolean {
@@ -1133,10 +1171,16 @@ function revealMimic(enemy: Enemy) {
   if (isInView(enemy.position)) {
     alertEnemy(enemy, heroPosition);
     enemy.hasSeenHero = true;
-    messageLog.add('The chest bares its teeth. It was a mimic!', 'danger');
+    messageLog.add(phrase('The chest bares its teeth. It was a mimic!'), 'danger');
   }
   updateVision();
   showEnemy(enemy);
+}
+
+// The name of an item, with how many there are when there are more than one.
+function stackName(name: ItemName, count: number): Phrase {
+  const item = potionLore.lookOf(name).name;
+  return count > 1 ? phrase('{item} x{count}', { item, count }) : item;
 }
 
 // Returns whether anything was picked up. Chests stay until they are opened.
@@ -1148,7 +1192,7 @@ function pickUpItems(tile: Point): boolean {
       heroGold += thing.amount;
       removeFromGround(item);
       hasPickedUp = true;
-      messageLog.add(`You picked up ${thing.amount} gold.`);
+      messageLog.add(phrase('You picked up {amount} gold.', { amount: thing.amount }));
     } else if (thing.kind === 'item') {
       if (addItem(inventory, thing.name)) {
         // The rest of a pile goes onto the stack that the first one started.
@@ -1159,9 +1203,7 @@ function pickUpItems(tile: Point): boolean {
         removeFromGround(item);
         hasPickedUp = true;
         // Same wording as you_now_have of Hero in Shattered Pixel Dungeon.
-        messageLog.add(
-          `You picked up: ${potionLore.lookOf(thing.name).displayName}${count > 1 ? ` x${count}` : ''}.`,
-        );
+        messageLog.add(phrase('You picked up: {item}.', { item: stackName(thing.name, count) }));
       } else {
         playBounce(roomView, item.paint, tile, renderCanvas);
       }
@@ -1429,7 +1471,7 @@ function startLevel() {
   applyCamera();
 
   gameOverScreen.hidden = true;
-  floorLabel.textContent = floor === 0 ? 'Surface' : `Floor ${floor}`;
+  showFloorLabel();
   sound.playMusic(musicOf(floor));
   canvas.update().render();
 }
@@ -1451,9 +1493,9 @@ function goDownStairs() {
   replaceLevel();
   if (wasSurface) {
     markSurfaceFinished();
-    messageLog.add('You went down into the dungeon.');
+    messageLog.add(phrase('You went down into the dungeon.'));
   } else {
-    messageLog.add('You went down to the next floor.');
+    messageLog.add(phrase('You went down to the next floor.'));
   }
 }
 
@@ -1481,7 +1523,11 @@ function replaceLevel() {
 // The first line of a run.
 const greet = () =>
   messageLog.add(
-    floor === 0 ? 'You arrived at the entrance of the dungeon.' : 'You entered an unknown dungeon.',
+    phrase(
+      floor === 0
+        ? 'You arrived at the entrance of the dungeon.'
+        : 'You entered an unknown dungeon.',
+    ),
   );
 
 sound.playMusic('bgm-menu');
@@ -1518,7 +1564,7 @@ function startChargeWarning(lane: Point[], direction: Point) {
   stopChargeWarning();
   chargeWarning = showLaneWarning(TVG, roomView, lane, direction, renderCanvas);
   damageNumbers.show(roomView, createTargetedText(TVG), heroPosition);
-  messageLog.add('The giant centipede rears up and targets you!', 'warning');
+  messageLog.add(phrase('The giant centipede rears up and targets you!'), 'warning');
   stopWalking();
 }
 
@@ -1527,7 +1573,7 @@ function startChargeWarning(lane: Point[], direction: Point) {
 function startConeWarning(tiles: Point[], direction: Point) {
   stopChargeWarning();
   chargeWarning = showLaneWarning(TVG, roomView, tiles, direction, renderCanvas);
-  messageLog.add('The necromancer gathers dark magic!', 'warning');
+  messageLog.add(phrase('The necromancer gathers dark magic!'), 'warning');
   stopWalking();
 }
 
@@ -1539,7 +1585,7 @@ function strikeCone(tiles: Point[]) {
   stopChargeWarning();
   playDark(TVG, roomView, tiles, renderCanvas);
   if (tiles.some((tile) => isSameTile(tile, heroPosition))) {
-    messageLog.add('The dark magic strikes you!', 'danger');
+    messageLog.add(phrase('The dark magic strikes you!'), 'danger');
     damageHero(normalIntRange(Math.random, ...CONE_DAMAGE));
     stopWalking();
   }
@@ -1568,7 +1614,7 @@ function playCharge(enemy: Enemy, path: Point[], hitsHero: boolean, onDone: () =
     }
 
     if (hitsHero) {
-      messageLog.add('The giant centipede slams into you!', 'danger');
+      messageLog.add(phrase('The giant centipede slams into you!'), 'danger');
       const damage = normalIntRange(Math.random, ...CHARGE_DAMAGE);
       damageHero(Math.max(0, damage - rollArmor(equipment, currentStrength())));
       showHeroStats();
@@ -1577,7 +1623,7 @@ function playCharge(enemy: Enemy, path: Point[], hitsHero: boolean, onDone: () =
         endGame();
       }
     } else {
-      messageLog.add('The giant centipede crashes headfirst into the wall! It is stunned!');
+      messageLog.add(phrase('The giant centipede crashes headfirst into the wall! It is stunned!'));
       addEnemyStatus(enemy, 'stunned', CHARGE_STUN_TURNS);
       for (const segment of enemy.followers) {
         addStatus(segment.statuses, 'stunned', CHARGE_STUN_TURNS);
@@ -1645,7 +1691,7 @@ function findTrap(trap: Trap) {
   trap.state = 'known';
   showTrap(trap);
   sound.play('trap-found');
-  messageLog.add(`You found ${TRAP_LABELS[trap.kind]}.`, 'warning');
+  messageLog.add(phrase('You found {trap}.', { trap: phrase(TRAP_LABELS[trap.kind]) }), 'warning');
   stopWalking();
 }
 
@@ -1669,7 +1715,7 @@ function searchArea() {
   );
   hidden.forEach(findTrap);
   if (hidden.length === 0) {
-    messageLog.add('You search the area and find nothing.');
+    messageLog.add(phrase('You search the area and find nothing.'));
   }
 }
 
@@ -1742,7 +1788,7 @@ function afterArrows(next: () => void) {
 function landArrow(target: ArrowTarget, damage: number) {
   if (target === 'hero') {
     if (!isGameOver) {
-      messageLog.add('An arrow hits you!', 'danger');
+      messageLog.add(phrase('An arrow hits you!'), 'danger');
       sound.play('hurt');
       damageHero(damage);
     }
@@ -1801,12 +1847,13 @@ function setOffTrap(trap: Trap, by: TrapTrigger) {
   if (tellsOf) {
     sound.play('trap-trigger');
   }
-  const label = TRAP_LABELS[trap.kind];
+  const label = phrase(TRAP_LABELS[trap.kind]);
   const lead = isHero
-    ? `You stepped on ${label}!`
+    ? phrase('You stepped on {trap}!', { trap: label })
     : by === 'item'
-      ? `Something set off ${label}!`
-      : `The ${by.stats.name} stepped on ${label}!`;
+      ? phrase('Something set off {trap}!', { trap: label })
+      : phrase('The {enemy} stepped on {trap}!', { enemy: phrase(by.stats.name), trap: label });
+  const withLead = (effect: string) => phrase('{lead} {effect}', { lead, effect: phrase(effect) });
   const damage = normalIntRange(Math.random, ...TRAP_DAMAGE[trap.kind]);
   const hurtSteppingEnemy = () => {
     if (typeof by === 'object') {
@@ -1816,7 +1863,7 @@ function setOffTrap(trap: Trap, by: TrapTrigger) {
 
   if (trap.kind === 'spike') {
     if (tellsOf) {
-      messageLog.add(`${lead} Spikes jab up out of the floor!`, 'danger');
+      messageLog.add(withLead('Spikes jab up out of the floor!'), 'danger');
     }
     if (isHero) {
       damageHero(damage);
@@ -1827,12 +1874,10 @@ function setOffTrap(trap: Trap, by: TrapTrigger) {
 
   const target = arrowTarget(trap.position);
   if (tellsOf) {
-    messageLog.add(
-      target
-        ? `${lead} An arrow shoots out of the floor!`
-        : `${lead} An arrow shoots out of the floor and finds no one.`,
-      'danger',
-    );
+    const arrow = target
+      ? 'An arrow shoots out of the floor!'
+      : 'An arrow shoots out of the floor and finds no one.';
+    messageLog.add(withLead(arrow), 'danger');
   }
   if (target) {
     if (target === 'hero') {
@@ -1903,7 +1948,10 @@ function smashCoffin(coffin: Coffin, skipsTurn: boolean): Enemy | null {
     skippingThisTurn.add(enemy);
   }
   sound.play('coffin');
-  messageLog.add(`A ${enemy.stats.name} smashes its way out of a coffin!`, 'warning');
+  messageLog.add(
+    phrase('A {enemy} smashes its way out of a coffin!', { enemy: phrase(enemy.stats.name) }),
+    'warning',
+  );
   damageNumbers.show(roomView, createNoticeMark(TVG), position);
   stopWalking();
   return enemy;
@@ -1950,19 +1998,19 @@ function showDamage(amount: number, tile: Point, target: DamageTarget) {
 function showEndScreen(title: string, text: string | null, buttonLabel: string) {
   // The hero can die to the enemy turn after changing equipment, while the bag is open.
   inventoryPanel.close();
-  document.querySelector('#game-over-title')!.textContent = title;
+  document.querySelector('#game-over-title')!.textContent = t(title);
   const body = document.querySelector<HTMLElement>('#game-over-text')!;
-  body.textContent = text;
+  body.textContent = text === null ? null : t(text);
   body.hidden = text === null;
-  document.querySelector('#restart')!.textContent = buttonLabel;
+  document.querySelector('#restart')!.textContent = t(buttonLabel);
 
-  const plural = (count: number, one: string, many: string) =>
-    `${count} ${count === 1 ? one : many}`;
+  const countOf = (count: number, one: string, many: string) =>
+    t(count === 1 ? one : many, { count });
   document.querySelector('#run-stats')!.replaceChildren(
     ...[
-      `Reached floor ${floor}`,
-      `Defeated ${plural(killCount, 'enemy', 'enemies')}`,
-      `Lasted ${plural(turnCount, 'turn', 'turns')}`,
+      t('Reached floor {floor}', { floor }),
+      t('Defeated {count}', { count: countOf(killCount, '{count} enemy', '{count} enemies') }),
+      t('Lasted {count}', { count: countOf(turnCount, '{count} turn', '{count} turns') }),
     ].map((text) => {
       const line = document.createElement('li');
       line.textContent = text;
@@ -1994,7 +2042,7 @@ function winGame() {
     enemies.splice(enemies.indexOf(enemy), 1);
     seenEnemies.delete(enemy);
   }
-  messageLog.add('The dead crumble to dust.', 'good');
+  messageLog.add(phrase('The dead crumble to dust.'), 'good');
   updateVision();
   setTimeout(
     () =>
@@ -2035,7 +2083,7 @@ function killEnemy(part: Enemy) {
   }
   stopChargeWarning();
   if ([enemy, ...enemy.followers].some(({ position }) => isInView(position))) {
-    messageLog.add(`You defeated the ${enemy.stats.name}.`);
+    messageLog.add(phrase('You defeated the {enemy}.', { enemy: phrase(enemy.stats.name) }));
   }
   for (const piece of [enemy, ...enemy.followers]) {
     roomView.remove(piece.paint);
@@ -2107,7 +2155,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
   const isHit =
     isAmbush || isHelpless(heroStatuses) || rollHit(enemy.stats.accuracy, heroEvasion());
   if (!seenEnemies.has(enemy)) {
-    messageLog.add('Something unseen attacked you.', 'danger');
+    messageLog.add(phrase('Something unseen attacked you.'), 'danger');
   }
 
   finishAttackEffect = playAttackEffect({
@@ -2281,14 +2329,19 @@ function burnItemInBag() {
   }
   const { name } = pick(Math.random, burnable);
   const into = ITEMS[name].burnsInto;
-  const nameOf = (item: ItemName) => potionLore.lookOf(item).displayName.toLowerCase();
+  const nameOf = (item: ItemName) => lowerCase(potionLore.lookOf(item).name);
   if (into) {
     replaceInBag(name, into);
-    messageLog.add(`The flames turned your ${nameOf(name)} into ${nameOf(into)}.`);
+    messageLog.add(
+      phrase('The flames turned your {item} into {into}.', {
+        item: nameOf(name),
+        into: nameOf(into),
+      }),
+    );
   } else {
     removeItem(inventory, name);
     inventoryPanel.refresh();
-    messageLog.add(`The flames burned up your ${nameOf(name)}.`);
+    messageLog.add(phrase('The flames burned up your {item}.', { item: nameOf(name) }));
   }
 }
 
@@ -2303,7 +2356,7 @@ function cookMeatOnFloor(isOnFire: (tile: Point) => boolean) {
     dropItem('cooked-meat', item.position);
   }
   if (cooked.some(({ position }) => isInView(position))) {
-    messageLog.add('The fire cooked the raw meat on the floor.');
+    messageLog.add(phrase('The fire cooked the raw meat on the floor.'));
   }
 }
 
@@ -2313,10 +2366,10 @@ function feelHunger() {
   const damage = tickHunger(heroHunger, heroMaxHp);
   const after = hungerState(heroHunger);
   if (after !== before && after === 'hungry') {
-    messageLog.add('You are getting hungry.', 'warning');
+    messageLog.add(phrase('You are getting hungry.'), 'warning');
   }
   if (after !== before && after === 'starving') {
-    messageLog.add('You are starving! You will keep losing HP until you eat.', 'danger');
+    messageLog.add(phrase('You are starving! You will keep losing HP until you eat.'), 'danger');
     stopWalking();
   }
   if (damage > 0) {
@@ -2456,7 +2509,7 @@ function runEnemyTurn(onDone: () => void) {
         chantedCoffins.forEach(showCoffin);
         addEnemyStatus(enemy, 'shielded', Infinity);
         if (isInView(enemy.position)) {
-          messageLog.add('The necromancer begins to chant an unknown spell!', 'warning');
+          messageLog.add(phrase('The necromancer begins to chant an unknown spell!'), 'warning');
         }
         actNext();
         break;
@@ -2486,7 +2539,7 @@ function runEnemyTurn(onDone: () => void) {
         delete enemy.statuses.shielded;
         showEnemy(enemy);
         if (isInView(enemy.position)) {
-          messageLog.add('The shield around the necromancer fades!');
+          messageLog.add(phrase('The shield around the necromancer fades!'));
         }
         actNext();
         break;
@@ -2523,7 +2576,7 @@ function playHeroAttack(enemy: Enemy) {
     updateHeroLook();
   }
   if (!seenEnemies.has(enemy)) {
-    messageLog.add('You attacked an unseen enemy.');
+    messageLog.add(phrase('You attacked an unseen enemy.'));
   }
 
   // An enemy farther away than the next tile gets the same lunge as one on the next tile.
@@ -2723,7 +2776,7 @@ function canTarget(tile: Point | null): tile is Point {
 
 // While examining, the second press of the button searches.
 function showExamineLabel() {
-  examineButton.textContent = targeting?.request === EXAMINE_REQUEST ? 'Search' : 'Examine';
+  examineButton.textContent = t(targeting?.request === EXAMINE_REQUEST ? 'Search' : 'Examine');
 }
 
 function requestTarget(request: TargetRequest) {
@@ -3022,7 +3075,7 @@ function shatterPotion(name: ItemName, tile: Point) {
   const { enemyEffect } = ITEMS[name];
   const enemy = enemyEffect && enemies.find(({ position }) => isSameTile(position, tile));
   if (!enemy) {
-    messageLog.add("The potion's flask broke, but nothing happened.");
+    messageLog.add(phrase("The potion's flask broke, but nothing happened."));
     return;
   }
   // Checked before the effect, because the hero still sees an enemy turn invisible.
@@ -3036,10 +3089,10 @@ function shatterPotion(name: ItemName, tile: Point) {
   updateVision();
   showEnemy(enemy);
   if (isSeen) {
-    messageLog.add(enemyEffect.message(enemy.stats.name));
+    messageLog.add(phrase(enemyEffect.message, { enemy: phrase(enemy.stats.name) }));
     potionLore.identify(name);
   } else {
-    messageLog.add("The potion's flask broke, but nothing happened.");
+    messageLog.add(phrase("The potion's flask broke, but nothing happened."));
   }
 }
 
@@ -3070,7 +3123,8 @@ function throwAtEnemy(name: ItemName, enemy: Enemy): boolean {
     showDamage(damage, enemy.position, 'enemy');
     isBroken = Math.random() < THROWN_BREAK_CHANCE;
     if (isBroken) {
-      messageLog.add(`The ${ITEMS[name].displayName.toLowerCase()} breaks.`);
+      const item = lowerCase(phrase(ITEMS[name].displayName));
+      messageLog.add(phrase('The {item} breaks.', { item }));
     }
     if (enemy.hp === 0) {
       killEnemy(enemy);
@@ -3089,7 +3143,9 @@ function throwAtEnemy(name: ItemName, enemy: Enemy): boolean {
 function throwItem(name: ItemName) {
   inventoryPanel.close();
   requestTarget({
-    prompt: `Throw the ${potionLore.lookOf(name).displayName.toLowerCase()} where?`,
+    prompt: t('Throw the {item} where?', {
+      item: translate(lowerCase(potionLore.lookOf(name).name)),
+    }),
     canPick: isInView,
     onSelect(tile) {
       const isWeapon = ITEMS[name].thrownDamage !== undefined;
@@ -3138,14 +3194,14 @@ function examine(tile: Point) {
   }
 }
 
-function describeTile(tile: Point): string[] {
+function describeTile(tile: Point): Phrase[] {
   const enemy = enemyAt(tile);
   if (enemy) {
     return [describeEnemy(enemy)];
   }
   if (disguisedMimicAt(tile)) {
     // Examining gives a mimic away, as it does in Shattered Pixel Dungeon.
-    return ['A chest. Its latch twitches now and then. Opening it could be dangerous.'];
+    return [phrase('A chest. Its latch twitches now and then. Opening it could be dangerous.')];
   }
   const things = itemsAt(tile);
   if (things.length > 0) {
@@ -3155,98 +3211,107 @@ function describeTile(tile: Point): string[] {
   if (trap?.state === 'known') {
     return [
       trap.kind === 'arrow'
-        ? 'An arrow trap. When it is activated, it shoots the nearest character within ' +
-          `${ARROW_RANGE} tiles.`
-        : 'A spike trap. When it is activated, it hurts whoever stands on it.',
+        ? phrase(
+            'An arrow trap. When it is activated, it shoots the nearest character within ' +
+              '{range} tiles.',
+            { range: ARROW_RANGE },
+          )
+        : phrase('A spike trap. When it is activated, it hurts whoever stands on it.'),
     ];
   }
   if (trap?.state === 'spent') {
-    return ['A plate that has already gone off.'];
+    return [phrase('A plate that has already gone off.')];
   }
   return [describeTerrain(tile)];
 }
 
 const ENEMY_STATES: Record<Enemy['state'], string> = {
-  disguised: 'is pretending to be a chest',
-  sleeping: 'is asleep',
-  wandering: 'is wandering',
-  hunting: 'is hunting you',
+  disguised: 'The {enemy} is pretending to be a chest.',
+  sleeping: 'The {enemy} is asleep.',
+  wandering: 'The {enemy} is wandering.',
+  hunting: 'The {enemy} is hunting you.',
 };
 
-function describeEnemy(part: Enemy): string {
+function describeEnemy(part: Enemy): Phrase {
   const enemy = wholeOf(part);
   const effects = (Object.keys(STATUS_LABELS) as StatusName[])
     .filter((name) => hasStatus(enemy.statuses, name))
-    .map((name) => STATUS_LABELS[name]);
-  const state = `The ${enemy.stats.name} ${ENEMY_STATES[enemy.state]}.`;
-  return effects.length > 0 ? `${state} Effects: ${effects.join(', ')}.` : state;
+    .map((name) => phrase(STATUS_LABELS[name]));
+  const state = phrase(ENEMY_STATES[enemy.state], { enemy: phrase(enemy.stats.name) });
+  return effects.length > 0
+    ? phrase('{state} {effects}', { state, effects: phrase('Effects: {effects}.', { effects }) })
+    : state;
 }
 
-function describeThing(thing: GroundThing): string {
+function describeThing(thing: GroundThing): Phrase {
   switch (thing.kind) {
     case 'item': {
-      const look = potionLore.lookOf(thing.name);
-      const count = thing.count ?? 1;
-      return `${look.displayName}${count > 1 ? ` x${count}` : ''}: ${look.description}`;
+      const item = stackName(thing.name, thing.count ?? 1);
+      return phrase('{item}: {description}', {
+        item,
+        description: potionLore.lookOf(thing.name).description,
+      });
     }
     case 'gold':
-      return `${thing.amount} gold.`;
+      return phrase('{amount} gold.', { amount: thing.amount });
     case 'chest':
-      return 'A chest. Open it from a tile next to it.';
+      return phrase('A chest. Open it from a tile next to it.');
   }
 }
 
-function describeTerrain({ x, y }: Point): string {
+function describeTerrain({ x, y }: Point): Phrase {
   switch (room.tiles[y][x]) {
     case 'wall':
-      return 'A wall.';
+      return phrase('A wall.');
     case 'door':
-      return openDoors.has(y * room.width + x) ? 'An open door.' : 'A closed door.';
+      return openDoors.has(y * room.width + x) ? phrase('An open door.') : phrase('A closed door.');
     case 'locked-door':
-      return 'A locked door. A key would open it.';
+      return phrase('A locked door. A key would open it.');
     case 'stairs':
-      return 'Stairs down to the next floor.';
+      return phrase('Stairs down to the next floor.');
     case 'campfire':
-      return 'A campfire. From a tile next to it, you can rest or cook raw meat.';
+      return phrase('A campfire. From a tile next to it, you can rest or cook raw meat.');
     case 'sign':
-      return `A sign. It reads: "${signAt({ x, y })?.text ?? ''}"`;
+      return phrase('A sign. It reads: "{text}"', { text: phrase(signAt({ x, y })?.text ?? '') });
     case 'water':
-      return 'Shallow water. It puts out the fire on whoever stands in it.';
+      return phrase('Shallow water. It puts out the fire on whoever stands in it.');
     case 'coffin':
-      return 'A wooden coffin.';
+      return phrase('A wooden coffin.');
     default:
       return floor > 0 && isSameTile({ x, y }, room.start)
-        ? 'The stairs you came down. There is no way back up.'
-        : 'The floor.';
+        ? phrase('The stairs you came down. There is no way back up.')
+        : phrase('The floor.');
   }
 }
 
 const EXAMINE_REQUEST: TargetRequest = {
-  prompt: 'Examine which tile?',
+  get prompt() {
+    return t('Examine which tile?');
+  },
   canPick: isExplored,
   onSelect: examine,
 };
 
 // Opens the campfire's window. Opening it takes no turn.
 function openCampfire() {
-  const enemyNearby = isEnemyInCampfireRoom() ? 'Not while an enemy is in the room.' : null;
+  const enemyNearby = isEnemyInCampfireRoom() ? t('Not while an enemy is in the room.') : null;
   const rawMeat = inventory.find(({ name }) => name === 'raw-meat')?.count ?? 0;
   const heal = Math.round(heroMaxHp * REST_HEAL_FRACTION);
-  const cookTime = COOK_TURNS === 1 ? 'one turn' : `${COOK_TURNS} turns`;
+  const cookTime = COOK_TURNS === 1 ? t('one turn') : t('{turns} turns', { turns: COOK_TURNS });
   dialog.open({
-    title: 'Campfire',
-    text: 'A warm fire crackles here. You can rest by it, or cook raw meat over it.',
+    title: t('Campfire'),
+    text: t('A warm fire crackles here. You can rest by it, or cook raw meat over it.'),
     actions: [
       {
-        label: 'Rest',
-        detail: `Recover ${heal} HP over ${REST_TURNS} turns.`,
-        blockedReason: enemyNearby ?? (heroHp >= heroMaxHp ? 'Your HP is already full.' : null),
+        label: t('Rest'),
+        detail: t('Recover {heal} HP over {turns} turns.', { heal, turns: REST_TURNS }),
+        blockedReason: enemyNearby ?? (heroHp >= heroMaxHp ? t('Your HP is already full.') : null),
         run: rest,
       },
       {
-        label: 'Cook raw meat',
-        detail: `Cook one piece in ${cookTime}. You have ${rawMeat}.`,
-        blockedReason: enemyNearby ?? (rawMeat === 0 ? 'You have no raw meat.' : null),
+        label: t('Cook raw meat'),
+        detail: t('Cook one piece in {time}. You have {count}.', { time: cookTime, count: rawMeat }),
+        blockedReason: enemyNearby ?? (rawMeat === 0 ? t('You have no raw meat.') : null),
         run: cookMeat,
       },
     ],
@@ -3276,7 +3341,10 @@ function spendCampfireTurns(
     }
     if (isEnemyInCampfireRoom()) {
       campfireTask = null;
-      messageLog.add(`An enemy came into the room! You stopped ${verb}.`, 'danger');
+      messageLog.add(
+        phrase('An enemy came into the room! You stopped {verb}.', { verb: phrase(verb) }),
+        'danger',
+      );
       return;
     }
     if (isDone || turnsLeft === 0) {
@@ -3293,7 +3361,7 @@ function spendCampfireTurns(
 
 function stopCampfireTask() {
   if (campfireTask) {
-    messageLog.add(`You stopped ${campfireTask.verb}.`);
+    messageLog.add(phrase('You stopped {verb}.', { verb: phrase(campfireTask.verb) }));
     campfireTask = null;
   }
 }
@@ -3303,7 +3371,7 @@ function stopCampfireTask() {
 function rest() {
   const total = Math.round(heroMaxHp * REST_HEAL_FRACTION);
   let turn = 0;
-  messageLog.add('You sit down by the fire to rest.');
+  messageLog.add(phrase('You sit down by the fire to rest.'));
   spendCampfireTurns(
     'resting',
     REST_TURNS,
@@ -3316,7 +3384,7 @@ function rest() {
       return heroHp >= heroMaxHp;
     },
     () => {
-      messageLog.add('You feel rested.', 'good');
+      messageLog.add(phrase('You feel rested.'), 'good');
       openCampfire();
     },
   );
@@ -3332,7 +3400,7 @@ function cookMeat() {
       if (inventory.some(({ name }) => name === 'raw-meat')) {
         replaceInBag('raw-meat', 'cooked-meat');
         sound.play('cook');
-        messageLog.add('The raw meat is cooked through.');
+        messageLog.add(phrase('The raw meat is cooked through.'));
       }
       openCampfire();
     },
@@ -3370,7 +3438,7 @@ function useItem(name: ItemName) {
     return;
   }
   if (useMessage) {
-    messageLog.add(useMessage);
+    messageLog.add(phrase(useMessage, { item: lowerCase(phrase(ITEMS[name].displayName)) }));
   }
 
   stopWalking();

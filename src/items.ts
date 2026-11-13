@@ -1,4 +1,5 @@
 import { HUNGRY, STARVING } from './hunger';
+import { phrase, type Phrase } from './i18n';
 import { normalIntRange, roundRandomly } from './random';
 import type { MessageCategory } from './messageLog';
 import type { GasKind } from './render';
@@ -67,6 +68,7 @@ export interface ItemContext {
   gainStrength(): void;
   gainLevel(): void;
   satisfyHunger(amount: number): void;
+  // Adds a line to the log. The message is English text, which the log translates.
   log(message: string, category?: MessageCategory): void;
   // The tiles within some steps of a tile, going around walls and closed doors.
   areaAround(tile: Point, steps: number): Point[];
@@ -78,9 +80,14 @@ export interface ItemContext {
 }
 
 export interface ItemDefinition {
-  // The name shown to the player. The item's name in the code is its ItemName.
+  // The name and the description shown to the player, in English, which i18n.ts translates. The
+  // item's name in the code is its ItemName. The description may hold {name} places, which
+  // descriptionValues fills.
   displayName: string;
   description: string;
+  descriptionValues?: Record<string, number>;
+  // Set for food, with how many turns of hunger it takes away.
+  foodTurns?: number;
   // The label of the button that uses the item, for items that can be used.
   useLabel?: string;
   // Set for items that can be equipped.
@@ -109,7 +116,7 @@ export interface ItemDefinition {
   blockedReason?(context: ItemContext): string | null;
   use?(context: ItemContext): void;
   shatter?(context: ItemContext, tile: Point): void;
-  // The log line when the hero drinks or eats it.
+  // The log line when the hero drinks or eats it. {item} in it is the name of the item.
   useMessage?: string;
   // Set for items that fire can burn in the bag of a burning hero. A burned one turns into this
   // item, as raw meat cooks, or burns up when it is null.
@@ -121,8 +128,8 @@ export interface ItemDefinition {
 export interface EnemyEffect {
   heal?: number;
   status?: { name: StatusName; turns: number };
-  // The log line when the hero sees it happen to the enemy with this name.
-  message(enemyName: string): string;
+  // The log line when the hero sees it happen. {enemy} in it is the name of the enemy.
+  message: string;
 }
 
 const SWORD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -335,13 +342,13 @@ const FOOD_POISONING_FRACTION = 1 / 5;
 
 const food = (
   amount: number,
-  definition: Omit<ItemDefinition, 'useLabel' | 'use' | 'useMessage'>,
+  definition: Omit<ItemDefinition, 'useLabel' | 'use' | 'useMessage' | 'foodTurns'>,
   afterEating?: (context: ItemContext) => void,
 ): ItemDefinition => ({
   ...definition,
-  description: `${definition.description} Keeps hunger away for ${amount} turns.`,
+  foodTurns: amount,
   useLabel: 'Eat',
-  useMessage: `You ate the ${definition.displayName.toLowerCase()}.`,
+  useMessage: 'You ate the {item}.',
   use(context) {
     context.satisfyHunger(amount);
     afterEating?.(context);
@@ -360,7 +367,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     useMessage: 'Your wounds healed!',
     enemyEffect: {
       heal: THROWN_HEALING_HP,
-      message: (name) => `The ${name}'s wounds healed!`,
+      message: "The {enemy}'s wounds healed!",
     },
   }),
   'strength-potion': potion('helpful', {
@@ -377,37 +384,41 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
   }),
   'haste-potion': potion('helpful', {
     displayName: 'Haste potion',
-    description: `You act twice for every turn of the enemies, for ${HASTE_TURNS} turns.`,
+    description: 'You act twice for every turn of the enemies, for {turns} turns.',
+    descriptionValues: { turns: HASTE_TURNS },
     use: ({ addStatus }) => addStatus('haste', HASTE_TURNS),
     useMessage: 'Your body suddenly felt light!',
     enemyEffect: {
       status: { name: 'haste', turns: HASTE_TURNS },
-      message: (name) => `The ${name} suddenly started moving fast!`,
+      message: 'The {enemy} suddenly started moving fast!',
     },
   }),
   'invisibility-potion': potion('helpful', {
     displayName: 'Invisibility potion',
-    description: `Enemies cannot see you for ${INVISIBLE_TURNS} turns, or until you attack.`,
+    description: 'Enemies cannot see you for {turns} turns, or until you attack.',
+    descriptionValues: { turns: INVISIBLE_TURNS },
     use: ({ addStatus }) => addStatus('invisible', INVISIBLE_TURNS),
     useMessage: 'Your body suddenly turned invisible!',
     enemyEffect: {
       status: { name: 'invisible', turns: INVISIBLE_TURNS },
-      message: (name) => `The ${name} suddenly turned invisible!`,
+      message: 'The {enemy} suddenly turned invisible!',
     },
   }),
   'levitation-potion': potion('helpful', {
     displayName: 'Levitation potion',
-    description: `You float for ${LEVITATION_TURNS} turns, above any fire on the floor.`,
+    description: 'You float for {turns} turns, above any fire on the floor.',
+    descriptionValues: { turns: LEVITATION_TURNS },
     use: ({ addStatus }) => addStatus('levitating', LEVITATION_TURNS),
     useMessage: 'Your body floated up into the air!',
     enemyEffect: {
       status: { name: 'levitating', turns: LEVITATION_TURNS },
-      message: (name) => `The ${name} floated up into the air!`,
+      message: 'The {enemy} floated up into the air!',
     },
   }),
   'telepathy-potion': potion('helpful', {
     displayName: 'Telepathy potion',
-    description: `You sense every enemy on the floor for ${TELEPATHY_TURNS} turns.`,
+    description: 'You sense every enemy on the floor for {turns} turns.',
+    descriptionValues: { turns: TELEPATHY_TURNS },
     use: ({ addStatus }) => addStatus('telepathy', TELEPATHY_TURNS),
     useMessage: 'You can see into the minds of your enemies!',
   }),
@@ -480,7 +491,8 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
   },
   spear: {
     displayName: 'Spear',
-    description: `A long spear that hits enemies up to ${SPEAR_REACH} tiles away.`,
+    description: 'A long spear that hits enemies up to {reach} tiles away.',
+    descriptionValues: { reach: SPEAR_REACH },
     equipKind: 'weapon',
     // The spear in Shattered Pixel Dungeon deals 2-20 and takes 1.5 turns to attack. An attack here
     // takes one turn, so the damage is divided by 1.5 to keep the same damage per turn.
@@ -588,6 +600,18 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
     icon: IRON_KEY_ICON,
   },
 };
+
+// The description of an item, with how long food keeps hunger away.
+export function itemDescription(name: ItemName): Phrase {
+  const { description, descriptionValues, foodTurns } = ITEMS[name];
+  const text = phrase(description, descriptionValues);
+  return foodTurns === undefined
+    ? text
+    : phrase('{text} {food}', {
+        text,
+        food: phrase('Keeps hunger away for {turns} turns.', { turns: foodTurns }),
+      });
+}
 
 // Same as fighting unarmed in Shattered Pixel Dungeon with the starting 10 strength.
 const UNARMED_DAMAGE: [min: number, max: number] = [1, 2];

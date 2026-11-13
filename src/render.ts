@@ -2,6 +2,7 @@ import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
 import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
 import { FONT_BOLD } from './fonts';
+import { t } from './i18n';
 import { STATUS_LABELS, type StatusName } from './status';
 
 type Color = [r: number, g: number, b: number];
@@ -1196,12 +1197,12 @@ export function createDamageNumber(
 
 // The name of an effect, shown over a character when the effect starts.
 export function createStatusText(TVG: ThorVGNamespace, name: StatusName): Scene {
-  return createFloatingText(TVG, STATUS_LABELS[name], STATUS_COLORS[name]);
+  return createFloatingText(TVG, t(STATUS_LABELS[name]), STATUS_COLORS[name]);
 }
 
 // The word shown over a character that evaded an attack.
 export function createEvadeText(TVG: ThorVGNamespace): Scene {
-  return createFloatingText(TVG, 'Evade', ATTACK_TEXT_COLOR);
+  return createFloatingText(TVG, t('Evade'), ATTACK_TEXT_COLOR);
 }
 
 // The mark shown over an enemy that was surprised, like the one in Shattered Pixel Dungeon.
@@ -1238,7 +1239,7 @@ function createSpeechBubble(TVG: ThorVGNamespace, text: string, color: Color): S
 // The mark shown over an enemy that just noticed the hero.
 // Shown over the hero when something has marked them as the target of an attack.
 export function createTargetedText(TVG: ThorVGNamespace): Scene {
-  return createFloatingText(TVG, 'Targeted', [255, 70, 60]);
+  return createFloatingText(TVG, t('Targeted'), [255, 70, 60]);
 }
 
 export function createNoticeMark(TVG: ThorVGNamespace): Scene {

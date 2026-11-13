@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import {
   EQUIPMENT_ICONS,
   EQUIPMENT_SLOTS,
@@ -95,17 +96,17 @@ export function createInventoryPanel({
     // The number of the strength line shows whether the hero has the strength the item needs.
     const stats: { label: string; value: string; tone?: 'enough' | 'short' }[] = [];
     if (item.damage) {
-      stats.push({ label: 'Damage', value: `${item.damage[0]}-${item.damage[1]}` });
+      stats.push({ label: t('Damage'), value: `${item.damage[0]}-${item.damage[1]}` });
     }
     if (item.thrownDamage) {
-      stats.push({ label: 'Damage', value: `${item.thrownDamage[0]}-${item.thrownDamage[1]}` });
+      stats.push({ label: t('Damage'), value: `${item.thrownDamage[0]}-${item.thrownDamage[1]}` });
     }
     if (item.armor) {
-      stats.push({ label: 'Armor', value: `${item.armor[0]}-${item.armor[1]}` });
+      stats.push({ label: t('Armor'), value: `${item.armor[0]}-${item.armor[1]}` });
     }
     if (item.strength !== undefined) {
       stats.push({
-        label: 'Strength',
+        label: t('Strength'),
         value: String(item.strength),
         tone: getStrength() >= item.strength ? 'enough' : 'short',
       });
@@ -128,7 +129,7 @@ export function createInventoryPanel({
     if (selected.from === 'equipment') {
       const slot = selected.slot;
       actions.append(
-        actionButton('Unequip', () => {
+        actionButton(t('Unequip'), () => {
           onUnequip(slot);
           if (!getEquipment()[slot]) {
             selected = { from: 'bag', name };
@@ -138,13 +139,13 @@ export function createInventoryPanel({
       );
     } else {
       if (item.useLabel) {
-        const use = actionButton(item.useLabel, () => onUse(name));
+        const use = actionButton(t(item.useLabel), () => onUse(name));
         use.disabled = reason !== null;
         actions.append(use);
       }
       if (item.equipKind) {
         actions.append(
-          actionButton('Equip', () => {
+          actionButton(t('Equip'), () => {
             onEquip(name);
             const slot = EQUIPMENT_SLOTS.find(({ slot }) => getEquipment()[slot] === name)?.slot;
             if (slot) {
@@ -154,7 +155,10 @@ export function createInventoryPanel({
           }),
         );
       }
-      actions.append(actionButton('Throw', () => onThrow(name)), actionButton('Drop', () => onDrop(name)));
+      actions.append(
+        actionButton(t('Throw'), () => onThrow(name)),
+        actionButton(t('Drop'), () => onDrop(name)),
+      );
     }
     details.append(title, description, ...statLines, actions);
   };
@@ -193,7 +197,7 @@ export function createInventoryPanel({
         // An empty slot shows a faint picture of what goes in it.
         element.innerHTML = EQUIPMENT_ICONS[kind];
         element.classList.add('empty-equipment');
-        element.setAttribute('aria-label', `No ${kind}`);
+        element.setAttribute('aria-label', t('No {kind}', { kind: t(kind) }));
       }
       equipmentSlots.append(element);
     }

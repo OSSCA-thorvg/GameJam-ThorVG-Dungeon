@@ -1,3 +1,4 @@
+import { LANGUAGES, type Language } from './i18n';
 import { availableUiScales, uiScaleFor, type Settings } from './settings';
 
 export interface SettingsPanelOptions {
@@ -19,11 +20,15 @@ export function createSettingsPanel({
 }: SettingsPanelOptions): SettingsPanel {
   const button = document.querySelector<HTMLButtonElement>('#settings-button')!;
   const overlay = document.querySelector<HTMLElement>('#settings')!;
+  const language = document.querySelector<HTMLSelectElement>('#language')!;
   const uiScale = document.querySelector<HTMLSelectElement>('#ui-scale')!;
   const sfxVolume = document.querySelector<HTMLInputElement>('#sfx-volume')!;
   const musicVolume = document.querySelector<HTMLInputElement>('#music-volume')!;
 
+  language.replaceChildren(...LANGUAGES.map(({ code, name }) => new Option(name, code)));
+
   const refresh = () => {
+    language.value = getSettings().language;
     uiScale.replaceChildren(
       ...availableUiScales(window.innerWidth).map(
         (scale) => new Option(`${scale * 100}%`, String(scale)),
@@ -34,6 +39,9 @@ export function createSettingsPanel({
     musicVolume.value = String(Math.round(getSettings().musicVolume * 100));
   };
 
+  language.addEventListener('change', () => {
+    onChange({ ...getSettings(), language: language.value as Language });
+  });
   uiScale.addEventListener('change', () => {
     onChange({ ...getSettings(), uiScale: Number(uiScale.value) });
   });

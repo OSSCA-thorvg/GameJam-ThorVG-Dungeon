@@ -1,4 +1,5 @@
-import { ITEMS, type ItemName, type PotionName } from './items';
+import { phrase, type Phrase } from './i18n';
+import { ITEMS, itemDescription, type ItemName, type PotionName } from './items';
 import { shuffle, type Random } from './random';
 import { STATUS_COLORS } from './render';
 import type { StatusName } from './status';
@@ -144,8 +145,8 @@ function potionIcon([r, g, b]: Color, mark?: PotionMark): string {
 
 // How an item looks to the player. A potion shows only its color until it is identified.
 export interface ItemLook {
-  displayName: string;
-  description: string;
+  name: Phrase;
+  description: Phrase;
   icon: string;
   isKnown: boolean;
   // The color a potion splashes when it breaks.
@@ -168,15 +169,21 @@ export function createPotionLore(random: Random): PotionLore {
       const item = ITEMS[name];
       const appearance = colorOf.get(name as PotionName);
       if (!appearance) {
-        const { displayName, description, icon = '' } = item;
-        return { displayName, description, icon, isKnown: true };
+        return {
+          name: phrase(item.displayName),
+          description: itemDescription(name),
+          icon: item.icon ?? '',
+          isKnown: true,
+        };
       }
       const isKnown = known.has(name);
       return {
-        displayName: isKnown ? item.displayName : `${appearance.name} potion`,
+        name: isKnown
+          ? phrase(item.displayName)
+          : phrase('{color} potion', { color: phrase(appearance.name) }),
         description: isKnown
-          ? item.description
-          : 'You do not know what this potion does. Drinking it will tell you.',
+          ? itemDescription(name)
+          : phrase('You do not know what this potion does. Drinking it will tell you.'),
         icon: potionIcon(appearance.color, isKnown ? POTION_MARKS[name as PotionName] : undefined),
         isKnown,
         color: appearance.color,

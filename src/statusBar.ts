@@ -4,6 +4,7 @@ import {
   hungerState,
   type Hunger,
 } from './hunger';
+import { t } from './i18n';
 import { STATUS_COLORS } from './render';
 import { STATUS_ICONS, type ShownHunger } from './statusIcons';
 import {
@@ -56,14 +57,14 @@ export function createStatusBar(element: HTMLElement, tooltip: HTMLElement): Sta
     }
     explained = entry.name;
     const title = document.createElement('strong');
-    title.textContent = entry.label;
+    title.textContent = t(entry.label);
     title.style.color = item.style.color;
     const description = document.createElement('p');
-    description.textContent = entry.description;
+    description.textContent = t(entry.description);
     const lines = [title, description];
     if (entry.turns !== null) {
       const turns = document.createElement('p');
-      turns.textContent = `${entry.turns} turns left`;
+      turns.textContent = t('{turns} turns left', { turns: entry.turns });
       lines.push(turns);
     }
     tooltip.replaceChildren(...lines);
@@ -116,7 +117,10 @@ export function createStatusBar(element: HTMLElement, tooltip: HTMLElement): Sta
           const item = document.createElement('button');
           item.className = 'status-effect';
           item.dataset.status = name;
-          item.setAttribute('aria-label', turns === null ? label : `${label}, ${turns} turns`);
+          item.setAttribute(
+            'aria-label',
+            turns === null ? t(label) : `${t(label)}, ${t('{turns} turns', { turns })}`,
+          );
           const svg = `<svg viewBox="-1 -1 12 12" aria-hidden="true">${STATUS_ICONS[name]}</svg>`;
           item.innerHTML = svg;
           item.style.color = `rgb(${r} ${g} ${b})`;

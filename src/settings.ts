@@ -1,5 +1,8 @@
+import { browserLanguage, LANGUAGES, type Language } from './i18n';
+
 // What the player sets in the settings window. It stays in this browser between runs.
 export interface Settings {
+  language: Language;
   // How many times larger everything but the map is drawn.
   uiScale: number;
   // How loud the sound effects and the music are, from 0 to 1.
@@ -27,7 +30,7 @@ export function uiScaleFor(settings: Settings, windowWidth: number): number {
 }
 
 // The sounds were judged by ear at full volume, so that is the default.
-const DEFAULT_SETTINGS: Settings = { uiScale: 1, sfxVolume: 1, musicVolume: 1 };
+const DEFAULT_SETTINGS: Settings = { language: 'en', uiScale: 1, sfxVolume: 1, musicVolume: 1 };
 const STORAGE_KEY = 'thorvg-dungeon.settings';
 
 // Storage can be blocked, as in a private window. Then the defaults stand in.
@@ -39,6 +42,9 @@ export function loadSettings(): Settings {
     const volumeOf = (value: unknown, fallback: number) =>
       value === undefined || !(Number(value) >= 0 && Number(value) <= 1) ? fallback : Number(value);
     return {
+      language: LANGUAGES.some(({ code }) => code === saved.language)
+        ? (saved.language as Language)
+        : browserLanguage(),
       uiScale: UI_SCALES.includes(uiScale) ? uiScale : DEFAULT_SETTINGS.uiScale,
       sfxVolume: volumeOf(saved.sfxVolume, DEFAULT_SETTINGS.sfxVolume),
       musicVolume: volumeOf(saved.musicVolume, DEFAULT_SETTINGS.musicVolume),

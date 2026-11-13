@@ -524,22 +524,22 @@
     </div>
     <div id="bottom-left">
       <button id="wait" hidden>
-        <span id="wait-label">Wait</span>
+        <span id="wait-label" data-i18n="Wait">Wait</span>
         <svg id="wait-clock" viewBox="-12 -12 24 24" aria-hidden="true">
           <circle r="10.5" />
           <line id="wait-minute-hand" y2="-8" />
           <line id="wait-hour-hand" y2="-5" />
         </svg>
       </button>
-      <button id="examine" hidden>Examine</button>
-      <button id="log-button" hidden>Log</button>
+      <button id="examine" data-i18n="Examine" hidden>Examine</button>
+      <button id="log-button" data-i18n="Log" hidden>Log</button>
     </div>
-    <button id="inventory-button" hidden>Bag</button>
+    <button id="inventory-button" data-i18n="Bag" hidden>Bag</button>
     <div id="inventory" hidden>
-      <div id="inventory-panel" role="dialog" aria-label="Bag">
+      <div id="inventory-panel" role="dialog" aria-label="Bag" data-i18n-aria="Bag">
         <div id="inventory-header">
-          Bag
-          <button id="inventory-close" aria-label="Close">×</button>
+          <span data-i18n="Bag">Bag</span>
+          <button id="inventory-close" aria-label="Close" data-i18n-aria="Close">×</button>
         </div>
         <div id="equipment-slots"></div>
         <div id="inventory-slots"></div>
@@ -548,34 +548,38 @@
     </div>
     <div id="main-menu" hidden>
       <h1>ThorVG Dungeon</h1>
-      <button id="menu-play">Play</button>
-      <button id="menu-settings">Settings</button>
+      <button id="menu-play" data-i18n="Play">Play</button>
+      <button id="menu-settings" data-i18n="Settings">Settings</button>
     </div>
     <div id="log-window" hidden>
-      <div id="log-panel" role="dialog" aria-label="Log">
+      <div id="log-panel" role="dialog" aria-label="Log" data-i18n-aria="Log">
         <div id="log-header">
-          Log
-          <button id="log-close" aria-label="Close">×</button>
+          <span data-i18n="Log">Log</span>
+          <button id="log-close" aria-label="Close" data-i18n-aria="Close">×</button>
         </div>
         <div id="log-lines"></div>
       </div>
     </div>
     <div id="settings" hidden>
-      <div id="settings-panel" role="dialog" aria-label="Settings">
+      <div id="settings-panel" role="dialog" aria-label="Settings" data-i18n-aria="Settings">
         <div id="settings-header">
-          Settings
-          <button id="settings-close" aria-label="Close">×</button>
+          <span data-i18n="Settings">Settings</span>
+          <button id="settings-close" aria-label="Close" data-i18n-aria="Close">×</button>
         </div>
         <label>
-          UI scale
+          <span data-i18n="Language">Language</span>
+          <select id="language"></select>
+        </label>
+        <label>
+          <span data-i18n="UI scale">UI scale</span>
           <select id="ui-scale"></select>
         </label>
         <label>
-          Sound effects
+          <span data-i18n="Sound effects">Sound effects</span>
           <input id="sfx-volume" type="range" min="0" max="100" step="5" />
         </label>
         <label>
-          Music
+          <span data-i18n="Music">Music</span>
           <input id="music-volume" type="range" min="0" max="100" step="5" />
         </label>
       </div>
@@ -584,7 +588,7 @@
       <div id="dialog-panel" role="dialog" aria-labelledby="dialog-title">
         <div id="dialog-header">
           <span id="dialog-title"></span>
-          <button id="dialog-close" aria-label="Close">×</button>
+          <button id="dialog-close" aria-label="Close" data-i18n-aria="Close">×</button>
         </div>
         <p id="dialog-text"></p>
         <div id="dialog-actions"></div>
@@ -592,7 +596,7 @@
     </div>
     <div id="target-prompt" hidden>
       <span id="target-prompt-text"></span>
-      <button id="target-cancel">Cancel</button>
+      <button id="target-cancel" data-i18n="Cancel">Cancel</button>
     </div>
     <div id="game-over" hidden>
       <span id="game-over-title">You died</span>
