@@ -17,7 +17,6 @@ npm run dev
 
 | Asset | Author | Source | License | Changes |
 | --- | --- | --- | --- | --- |
-| Swordman icon | Cathelineau | [game-icons.net](https://game-icons.net/1x1/cathelineau/swordman.html) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | Removed the black background |
 | ThorVG splash | ThorVG project | [OSSCA ThorVG GameJam](https://ossca-thorvg.github.io/site/project/#event) | [Terms](LICENSES/LicenseRef-ThorVG-Splash.txt) | None, the file is used as provided |
 | Galmuri fonts (Galmuri9, Galmuri11, Galmuri11 Bold) | Lee Minseo (quiple) | [GitHub](https://github.com/quiple/galmuri) | [OFL 1.1](LICENSES/OFL-1.1.txt) | None, the woff2 and ttf files are used as provided |
 
@@ -43,10 +42,10 @@ Whether copyright applies to work made with an AI tool is unsettled, so this rep
 
 ## Art
 
-The pixel art of the map tiles, items and objects is made by code. It is not drawn from or traced over existing images, and no outside art is used in it.
+The pixel art of the map tiles, items, objects and characters is made by code. It is not drawn from or traced over existing images, and no outside art is used in it.
 
 - [`src/tileArt.ts`](src/tileArt.ts) draws the floor, walls, water, doors and stairs of each stage pixel by pixel when a floor is built, from rules for flagstones, bricks and ripples. It draws the traps and coffins the same way.
-- [`src/itemArt.ts`](src/itemArt.ts) holds the items, the chest, the campfire and the signs as rows of pixels. A script outside this repository drew them from lines and shapes and wrote out the rows.
+- [`src/itemArt.ts`](src/itemArt.ts) holds the items, the chest, the campfire and the signs as rows of pixels, and [`src/characterArt.ts`](src/characterArt.ts) holds the hero and the enemies the same way. A script outside this repository drew them from lines and shapes and wrote out the rows.
 - The code was written with Claude Code (Anthropic). The developer chose the look from sheets of drafts and gave the directions to change it.
 
 Whether copyright applies to work made with an AI tool is unsettled, so this repository claims nothing beyond this: to the extent any rights exist in this art, it is licensed under [MIT](LICENSE) like the code.

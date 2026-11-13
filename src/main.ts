@@ -1,7 +1,6 @@
 import ThorVG, { type Paint } from '@thorvg/webcanvas';
 // The package does not export this path, so it is imported by file path.
 import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
-import heroIcon from '../assets/icons/cathelineau/swordman.svg?raw';
 import { playAttackEffect } from './attackEffect';
 import { createDamageNumbers } from './damageNumbers';
 import {
@@ -119,7 +118,6 @@ import {
   GOLD_ICON,
   GOLD_PILES_PER_FLOOR,
   hideInChests,
-  MIMIC_ICON,
   pickMimicFloor,
   rollEquipment,
   rollThrownWeapons,
@@ -143,7 +141,6 @@ import {
   type Random,
 } from './random';
 import {
-  createCharacter,
   createCampfirePaint,
   createChest,
   createDamageNumber,
@@ -154,7 +151,9 @@ import {
   createSurpriseMark,
   createCentipedePart,
   createTargetedText,
-  createDummyEnemy,
+  createEnemyPaint,
+  createHero,
+  faceToward,
   createEnemyHealthBar,
   createItemPaint,
   createHeroHealthBar,
@@ -268,7 +267,6 @@ const canvas = new TVG.Canvas('#canvas', {
 fitCanvas(canvas);
 
 await playSplash(TVG, canvas);
-document.querySelector('footer')!.hidden = false;
 
 const waitButton = document.querySelector<HTMLButtonElement>('#wait')!;
 waitButton.hidden = false;
@@ -522,7 +520,7 @@ function createNecromancer(position: Point): Enemy {
     necromancerStats,
     position,
     false,
-    createDummyEnemy(TVG, 'necromancer'),
+    createEnemyPaint(TVG, 'necromancer'),
     createEnemyHealthBar(TVG, renderCanvas),
     createSleepMark(TVG),
     necromancer,
@@ -579,7 +577,7 @@ function createLevel() {
       stats,
       position,
       random() < ASLEEP_CHANCE,
-      createDummyEnemy(TVG, kind),
+      createEnemyPaint(TVG, kind),
       createEnemyHealthBar(TVG, renderCanvas),
       createSleepMark(TVG),
       kind === 'skeleton' ? archer : chaser,
@@ -630,7 +628,7 @@ function finishLevel(
       isFlammable: isFlammableTile,
       burnUp: burnUpTile,
     }),
-    hero: createCharacter(TVG, heroIcon),
+    hero: createHero(TVG),
     enemies,
     floorItems,
     signs,
@@ -1167,7 +1165,7 @@ function revealMimic(enemy: Enemy) {
     return;
   }
   roomView.remove(enemy.paint);
-  enemy.paint = createCharacter(TVG, MIMIC_ICON);
+  enemy.paint = createEnemyPaint(TVG, 'mimic');
   enemy.state = 'wandering';
   if (isInView(enemy.position)) {
     alertEnemy(enemy, heroPosition);
@@ -1350,6 +1348,7 @@ function leaveDoor(tile: Point) {
 function placeHero(tile: Point) {
   const previous = heroPosition;
   heroPosition = tile;
+  faceToward(hero, previous, tile);
   leaveDoor(previous);
   enterDoor(tile);
   roomView.place(hero, tile.x, tile.y);
@@ -1396,6 +1395,7 @@ function showEnemy(enemy: Enemy) {
 function placeEnemy(enemy: Enemy, tile: Point) {
   const previous = enemy.position;
   enemy.position = tile;
+  faceToward(enemy.paint, previous, tile);
   leaveDoor(previous);
   enterDoor(tile);
   updateVision();
@@ -1937,7 +1937,7 @@ function smashCoffin(coffin: Coffin, skipsTurn: boolean): Enemy | null {
     UNDEAD_KINDS[coffin.kind],
     position,
     false,
-    createDummyEnemy(TVG, coffin.kind),
+    createEnemyPaint(TVG, coffin.kind),
     createEnemyHealthBar(TVG, renderCanvas),
     createSleepMark(TVG),
     chaser,
@@ -2160,6 +2160,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
     messageLog.add(phrase('Something unseen attacked you.'), 'danger');
   }
 
+  faceToward(enemy.paint, attackerTile, heroPosition);
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, heroPosition), LUNGE_DISTANCE),
     isMiss: !isHit,
@@ -2495,6 +2496,7 @@ function runEnemyTurn(onDone: () => void) {
         }, ENEMY_ATTACK_DELAY_MS);
         break;
       case 'shoot':
+        faceToward(enemy.paint, enemy.position, heroPosition);
         showEnemy(enemy);
         showNoticeMark();
         // The same pause as before a blow, with input waiting too.
@@ -2587,6 +2589,7 @@ function playHeroAttack(enemy: Enemy) {
     Math.abs(enemy.position.y - attackerTile.y),
   );
 
+  faceToward(hero, attackerTile, enemy.position);
   finishAttackEffect = playAttackEffect({
     lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE / steps),
     isMiss: !isHit,
@@ -3150,6 +3153,7 @@ function throwItem(name: ItemName) {
     }),
     canPick: isInView,
     onSelect(tile) {
+      faceToward(hero, heroPosition, tile);
       const isWeapon = ITEMS[name].thrownDamage !== undefined;
       const { end } = traceTo(tile, isWeapon ? THROWN_WEAPON : THROWN, !ITEMS[name].potion);
       if (!takeFromBag(name)) {

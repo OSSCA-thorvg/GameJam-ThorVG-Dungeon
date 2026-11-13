@@ -1,4 +1,5 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
+import { CHARACTER_ART, type CharacterArt } from './characterArt';
 import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
 import { ART_PIXEL, drawTilePart, tileThemeOf, WALL_PIXELS, type TilePart } from './tileArt';
@@ -83,7 +84,10 @@ const TILE_HEIGHT = 32;
 
 const WALL_HEIGHT = WALL_PIXELS * ART_PIXEL;
 
+// A character is three quarters of a tile wide and high. Its art is 32 by 32 art pixels, so one of
+// its art pixels is 1.5 screen pixels, smaller than those of the tiles and items.
 const CHARACTER_SIZE = TILE_WIDTH * 0.75;
+const CHARACTER_PIXEL = CHARACTER_SIZE / 32;
 // Half of a character's height, above the floor.
 export const CHARACTER_WAIST_HEIGHT = CHARACTER_SIZE / 2;
 const ITEM_SIZE = TILE_WIDTH * 0.5;
@@ -209,18 +213,6 @@ const DAMAGE_NUMBER_COLORS: Record<DamageTarget, Color> = {
   heal: [120, 230, 120],
 };
 // Placeholder looks of each kind of enemy: its color, and its size against the hero.
-const ENEMY_LOOKS: Record<
-  EnemyKind | UndeadKind | 'ghost' | 'skeleton' | 'necromancer',
-  { color: Color; scale: number }
-> = {
-  weak: { color: [176, 112, 96], scale: 0.8 },
-  medium: { color: [104, 60, 116], scale: 1 },
-  strong: { color: [130, 50, 150], scale: 1.2 },
-  ghoul: { color: [128, 150, 112], scale: 1 },
-  ghost: { color: [176, 196, 220], scale: 1 },
-  skeleton: { color: [226, 220, 200], scale: 1 },
-  necromancer: { color: [112, 72, 150], scale: 1.2 },
-};
 // Placeholder colors of each effect, for its name over a character and its icon on the screen.
 export const STATUS_COLORS: Record<StatusName, Color> = {
   haste: [120, 230, 120],
@@ -835,17 +827,51 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
   };
 }
 
-// The picture's bottom center stands on the scene's local origin.
-// It is a Scene because scene effects, such as the hit flash, only apply to scenes.
-export function createCharacter(TVG: ThorVGNamespace, svg: string, size = CHARACTER_SIZE): Scene {
+// A picture whose bottom center stands on the paint's local origin.
+function createStandingPicture(TVG: ThorVGNamespace, svg: string, size: number): Paint {
   const picture = new TVG.Picture();
   picture.load(svg, { type: 'svg' });
   picture.size(size, size);
   picture.origin(0.5, 1);
+  return picture;
+}
 
+// The pictures of each character facing left and facing right, of which one is shown.
+const facings = new WeakMap<Paint, { left: Paint; right: Paint }>();
+
+// A character standing on the scene's local origin, facing one way at first. It is a Scene because
+// scene effects, such as the hit flash, only apply to scenes.
+function createCharacter(
+  TVG: ThorVGNamespace,
+  art: CharacterArt,
+  facing: 'left' | 'right' = 'left',
+  size = art.pixels * CHARACTER_PIXEL,
+): Scene {
+  const left = createStandingPicture(TVG, art.left, size);
+  const right = createStandingPicture(TVG, art.right, size);
+  left.visible(facing === 'left');
+  right.visible(facing === 'right');
   const scene = new TVG.Scene();
-  scene.add(picture);
+  scene.add(left);
+  scene.add(right);
+  facings.set(scene, { left, right });
   return scene;
+}
+
+// Turns a character to face the way from one tile to another on the screen. A move straight up or
+// down the screen keeps the way it faced.
+export function faceToward(paint: Paint, from: Point, to: Point): void {
+  const facing = facings.get(paint);
+  const screenX = to.x - from.x - (to.y - from.y);
+  if (!facing || screenX === 0) {
+    return;
+  }
+  facing.left.visible(screenX < 0);
+  facing.right.visible(screenX > 0);
+}
+
+export function createHero(TVG: ThorVGNamespace): Scene {
+  return createCharacter(TVG, CHARACTER_ART.hero, 'right');
 }
 
 // A chest is 24 by 24 art pixels, about as big as a coffin. It stands like a character, with the
@@ -853,7 +879,9 @@ export function createCharacter(TVG: ThorVGNamespace, svg: string, size = CHARAC
 const CHEST_PIXELS = 24;
 
 export function createChest(TVG: ThorVGNamespace, svg: string): Scene {
-  return createCharacter(TVG, svg, CHEST_PIXELS * ART_PIXEL);
+  const scene = new TVG.Scene();
+  scene.add(createStandingPicture(TVG, svg, CHEST_PIXELS * ART_PIXEL));
+  return scene;
 }
 
 // An item lying on the tile, with its lower part on the paint's local origin.
@@ -878,46 +906,29 @@ export function createCampfirePaint(TVG: ThorVGNamespace, svg: string): Paint {
   return picture;
 }
 
-// A placeholder enemy with its feet on the scene's local origin.
-// It is a Scene because scene effects, such as the hit flash, only apply to scenes.
-// Placeholder look of the giant centipede: a low, round body segment, and a head with eyes that is
-// a little bigger.
-const CENTIPEDE_BODY: Color = [150, 70, 40];
-const CENTIPEDE_HEAD: Color = [185, 60, 40];
-const CENTIPEDE_EYE: Color = [250, 230, 90];
-
 export function createCentipedePart(TVG: ThorVGNamespace, isHead: boolean): Scene {
-  const size = CHARACTER_SIZE * (isHead ? 1.15 : 1);
-  const scene = new TVG.Scene();
-  const body = new TVG.Shape();
-  body.appendCircle(0, -size * 0.3, size * 0.38, size * 0.3);
-  body.fill(...(isHead ? CENTIPEDE_HEAD : CENTIPEDE_BODY));
-  scene.add(body);
-  if (isHead) {
-    for (const side of [-1, 1]) {
-      const eye = new TVG.Shape();
-      eye.appendCircle(side * size * 0.17, -size * 0.38, size * 0.07);
-      eye.fill(...CENTIPEDE_EYE);
-      scene.add(eye);
-    }
-  }
-  return scene;
+  return createCharacter(TVG, CHARACTER_ART[isHead ? 'centipede-head' : 'centipede-body']);
 }
 
-export function createDummyEnemy(
-  TVG: ThorVGNamespace,
-  kind: EnemyKind | UndeadKind | 'ghost' | 'skeleton' | 'necromancer',
-): Scene {
-  const { color, scale } = ENEMY_LOOKS[kind];
-  const size = CHARACTER_SIZE * scale;
-  const shape = new TVG.Shape();
-  shape.appendRect(-size / 4, -size * 0.6, size / 2, size * 0.6);
-  shape.appendCircle(0, -size * 0.8, size / 5);
-  shape.fill(...color);
+type EnemyLook = EnemyKind | UndeadKind | 'ghost' | 'skeleton' | 'necromancer' | 'mimic';
 
-  const scene = new TVG.Scene();
-  scene.add(shape);
-  return scene;
+const ENEMY_ART: Record<EnemyLook, CharacterArt> = {
+  weak: CHARACTER_ART.rat,
+  medium: CHARACTER_ART.crab,
+  strong: CHARACTER_ART.bat,
+  ghoul: CHARACTER_ART.ghoul,
+  ghost: CHARACTER_ART.ghost,
+  skeleton: CHARACTER_ART.skeleton,
+  necromancer: CHARACTER_ART.necromancer,
+  mimic: CHARACTER_ART.mimic,
+};
+
+// An enemy standing on the scene's local origin.
+export function createEnemyPaint(TVG: ThorVGNamespace, look: EnemyLook): Scene {
+  // A mimic is as big as the chest it passed for.
+  return look === 'mimic'
+    ? createCharacter(TVG, ENEMY_ART.mimic, 'left', CHEST_PIXELS * ART_PIXEL)
+    : createCharacter(TVG, ENEMY_ART[look]);
 }
 
 // Lays a color over a character, or takes it away.

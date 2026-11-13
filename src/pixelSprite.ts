@@ -4,6 +4,37 @@ import { ART_PIXEL } from './tileArt';
 
 type Color = [r: number, g: number, b: number];
 
+// Placeholder values, set by eye against the floor. The items and characters were drawn more
+// saturated and with more contrast than the tiles, so on the floor they stood out from them. Each
+// color loses part of its saturation, toward its own luma, and then part of its distance from a
+// middle value near the lighter tiles.
+const SATURATION = 0.7;
+const CONTRAST = 0.85;
+const MIDDLE = 110;
+
+// Luma with the Rec. 601 weights.
+const lumaOf = ([r, g, b]: Color) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+export function muted(color: Color): Color {
+  const luma = lumaOf(color);
+  return color.map((value) => {
+    const desaturated = luma + (value - luma) * SATURATION;
+    return Math.min(255, Math.max(0, Math.round(MIDDLE + (desaturated - MIDDLE) * CONTRAST)));
+  }) as Color;
+}
+
+// A palette with every color muted, except the colors of things that give off light.
+export const mutedPalette = (
+  palette: Record<string, Color>,
+  glowing: string[],
+): Record<string, Color> =>
+  Object.fromEntries(
+    Object.entries(palette).map(([key, color]) => [
+      key,
+      glowing.includes(key) ? color : muted(color),
+    ]),
+  );
+
 const hex = (color: Color) =>
   `#${color.map((value) => value.toString(16).padStart(2, '0')).join('')}`;
 
