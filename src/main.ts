@@ -12,6 +12,7 @@ import {
   playShatter,
   playThrow,
 } from './throwEffect';
+import { drawCoffin, drawTrap } from './tileArt';
 import { THROWN, THROWN_WEAPON, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   alertEnemy,
@@ -143,6 +144,7 @@ import {
 } from './random';
 import {
   createCharacter,
+  createChest,
   createDamageNumber,
   createEvadeText,
   createNoticeMark,
@@ -151,8 +153,6 @@ import {
   createSurpriseMark,
   createCentipedePart,
   createTargetedText,
-  createTrapPaint,
-  createCoffinPaint,
   createDummyEnemy,
   createEnemyHealthBar,
   createItemPaint,
@@ -477,7 +477,7 @@ function pickSecondStageKind(random: Random) {
 // Mimic.generatePrize() of Shattered Pixel Dungeon picks from.
 function createMimic(position: Point, random: Random): Enemy {
   const look = new TVG.Scene();
-  look.add(createItemPaint(TVG, CHEST_ICON));
+  look.add(createChest(TVG, CHEST_ICON));
   const mimic = createEnemy(
     mimicStats(currentStage()),
     position,
@@ -1105,13 +1105,13 @@ function dropItem(name: ItemName, position: Point) {
 }
 
 function dropThing(thing: GroundThing, position: Point) {
-  const icon =
-    thing.kind === 'item'
-      ? potionLore.lookOf(thing.name).icon
-      : thing.kind === 'gold'
-        ? GOLD_ICON
-        : CHEST_ICON;
-  const paint = createItemPaint(TVG, icon);
+  const paint =
+    thing.kind === 'chest'
+      ? createChest(TVG, CHEST_ICON)
+      : createItemPaint(
+          TVG,
+          thing.kind === 'item' ? potionLore.lookOf(thing.name).icon : GOLD_ICON,
+        );
   roomView.place(paint, position.x, position.y);
   groundItems.push({ thing, position, paint });
   enterDoor(position);
@@ -1680,7 +1680,7 @@ function showTrap(trap: Trap) {
   if (trap.paint) {
     roomView.remove(trap.paint);
   }
-  trap.paint = trap.state === 'hidden' ? null : createTrapPaint(TVG, trap.kind, trap.state);
+  trap.paint = trap.state === 'hidden' ? null : drawTrap(TVG, trap.kind, trap.state);
   if (trap.paint) {
     roomView.placeOnFloor(trap.paint, trap.position.x, trap.position.y);
   }
@@ -1912,7 +1912,7 @@ function showCoffin(coffin: Coffin) {
   if (coffin.paint) {
     roomView.remove(coffin.paint);
   }
-  coffin.paint = createCoffinPaint(TVG, chantedCoffins.includes(coffin));
+  coffin.paint = drawCoffin(TVG, chantedCoffins.includes(coffin));
   roomView.place(coffin.paint, coffin.position.x, coffin.position.y);
 }
 

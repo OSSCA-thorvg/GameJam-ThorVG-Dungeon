@@ -463,3 +463,123 @@ export function drawTilePart(
   }
   return raster.toScene(TVG, center);
 }
+
+// Placeholder colors of a trap's plate and its edge, red while it is armed and gray once spent.
+const TRAP_COLORS = {
+  known: { plate: [74, 40, 40], edge: [210, 90, 70], mark: [238, 200, 150], hole: [255, 90, 70] },
+  spent: { plate: [60, 62, 70], edge: [112, 114, 122], mark: [40, 42, 48], hole: [70, 72, 80] },
+} satisfies Record<string, Record<string, Color>>;
+const SPIKE_LIGHT: Color = [214, 218, 226];
+const SPIKE_SHADE: Color = [150, 154, 164];
+const SPIKE_HOLE: Color = [36, 38, 44];
+// The crosshair of an arrow trap, centered on the plate: a circle on the floor, which is twice as
+// wide as it is high on the screen, with ticks around it and a dot in the middle.
+const ARROW_MARK = [
+  '..........#..........',
+  '.....................',
+  '.......#######.......',
+  '.....##.......##.....',
+  '....#...........#....',
+  '###.#.....o.....#.###',
+  '....#...........#....',
+  '.....##.......##.....',
+  '.......#######.......',
+  '.....................',
+  '..........#..........',
+];
+
+// The pressure plate of a trap on a tile's floor, centered on the paint's local origin, with a mark
+// of its kind. An armed spike trap shows its spikes and a spent one their holes, and an arrow trap
+// shows a crosshair.
+export function drawTrap(
+  TVG: ThorVGNamespace,
+  kind: 'spike' | 'arrow',
+  state: 'known' | 'spent',
+): Scene {
+  const raster = createRaster();
+  const colors = TRAP_COLORS[state];
+  raster.fill(diamond(0, 15), () => colors.edge);
+  raster.fill(diamond(0, 13), () => colors.plate);
+  if (kind === 'spike') {
+    for (const { x, y } of [
+      { x: -5, y: 0 },
+      { x: 0, y: 3 },
+      { x: 5, y: 0 },
+    ]) {
+      if (state === 'known') {
+        const spike = [
+          { x: x - 2, y: y + 1 },
+          { x: x + 2, y: y + 1 },
+          { x, y: y - 8 },
+        ];
+        raster.fill(spike, (px) => (px < x ? SPIKE_SHADE : SPIKE_LIGHT));
+      } else {
+        raster.fill(
+          [
+            { x: x - 2, y },
+            { x: x + 2, y },
+            { x: x + 2, y: y + 2 },
+            { x: x - 2, y: y + 2 },
+          ],
+          () => SPIKE_HOLE,
+        );
+      }
+    }
+  } else {
+    ARROW_MARK.forEach((row, y) => {
+      [...row].forEach((pixel, x) => {
+        if (pixel !== '.') {
+          raster.set(x - 10, y - 5, pixel === 'o' ? colors.hole : colors.mark);
+        }
+      });
+    });
+  }
+  return raster.toScene(TVG, { x: 0, y: 0 });
+}
+
+// Placeholder colors of a wooden coffin: its lid and the cross on it, its two sides, and the dark
+// inside that shows when its lid is pushed aside.
+const COFFIN_LID: Color = [108, 86, 66];
+const COFFIN_CROSS: Color = [150, 126, 98];
+const COFFIN_LEFT: Color = [74, 56, 44];
+const COFFIN_RIGHT: Color = [48, 36, 28];
+const COFFIN_INSIDE: Color = [16, 12, 14];
+// Half its length along the map's x axis and half its width along its y axis, as fractions of a
+// tile, and its height in art pixels.
+const COFFIN_HALF_LENGTH = 0.46;
+const COFFIN_HALF_WIDTH = 0.2;
+const COFFIN_HEIGHT = 6;
+// How high the lid of a waking coffin is lifted, in art pixels.
+const COFFIN_LID_LIFT = 2;
+
+// A wooden coffin standing on a tile's floor, centered on the paint's local origin. A coffin whose
+// dead is waking has its lid pushed aside, over the dark inside.
+export function drawCoffin(TVG: ThorVGNamespace, isAwake: boolean): Scene {
+  const raster = createRaster();
+  // A point on the floor, along the map's axes in tiles from the center, raised by a height.
+  const at = (u: number, v: number, lift = 0): Point => ({
+    x: (u - v) * 16,
+    y: (u + v) * 8 - lift,
+  });
+  const a = COFFIN_HALF_LENGTH;
+  const b = COFFIN_HALF_WIDTH;
+  const h = COFFIN_HEIGHT;
+  const box = (lift: number) => [at(-a, -b, lift), at(a, -b, lift), at(a, b, lift), at(-a, b, lift)];
+  const [, baseRight, baseNear, baseLeft] = box(0);
+  const [, topRight, topNear, topLeft] = box(h);
+  // The side facing the viewer on the left runs along the edge y = +b, and the right one along
+  // x = +a.
+  raster.fill([baseLeft, baseNear, topNear, topLeft], () => COFFIN_LEFT);
+  raster.fill([baseRight, baseNear, topNear, topRight], () => COFFIN_RIGHT);
+  if (!isAwake) {
+    raster.fill(box(h), () => COFFIN_LID);
+    raster.fill([at(-0.34, -0.03, h), at(0.34, -0.03, h), at(0.34, 0.03, h), at(-0.34, 0.03, h)], () => COFFIN_CROSS);
+    raster.fill([at(-0.1, -0.15, h), at(0, -0.15, h), at(0, 0.15, h), at(-0.1, 0.15, h)], () => COFFIN_CROSS);
+  } else {
+    const lid = h + COFFIN_LID_LIFT;
+    raster.fill(box(h), () => COFFIN_INSIDE);
+    raster.fill([at(-0.1, -b, lid), at(a, -b, lid), at(a, b, lid), at(-0.1, b, lid)], () => COFFIN_LID);
+    raster.fill([at(-0.1, b, lid), at(a, b, lid), at(a, b, h), at(-0.1, b, h)], () => COFFIN_LEFT);
+  }
+  return raster.toScene(TVG, { x: 0, y: 0 });
+}

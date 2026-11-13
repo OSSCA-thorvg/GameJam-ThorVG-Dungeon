@@ -837,15 +837,23 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
 
 // The picture's bottom center stands on the scene's local origin.
 // It is a Scene because scene effects, such as the hit flash, only apply to scenes.
-export function createCharacter(TVG: ThorVGNamespace, svg: string): Scene {
+export function createCharacter(TVG: ThorVGNamespace, svg: string, size = CHARACTER_SIZE): Scene {
   const picture = new TVG.Picture();
   picture.load(svg, { type: 'svg' });
-  picture.size(CHARACTER_SIZE, CHARACTER_SIZE);
+  picture.size(size, size);
   picture.origin(0.5, 1);
 
   const scene = new TVG.Scene();
   scene.add(picture);
   return scene;
+}
+
+// A chest is 24 by 24 art pixels, about as big as a coffin. It stands like a character, with the
+// bottom of its picture on the scene's local origin.
+const CHEST_PIXELS = 24;
+
+export function createChest(TVG: ThorVGNamespace, svg: string): Scene {
+  return createCharacter(TVG, svg, CHEST_PIXELS * ART_PIXEL);
 }
 
 // An item lying on the tile, with its lower part on the paint's local origin.
@@ -923,95 +931,7 @@ export function createSearchPaint(TVG: ThorVGNamespace): Shape {
   return shape;
 }
 
-const TRAP_PLATE_SCALE = 0.6;
-const TRAP_COLORS = {
-  known: { fill: [86, 48, 48, 255], edge: [210, 90, 70, 255] },
-  spent: { fill: [70, 72, 80, 255], edge: [110, 112, 120, 255] },
-} as const;
-
-// The pressure plate of a trap on a tile's floor, centered on the paint's local origin, with spikes
-// or an arrow on it by the kind. A spent plate is gray.
-export function createTrapPaint(
-  TVG: ThorVGNamespace,
-  kind: 'spike' | 'arrow',
-  state: 'known' | 'spent',
-): Scene {
-  const halfWidth = (TILE_WIDTH / 2) * TRAP_PLATE_SCALE;
-  const halfHeight = (TILE_HEIGHT / 2) * TRAP_PLATE_SCALE;
-  const { fill, edge } = TRAP_COLORS[state];
-  const edgeColor: Color = [edge[0], edge[1], edge[2]];
-
-  const plate = new TVG.Shape()
-    .moveTo(0, -halfHeight)
-    .lineTo(halfWidth, 0)
-    .lineTo(0, halfHeight)
-    .lineTo(-halfWidth, 0)
-    .close();
-  plate.fill(fill[0], fill[1], fill[2], fill[3]);
-  plate.stroke({ width: 1.5, color: [...edgeColor, 255], join: TVG.StrokeJoin.Round });
-
-  const mark = new TVG.Shape();
-  if (kind === 'spike') {
-    for (const x of [-7, 0, 7]) {
-      mark.moveTo(x - 3.5, 3).lineTo(x, -4).lineTo(x + 3.5, 3).close();
-    }
-    mark.fill(...edgeColor, 255);
-  } else {
-    mark.moveTo(-9, 0).lineTo(5, 0);
-    mark.moveTo(10, 0).lineTo(4, -4).lineTo(4, 4).close();
-    mark.fill(...edgeColor, 255);
-    mark.stroke({ width: 1.5, color: [...edgeColor, 255], join: TVG.StrokeJoin.Round });
-  }
-
-  const scene = new TVG.Scene();
-  scene.add(plate);
-  scene.add(mark);
-  return scene;
-}
-
 const ARROW_COLOR: Color = [214, 184, 132];
-
-// Placeholder colors of a wooden coffin: its lid, and its two sides.
-const COFFIN_TOP: Color = [118, 82, 52];
-const COFFIN_TOP_AWAKE: Color = [170, 64, 56];
-const COFFIN_LEFT: Color = [84, 58, 38];
-const COFFIN_RIGHT: Color = [62, 43, 29];
-// A coffin's half length along the map's x axis and half width along its y axis, in tiles, and its
-// height in pixels.
-const COFFIN_HALF_LENGTH = 0.44;
-const COFFIN_HALF_WIDTH = 0.26;
-const COFFIN_HEIGHT = 12;
-
-// A wooden coffin standing on a tile's floor, centered on the paint's local origin. A coffin that
-// is being chanted over has a red lid.
-export function createCoffinPaint(TVG: ThorVGNamespace, isAwake = false): Scene {
-  const corner = (x: number, y: number, lift = 0): Point => ({
-    x: ((x - y) * TILE_WIDTH) / 2,
-    y: ((x + y) * TILE_HEIGHT) / 2 - lift,
-  });
-  const a = COFFIN_HALF_LENGTH;
-  const b = COFFIN_HALF_WIDTH;
-  const h = COFFIN_HEIGHT;
-  const scene = new TVG.Scene();
-  const face = (points: Point[], color: Color) => {
-    const shape = new TVG.Shape().moveTo(points[0].x, points[0].y);
-    for (const point of points.slice(1)) {
-      shape.lineTo(point.x, point.y);
-    }
-    shape.close().fill(...color, 255);
-    scene.add(shape);
-  };
-
-  // The side facing the viewer on the left runs along the edge y = +b, and the right one along
-  // x = +a.
-  face([corner(-a, b), corner(a, b), corner(a, b, h), corner(-a, b, h)], COFFIN_LEFT);
-  face([corner(a, b), corner(a, -b), corner(a, -b, h), corner(a, b, h)], COFFIN_RIGHT);
-  face(
-    [corner(-a, -b, h), corner(a, -b, h), corner(a, b, h), corner(-a, b, h)],
-    isAwake ? COFFIN_TOP_AWAKE : COFFIN_TOP,
-  );
-  return scene;
-}
 
 // An arrow in flight, pointing right and centered on the paint's local origin.
 export function createArrowPaint(TVG: ThorVGNamespace): Shape {

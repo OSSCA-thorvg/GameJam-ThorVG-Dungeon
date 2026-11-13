@@ -1,4 +1,5 @@
 import { phrase, type Phrase } from './i18n';
+import { flaskIcon } from './itemArt';
 import { ITEMS, itemDescription, type ItemName, type PotionName } from './items';
 import { shuffle, type Random } from './random';
 import { STATUS_COLORS } from './render';
@@ -130,17 +131,18 @@ const markStyled = ({ icon, color: [r, g, b] }: PotionMark) =>
     )
     .replaceAll('class="fill"', `fill="rgb(${r},${g},${b})"`);
 
-// A flask of the color of its liquid. Once the potion is known, its mark sits in a corner.
-function potionIcon([r, g, b]: Color, mark?: PotionMark): string {
-  const badge = mark
-    ? `<circle cx="19" cy="5" r="5" fill="#1e2027" stroke="#6a6e7c" stroke-width="0.7"/>
-    <g transform="translate(15.500 1.500) scale(0.700)">${markStyled(mark)}</g>`
-    : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-    <path fill="#b9c0cc" d="M9 2H15V4H14V9L19.500 18.500Q20.500 21 18 21H6Q3.500 21 4.500 18.500L10 9V4H9Z"/>
-    <path fill="rgb(${r},${g},${b})" d="M8.300 13H15.700L18.600 18.800Q19 20 17.500 20H6.500Q5 20 5.400 18.800Z"/>
-    ${badge}
-  </svg>`;
+// A flask of the color of its liquid. Once the potion is known, its mark sits in a corner. The
+// badge is drawn in a 24 by 24 box, scaled to the 16 art pixels of the flask.
+function potionIcon(color: Color, mark?: PotionMark): string {
+  const flask = flaskIcon(color);
+  if (!mark) {
+    return flask;
+  }
+  const badge = `<g transform="scale(${16 / 24})" shape-rendering="auto">
+    <circle cx="19" cy="5" r="5" fill="#1e2027" stroke="#6a6e7c" stroke-width="0.7"/>
+    <g transform="translate(15.500 1.500) scale(0.700)">${markStyled(mark)}</g>
+  </g>`;
+  return flask.replace('</svg>', `${badge}</svg>`);
 }
 
 // How an item looks to the player. A potion shows only its color until it is identified.

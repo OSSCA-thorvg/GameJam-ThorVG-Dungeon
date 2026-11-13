@@ -1,3 +1,4 @@
+import { ITEM_ICONS } from './itemArt';
 import { createStartingEquipment, createStartingInventory, type ItemName } from './items';
 import type { GeneratedMap } from './mapgen';
 import { parseRoom, type Point } from './room';
@@ -34,13 +35,7 @@ const SIGN_TEXTS: Record<string, string> = {
     'area around you, which takes a turn and may uncover something useful.',
 };
 
-export const SIGN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <path fill="#6b4a2a" d="M11 11H13V22H11Z"/>
-  <path fill="#a8763e" d="M3 3H21V12H3Z"/>
-  <path fill="#7a5030" d="M3 11H21V12.500H3Z"/>
-  <path fill="#5c3b22" d="M6 5.500H18V6.500H6Z"/>
-  <path fill="#5c3b22" d="M6 8H15V9H6Z"/>
-</svg>`;
+export const SIGN_ICON = ITEM_ICONS.sign;
 
 // Whether this browser already went down from the surface once, so later runs start on floor 1.
 const FINISHED_KEY = 'thorvg-dungeon.surface-finished';
