@@ -1,5 +1,5 @@
 import { LANGUAGES, type Language } from './i18n';
-import { availableUiScales, uiScaleFor, type Settings } from './settings';
+import { availableUiScales, uiScaleFor, windowShortSide, type Settings } from './settings';
 
 export interface SettingsPanelOptions {
   getSettings(): Settings;
@@ -36,11 +36,11 @@ export function createSettingsPanel({
   const refresh = () => {
     language.value = getSettings().language;
     uiScale.replaceChildren(
-      ...availableUiScales(window.innerWidth).map(
+      ...availableUiScales(windowShortSide()).map(
         (scale) => new Option(`${scale * 100}%`, String(scale)),
       ),
     );
-    uiScale.value = String(uiScaleFor(getSettings(), window.innerWidth));
+    uiScale.value = String(uiScaleFor(getSettings(), windowShortSide()));
     sfxVolume.value = String(Math.round(getSettings().sfxVolume * 100));
     musicVolume.value = String(Math.round(getSettings().musicVolume * 100));
     showFill(sfxVolume);

@@ -15,19 +15,22 @@ export interface Settings {
 // The steps of display scaling in Windows, from 100% to 200%.
 const UI_SCALES = [1, 1.25, 1.5, 1.75, 2];
 
-// A heuristic, not a measurement of the UI: at 100% the UI was seen to fit a 360px wide phone
-// screen. A UI scale is offered only when the window keeps that much width for the UI. Change this
-// when the UI no longer fits in 360px.
-const MIN_UI_WIDTH = 360;
+// A heuristic, not a measurement of the UI: at 100% the UI was seen to fit a 360px phone screen,
+// held upright (360 by 740) and on its side (740 by 360). A UI scale is offered only when the
+// shorter side of the window keeps that much room for the UI. Change this when the UI no longer
+// fits in 360px.
+const MIN_UI_SIDE = 360;
 
-export function availableUiScales(windowWidth: number): number[] {
-  return UI_SCALES.filter((scale) => scale === 1 || windowWidth / scale >= MIN_UI_WIDTH);
+export const windowShortSide = () => Math.min(window.innerWidth, window.innerHeight);
+
+export function availableUiScales(shortSide: number): number[] {
+  return UI_SCALES.filter((scale) => scale === 1 || shortSide / scale >= MIN_UI_SIDE);
 }
 
-// The UI scale in use: the chosen one, or the largest available while the window is too narrow for
+// The UI scale in use: the chosen one, or the largest available while the window is too small for
 // the chosen one.
-export function uiScaleFor(settings: Settings, windowWidth: number): number {
-  const available = availableUiScales(windowWidth);
+export function uiScaleFor(settings: Settings, shortSide: number): number {
+  const available = availableUiScales(shortSide);
   return available.includes(settings.uiScale) ? settings.uiScale : available[available.length - 1];
 }
 

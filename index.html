@@ -32,6 +32,11 @@
       body {
         -webkit-user-select: none;
         user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
       }
       html,
       body {
@@ -62,7 +67,11 @@
       #status {
         top: 88px;
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
+        /* Keeps 100px clear on the right: 12px of margin, and 76px for the floor label that drops
+           under the buttons on a narrow screen. */
+        max-width: calc(100vw / var(--ui-scale, 1) - 100px);
         /* So that hovering an icon shows its name. */
         pointer-events: auto;
       }
@@ -112,24 +121,45 @@
         text-shadow: 0 1px 2px #000;
         pointer-events: none;
       }
+      /* The hero health bar on the canvas ends about 214px from the left, so this block keeps right
+         of 218px. When the floor label does not fit beside the buttons, it wraps under them. The row
+         runs in reverse so that the wrapped label stays at the right edge, and order puts the
+         label back at the left when it fits. */
       #top-right {
         position: fixed;
         top: 6px;
         right: 12px;
         display: flex;
+        flex-direction: row-reverse;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 10px;
+        column-gap: 10px;
+        max-width: calc(100vw / var(--ui-scale, 1) - 230px);
       }
       #floor {
+        order: 3;
         font: 22px 'Galmuri11', sans-serif;
         color: #c8cad2;
       }
+      #help-button {
+        order: 2;
+      }
+      #settings-button {
+        order: 1;
+      }
+      /* Stops 8px short of the bag button, so on a narrow screen its buttons shrink instead of going
+         under it. */
       #bottom-left {
         position: fixed;
         left: 12px;
         bottom: 28px;
         display: flex;
         gap: 8px;
+        max-width: calc(100vw / var(--ui-scale, 1) - 128px);
+      }
+      #bottom-left button {
+        flex: 0 1 auto;
+        min-width: 0;
       }
       #inventory-button {
         position: fixed;
@@ -157,7 +187,11 @@
       #log-panel,
       #settings-panel,
       #dialog-panel {
+        display: flex;
+        flex-direction: column;
         width: min(340px, calc(100vw / var(--ui-scale, 1) - 24px));
+        max-height: calc(100vh / var(--ui-scale, 1) - 24px);
+        max-height: calc(100dvh / var(--ui-scale, 1) - 24px);
         box-sizing: border-box;
         padding: 12px;
         font: 22px 'Galmuri11', sans-serif;
@@ -165,10 +199,19 @@
         border: 8px solid transparent;
         border-image: var(--window) 4 fill / 8px;
       }
+      /* Everything under the header, which scrolls on a screen too short for the panel while the
+         header and its close button stay in view. */
+      .panel-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
       #inventory-header,
       #log-header,
       #settings-header,
       #dialog-header {
+        flex: none;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -181,7 +224,10 @@
         width: min(720px, calc(100vw / var(--ui-scale, 1) - 24px));
       }
       #log-lines {
-        height: 60vh;
+        flex: 0 1 auto;
+        min-height: 0;
+        height: calc(60vh / var(--ui-scale, 1));
+        height: calc(60dvh / var(--ui-scale, 1));
         overflow-y: scroll;
         font-size: 22px;
         line-height: 1.5;
@@ -216,34 +262,40 @@
          thumb. A scroll bar takes no border image, so the thumb is drawn with a border and inset
          shadows in the colors of a button in uiArt.ts. Firefox has no way to style the parts, so
          it gets the colors only. */
-      #log-lines::-webkit-scrollbar {
+      #log-lines::-webkit-scrollbar,
+      .panel-body::-webkit-scrollbar {
         width: 16px;
       }
-      #log-lines::-webkit-scrollbar-track {
+      #log-lines::-webkit-scrollbar-track,
+      .panel-body::-webkit-scrollbar-track {
         border: 2px solid #15161c;
         background: #23242c;
       }
-      #log-lines::-webkit-scrollbar-thumb {
+      #log-lines::-webkit-scrollbar-thumb,
+      .panel-body::-webkit-scrollbar-thumb {
         border: 2px solid #15161c;
         background: #2c2e36;
         box-shadow:
           inset 2px 2px 0 #5a5e6c,
           inset -2px -2px 0 #1c1d24;
       }
-      #log-lines::-webkit-scrollbar-thumb:hover {
+      #log-lines::-webkit-scrollbar-thumb:hover,
+      .panel-body::-webkit-scrollbar-thumb:hover {
         background: #3a3e4a;
         box-shadow:
           inset 2px 2px 0 #7a7e8e,
           inset -2px -2px 0 #1c1d24;
       }
-      #log-lines::-webkit-scrollbar-thumb:active {
+      #log-lines::-webkit-scrollbar-thumb:active,
+      .panel-body::-webkit-scrollbar-thumb:active {
         background: #24262e;
         box-shadow:
           inset 2px 2px 0 #1c1d24,
           inset -2px -2px 0 #5a5e6c;
       }
       @supports (-moz-appearance: none) {
-        #log-lines {
+        #log-lines,
+        .panel-body {
           scrollbar-color: #6a6e7c #23242c;
         }
       }
@@ -408,16 +460,20 @@
       }
       /* Three tiles a row, each an icon centered in a row as tall as the largest icon (64px, see
          dialog.ts), over its label. */
+      /* minmax(0, 1fr) lets a column be narrower than its label, as on a phone, where Korean labels
+         break at spaces only. */
       #dialog-actions.grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
       #dialog-actions.grid .dialog-action {
         display: grid;
         grid-template-rows: 64px auto;
         place-items: center;
         gap: 6px;
+        padding: 8px 4px;
         text-align: center;
+        word-break: keep-all;
       }
       .dialog-action-icon {
         image-rendering: pixelated;
@@ -524,10 +580,16 @@
         display: flex;
         gap: 8px;
       }
+      /* Below the top buttons and the floor label that may wrap under them, 100px from the top.
+         max-content keeps the prompt from being squeezed into the half of the screen right of its
+         left edge, and max-width keeps it inside a narrow screen, where its text wraps. */
       #target-prompt {
         position: fixed;
-        top: 48px;
+        top: 100px;
         left: 50%;
+        width: max-content;
+        max-width: calc(100vw / var(--ui-scale, 1) - 24px);
+        box-sizing: border-box;
         display: flex;
         align-items: center;
         gap: 12px;
@@ -546,8 +608,10 @@
         white-space: pre-line;
       }
       #target-prompt button {
+        flex: none;
         min-height: 36px;
         padding: 0 12px;
+        white-space: nowrap;
         font: 22px 'Galmuri11', sans-serif;
       }
       #game-over {
@@ -558,6 +622,9 @@
         align-items: center;
         justify-content: center;
         gap: 16px;
+        overflow-y: auto;
+        justify-content: center;
+        justify-content: safe center;
         background: rgb(0 0 0 / 60%);
         font: 33px 'Galmuri11', sans-serif;
         color: #e8e8ec;
@@ -574,6 +641,8 @@
       }
       /* The emblem over the title of the clear screen (emblemArt.ts). */
       #end-emblem {
+        max-width: calc(24dvh / var(--ui-scale, 1));
+        height: auto;
         image-rendering: pixelated;
       }
       #end-emblem[hidden] {
@@ -589,7 +658,7 @@
         word-break: keep-all;
       }
       #game-over-text {
-        max-width: min(520px, calc(100vw - 32px));
+        max-width: min(520px, calc(100vw / var(--ui-scale, 1) - 32px));
         margin: 0;
         font: 22px/1.5 'Galmuri11', sans-serif;
         text-align: center;
@@ -597,7 +666,7 @@
       }
       /* What the run came to, told in one sentence. */
       #run-summary {
-        max-width: min(520px, calc(100vw - 32px));
+        max-width: min(520px, calc(100vw / var(--ui-scale, 1) - 32px));
         margin: 0;
         font: 22px/1.6 'Galmuri11', sans-serif;
         text-align: center;
@@ -622,8 +691,10 @@
         flex-direction: column;
         align-items: flex-start;
         justify-content: center;
+        justify-content: safe center;
         gap: 14px;
-        padding-left: max(24px, 8vw);
+        padding-left: max(24px, calc(8vw / var(--ui-scale, 1)));
+        overflow-y: auto;
         color: #e8e8ec;
       }
       #main-menu[hidden] {
@@ -656,7 +727,12 @@
       /* The title drawn as pixel art (titleArt.ts), which replaces the text once it is ready. */
       #main-menu h1 img {
         display: block;
-        max-width: calc(100vw - 32px);
+        /* The height limit keeps the title and the buttons on a short screen, the aspect ratio
+           being set by mainMenu.ts. */
+        max-width: min(
+          calc(100vw / var(--ui-scale, 1) - 32px),
+          calc(30dvh / var(--ui-scale, 1) * var(--aspect, 100))
+        );
         height: auto;
         image-rendering: pixelated;
       }
@@ -697,11 +773,15 @@
         cursor: pointer;
         touch-action: manipulation;
       }
-      :is(#wait, #examine, #log-button, #inventory-button, #settings-button, #help-button,
-        #inventory-close, #log-close, #settings-close, #dialog-close, #main-menu button,
-        #game-over button, #target-prompt button, #quit-to-menu, .dialog-action,
-        #inventory-details button):hover:not(:disabled) {
-        border-image-source: var(--button-hover);
+      /* A touch screen has no pointer to hover with, and keeps the hover look on the button it last
+         touched. */
+      @media (hover: hover) {
+        :is(#wait, #examine, #log-button, #inventory-button, #settings-button, #help-button,
+          #inventory-close, #log-close, #settings-close, #dialog-close, #main-menu button,
+          #game-over button, #target-prompt button, #quit-to-menu, .dialog-action,
+          #inventory-details button):hover:not(:disabled) {
+          border-image-source: var(--button-hover);
+        }
       }
       :is(#wait, #examine, #log-button, #inventory-button, #settings-button, #help-button,
         #inventory-close, #log-close, #settings-close, #dialog-close, #main-menu button,
@@ -797,8 +877,10 @@
       #inventory-button::before {
         background-image: var(--icon-bag);
       }
-      #inventory-button:hover::before {
-        background-image: var(--icon-bag-open);
+      @media (hover: hover) {
+        #inventory-button:hover::before {
+          background-image: var(--icon-bag-open);
+        }
       }
       #settings-button::before {
         background-image: var(--icon-settings);
@@ -825,6 +907,32 @@
         height: 16px;
         background-image: var(--icon-close);
       }
+      /* A finger needs about 48px to hit a control, 12 more than the small controls have. The
+         switch is drawn at 3 screen pixels to an art pixel instead of 2. */
+      @media (pointer: coarse) {
+        #inventory-close,
+        #log-close,
+        #settings-close,
+        #dialog-close {
+          width: 48px;
+          height: 48px;
+        }
+        #settings-panel .setting {
+          min-height: 48px;
+        }
+        #settings-panel select,
+        #target-prompt button,
+        #inventory-details button {
+          min-height: 48px;
+        }
+        #settings-panel input[type='range'] {
+          height: 48px;
+        }
+        #mute {
+          width: 78px;
+          height: 42px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -849,9 +957,11 @@
           <span data-i18n="Bag">Bag</span>
           <button id="inventory-close" aria-label="Close" data-i18n-aria="Close"></button>
         </div>
-        <div id="equipment-slots"></div>
-        <div id="inventory-slots"></div>
-        <div id="inventory-details"></div>
+        <div class="panel-body">
+          <div id="equipment-slots"></div>
+          <div id="inventory-slots"></div>
+          <div id="inventory-details"></div>
+        </div>
       </div>
     </div>
     <div id="main-menu" hidden>
@@ -875,43 +985,45 @@
           <span data-i18n="Settings">Settings</span>
           <button id="settings-close" aria-label="Close" data-i18n-aria="Close"></button>
         </div>
-        <div class="setting">
-          <span data-i18n="Language">Language</span>
-          <select id="language" aria-label="Language" data-i18n-aria="Language"></select>
+        <div class="panel-body">
+          <div class="setting">
+            <span data-i18n="Language">Language</span>
+            <select id="language" aria-label="Language" data-i18n-aria="Language"></select>
+          </div>
+          <div class="setting">
+            <span data-i18n="UI scale">UI scale</span>
+            <select id="ui-scale" aria-label="UI scale" data-i18n-aria="UI scale"></select>
+          </div>
+          <div class="setting">
+            <span data-i18n="Sound effects">Sound effects</span>
+            <input
+              id="sfx-volume"
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              aria-label="Sound effects"
+              data-i18n-aria="Sound effects"
+            />
+          </div>
+          <div class="setting">
+            <span data-i18n="Music">Music</span>
+            <input
+              id="music-volume"
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              aria-label="Music"
+              data-i18n-aria="Music"
+            />
+          </div>
+          <div class="setting">
+            <span data-i18n="Mute">Mute</span>
+            <button id="mute" aria-pressed="false" aria-label="Mute" data-i18n-aria="Mute"></button>
+          </div>
+          <button id="quit-to-menu" data-i18n="Main menu" hidden>Main menu</button>
         </div>
-        <div class="setting">
-          <span data-i18n="UI scale">UI scale</span>
-          <select id="ui-scale" aria-label="UI scale" data-i18n-aria="UI scale"></select>
-        </div>
-        <div class="setting">
-          <span data-i18n="Sound effects">Sound effects</span>
-          <input
-            id="sfx-volume"
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            aria-label="Sound effects"
-            data-i18n-aria="Sound effects"
-          />
-        </div>
-        <div class="setting">
-          <span data-i18n="Music">Music</span>
-          <input
-            id="music-volume"
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            aria-label="Music"
-            data-i18n-aria="Music"
-          />
-        </div>
-        <div class="setting">
-          <span data-i18n="Mute">Mute</span>
-          <button id="mute" aria-pressed="false" aria-label="Mute" data-i18n-aria="Mute"></button>
-        </div>
-        <button id="quit-to-menu" data-i18n="Main menu" hidden>Main menu</button>
       </div>
     </div>
     <div id="dialog" hidden>
@@ -920,9 +1032,11 @@
           <span id="dialog-title"></span>
           <button id="dialog-close" aria-label="Close" data-i18n-aria="Close"></button>
         </div>
-        <p id="dialog-text"></p>
-        <ul id="dialog-entries" hidden></ul>
-        <div id="dialog-actions"></div>
+        <div class="panel-body">
+          <p id="dialog-text"></p>
+          <ul id="dialog-entries" hidden></ul>
+          <div id="dialog-actions"></div>
+        </div>
       </div>
     </div>
     <div id="target-prompt" hidden>

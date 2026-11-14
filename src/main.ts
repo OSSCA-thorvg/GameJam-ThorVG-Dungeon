@@ -71,7 +71,7 @@ import { EMBLEM_HEIGHT, EMBLEM_SVG, EMBLEM_WIDTH } from './emblemArt';
 // How many screen pixels an art pixel of the clear screen's emblem takes. Placeholder value, larger
 // than the icons of the screen, as it stands for the end of the game.
 const EMBLEM_SCALE = 6;
-import { loadSettings, saveSettings, uiScaleFor, volumeOf } from './settings';
+import { loadSettings, saveSettings, uiScaleFor, volumeOf, windowShortSide } from './settings';
 import { createLogPanel } from './logPanel';
 import { createSettingsPanel } from './settingsPanel';
 import { createStatusBar } from './statusBar';
@@ -364,7 +364,7 @@ document.addEventListener('click', (event) => {
 function applySettings() {
   sound.setVolume('sfx', volumeOf(settings, 'sfx'));
   sound.setVolume('music', volumeOf(settings, 'music'));
-  const scale = uiScaleFor(settings, window.innerWidth);
+  const scale = uiScaleFor(settings, windowShortSide());
   document.documentElement.style.setProperty('--ui-scale', String(scale));
   mapScene.scale(pixelRatio());
   heroHealthBar.scene.scale(scale * pixelRatio());

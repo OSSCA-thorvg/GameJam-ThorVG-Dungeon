@@ -33,6 +33,7 @@ export function createMainMenu(openSettings: () => void): MainMenu {
   const title = menu.querySelector<HTMLElement>('h1')!;
   void drawTitle().then(({ svg, width, height }) => {
     const image = new Image(width * TITLE_SCALE, height * TITLE_SCALE);
+    image.style.setProperty('--aspect', String(width / height));
     image.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
     image.alt = title.textContent ?? '';
     title.replaceChildren(image);
