@@ -237,7 +237,7 @@ const CAMERA_SETTLE_DISTANCE = 0.1;
 const EXPERIENCE_PER_LEVEL = 3;
 const LEVEL_UP_HP = 5;
 const LEVEL_UP_ACCURACY = 1;
-const LEVEL_UP_EVASION = 1;
+const LEVEL_UP_EVASION = 0.5;
 
 // Placeholder values. Fire sets a character burning for some turns, and burning and poison gas
 // hurt by a roll in these ranges every turn. Paralyzing gas paralyzes for some turns after it.
