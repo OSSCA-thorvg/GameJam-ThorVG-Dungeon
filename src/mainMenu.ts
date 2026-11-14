@@ -1,3 +1,5 @@
+import { drawTitle, TITLE_SCALE } from './titleArt';
+
 // Placeholder value. How long the menu stays empty after the splash, before it fades in.
 const FADE_DELAY_MS = 200;
 
@@ -26,6 +28,15 @@ export function createMainMenu(openSettings: () => void): MainMenu {
   play.addEventListener('click', () => pick('new'));
   resume.addEventListener('click', () => pick('continue'));
   document.querySelector('#menu-settings')!.addEventListener('click', openSettings);
+
+  // The title is text until its picture is drawn, which waits for the font.
+  const title = menu.querySelector<HTMLElement>('h1')!;
+  void drawTitle().then(({ svg, width, height }) => {
+    const image = new Image(width * TITLE_SCALE, height * TITLE_SCALE);
+    image.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    image.alt = title.textContent ?? '';
+    title.replaceChildren(image);
+  });
 
   return {
     show(canContinue) {

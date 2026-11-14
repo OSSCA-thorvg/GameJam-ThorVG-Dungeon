@@ -624,6 +624,13 @@
         letter-spacing: 2px;
         text-shadow: 0 2px 0 #000;
       }
+      /* The title drawn as pixel art (titleArt.ts), which replaces the text once it is ready. */
+      #main-menu h1 img {
+        display: block;
+        max-width: calc(100vw - 32px);
+        height: auto;
+        image-rendering: pixelated;
+      }
       /* The game's own text and buttons stay hidden behind the menu. */
       body.menu-open
         :is(#status, #status-tooltip, #log, #top-right, #bottom-left, #inventory-button,
