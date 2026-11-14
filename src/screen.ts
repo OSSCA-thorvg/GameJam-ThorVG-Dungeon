@@ -4,7 +4,7 @@ import type { Canvas } from '@thorvg/webcanvas';
 // which makes a canvas 9 times as large, and the blur and the masks of the light cost by its size.
 // In a headless test at the size of a phone, a frame took about 550 ms at 3, 200 ms at 2, and
 // stayed under the 16 ms of the test's pacing at 1.5 and below. The browser scales the canvas up.
-const MAX_PIXEL_RATIO = 1.5;
+const MAX_PIXEL_RATIO = 1;
 
 // How many pixels of the canvas one CSS pixel covers, as on a display scaled to 150%.
 export const pixelRatio = () => Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
