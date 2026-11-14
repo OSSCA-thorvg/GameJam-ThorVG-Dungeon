@@ -874,9 +874,15 @@ function addEnemyStatus(enemy: Enemy, name: StatusName, turns: number) {
   if (!hasStatus(enemy.statuses, name) && seenEnemies.has(enemy)) {
     showStatusText(enemy.position, name);
   }
-  addStatus(enemy.statuses, name, turns);
-  disturbEnemy(enemy);
-  showEnemy(enemy);
+  // A status on any part of a long body is on all of it, as its parts move as one. Only fire
+  // burns each part on its own, so it is the bane of a long body.
+  const whole = wholeOf(enemy);
+  const parts = name === 'burning' ? [enemy] : [whole, ...whole.followers];
+  for (const part of parts) {
+    addStatus(part.statuses, name, turns);
+    disturbEnemy(part);
+    showEnemy(part);
+  }
 }
 
 const heroAccuracy = () =>
@@ -2534,7 +2540,8 @@ function applyHazards() {
     if (enemyHazards.includes('paralysis')) {
       addEnemyStatus(enemy, 'paralyzed', PARALYZED_TURNS);
     }
-    if (enemyHazards.includes('poison')) {
+    // A long body breathes through its head, so the gas around the rest of it does no harm.
+    if (enemyHazards.includes('poison') && !enemy.owner) {
       hurtEnemy(enemy, normalIntRange(Math.random, ...POISON_DAMAGE));
     }
   }
