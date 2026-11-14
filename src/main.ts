@@ -983,7 +983,7 @@ const dialog = createDialog();
 // was walking or attacking do not close it unread. Opened from the help window, it closes at once.
 const GUIDE_CLOSE_DELAY_MS = 5000;
 
-// Each guide opens by itself the first time its situation comes up in a page load: the controls on
+// Each guide opens by itself the first time its situation comes up in a browser: the controls on
 // reaching floor 1, the next four on first seeing an enemy, a found or spent trap, the stairs, and
 // a campfire, food on first getting hungry, potions and gear too heavy on first picking one up, and
 // locked doors on first trying one or picking up a key. The help window lists them in this order.
@@ -1066,13 +1066,40 @@ const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
 // read again. A guide is not listed before its situation comes up, so it is read there first. The
 // button shows with the first guide.
 const helpButton = document.querySelector<HTMLButtonElement>('#help-button')!;
-const shownGuides = new Set<GuideName>();
+
+// The guides already shown are kept in the browser, so that they do not open again in later runs
+// or after a reload, and stay in the help window. When storage is blocked, as in a private window,
+// they are kept for the page only.
+const SHOWN_GUIDES_KEY = 'thorvg-dungeon.shown-guides';
+
+function loadShownGuides(): Set<GuideName> {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(SHOWN_GUIDES_KEY) ?? '[]');
+    return new Set(
+      Array.isArray(saved) ? saved.filter((name): name is GuideName => name in GUIDES) : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function saveShownGuides() {
+  try {
+    localStorage.setItem(SHOWN_GUIDES_KEY, JSON.stringify([...shownGuides]));
+  } catch {
+    // Nothing else can keep them.
+  }
+}
+
+const shownGuides = loadShownGuides();
+helpButton.hidden = shownGuides.size === 0;
 // Guides whose situation came up while another dialog was open. They open one at a time, as the
 // vision is updated on the next moves.
 const waitingGuides = new Set<GuideName>();
 
 function showGuide(name: GuideName, onBack?: () => void) {
   shownGuides.add(name);
+  saveShownGuides();
   waitingGuides.delete(name);
   helpButton.hidden = false;
   // A guide that opens by itself stops a walk, which would go on under the dialog.
