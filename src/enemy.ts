@@ -19,6 +19,8 @@ export type EnemyKind = 'weak' | 'medium' | 'strong';
 export interface EnemyStats {
   // The name shown to the player.
   name: string;
+  // What examining it tells, with a hint of how it fights.
+  description: string;
   maxHp: number;
   damage: [min: number, max: number];
   accuracy: number;
@@ -55,6 +57,7 @@ interface EnemyKindStats extends EnemyStats {
 export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
   weak: {
     name: 'rat',
+    description: 'Unlike the rats common in the sewers, this one is strangely large.',
     maxHp: 11,
     damage: [1, 4],
     accuracy: 8,
@@ -67,6 +70,7 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
   },
   medium: {
     name: 'crab',
+    description: 'A crab as big as a man! One of its claws is huge.',
     maxHp: 16,
     damage: [2, 5],
     accuracy: 9,
@@ -79,6 +83,8 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
   },
   strong: {
     name: 'bat',
+    description:
+      'A bat. It darts out and startles people. It seems to move faster than other enemies.',
     maxHp: 10,
     damage: [1, 3],
     accuracy: 9,
@@ -94,9 +100,29 @@ export const ENEMY_KINDS: Record<EnemyKind, EnemyKindStats> = {
 // stage. The mimic of Shattered Pixel Dungeon grows with the floor, but the enemies here do not
 // differ much between the floors of a stage, so neither does the mimic. It gives no experience
 // there either.
+const MIMIC_DESCRIPTION =
+  'A mimic, pretending to be a chest. Where it came from and how it lives are a mystery.';
 const MIMIC_STATS: EnemyStats[] = [
-  { name: 'mimic', maxHp: 20, damage: [2, 6], accuracy: 10, evasion: 3, actions: 1, experience: 0 },
-  { name: 'mimic', maxHp: 28, damage: [4, 8], accuracy: 11, evasion: 4, actions: 1, experience: 0 },
+  {
+    name: 'mimic',
+    description: MIMIC_DESCRIPTION,
+    maxHp: 20,
+    damage: [2, 6],
+    accuracy: 10,
+    evasion: 3,
+    actions: 1,
+    experience: 0,
+  },
+  {
+    name: 'mimic',
+    description: MIMIC_DESCRIPTION,
+    maxHp: 28,
+    damage: [4, 8],
+    accuracy: 11,
+    evasion: 4,
+    actions: 1,
+    experience: 0,
+  },
 ];
 
 export function mimicStats(stage: number): EnemyStats {
@@ -111,6 +137,7 @@ export type UndeadKind = 'ghoul';
 export const UNDEAD_KINDS: Record<UndeadKind, EnemyStats> = {
   ghoul: {
     name: 'ghoul',
+    description: 'A ghoul, found in places such as catacombs. It can drain life.',
     maxHp: 22,
     damage: [3, 6],
     accuracy: 10,
@@ -125,6 +152,7 @@ export const UNDEAD_KINDS: Record<UndeadKind, EnemyStats> = {
 // floor's hazards do not touch it, and its touch weakens the hero.
 export const ghostStats: EnemyStats = {
   name: 'ghost',
+  description: 'A ghost floating in the air. It can sap the strength of others.',
   maxHp: 16,
   damage: [2, 5],
   accuracy: 11,
@@ -139,6 +167,8 @@ export const ghostStats: EnemyStats = {
 // is depends on the boss room's template.
 export const centipedeStats: EnemyStats = {
   name: 'giant centipede',
+  description:
+    'A centipede that has lived underground for decades. As if under some command, it devours the creatures of the sewers without mercy.',
   maxHp: 90,
   damage: [6, 12],
   accuracy: 11,
@@ -471,6 +501,8 @@ function freeLine(room: Room, from: Point, direction: Point, blocked: Point[]): 
 // The skeleton archer of the second stage. Placeholder values. It is frail, and shoots from afar.
 export const skeletonArcherStats: EnemyStats = {
   name: 'skeleton archer',
+  description:
+    'A skeleton archer that shoots annoying arrows from afar. Up close, it is easier to deal with than it looks.',
   maxHp: 12,
   damage: [3, 5],
   accuracy: 11,
@@ -531,6 +563,7 @@ export const createNecromancerState = (): NecromancerState => ({
 // the ghouls in two of the coffins of its room.
 export const necromancerStats: EnemyStats = {
   name: 'necromancer',
+  description: 'The source of evil in the dungeon. It wields an unknown dark power.',
   maxHp: 90,
   damage: [3, 6],
   accuracy: 12,

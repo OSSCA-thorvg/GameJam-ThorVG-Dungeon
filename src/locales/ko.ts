@@ -103,6 +103,23 @@ export const ko: Record<string, string> = {
   'giant centipede': '거대 지네',
   'skeleton archer': '해골 궁수',
   necromancer: '네크로맨서',
+  'Unlike the rats common in the sewers, this one is strangely large.':
+    '하수구에서 흔하게 볼 수 있는 쥐...와는 다르게 크기가 이상할 정도로 크다.',
+  'A crab as big as a man! One of its claws is huge.': '사람만 한 게! 한쪽 집게발이 정말 크다.',
+  'A bat. It darts out and startles people. It seems to move faster than other enemies.':
+    '박쥐. 갑자기 튀어나와 사람을 놀래곤 한다. 다른 적보다 행동이 빠른 것 같다.',
+  'A mimic, pretending to be a chest. Where it came from and how it lives are a mystery.':
+    '상자인 척하는 미믹이다. 어디서 생겨났는지, 그 생태는 어떠한지는 베일에 싸여 있다.',
+  'A ghoul, found in places such as catacombs. It can drain life.':
+    '지하 묘지 등에서 발견되곤 하는 구울. 체력을 흡수하는 능력이 있다.',
+  'A ghost floating in the air. It can sap the strength of others.':
+    '공중을 떠다니는 유령. 상대방의 힘을 약화시키는 능력이 있다.',
+  'A skeleton archer that shoots annoying arrows from afar. Up close, it is easier to deal with than it looks.':
+    '원거리에서 성가신 화살을 발사하는 해골 궁수. 접근한다면 의외로 처리하기는 쉽다.',
+  'A centipede that has lived underground for decades. As if under some command, it devours the creatures of the sewers without mercy.':
+    '지하에서 수십 년을 살아온 지네. 무언가의 명령을 받는 듯, 하수구의 생물을 무자비하게 먹어치우고 있다.',
+  'The source of evil in the dungeon. It wields an unknown dark power.':
+    '던전의 악의 근원. 알 수 없는 어둠의 힘을 사용한다.',
 
   // The items.
   'Healing potion': '치유 물약',

@@ -3638,7 +3638,8 @@ function examine(tile: Point) {
 function describeTile(tile: Point): Phrase[] {
   const enemy = enemyAt(tile);
   if (enemy) {
-    return [describeEnemy(enemy)];
+    // What the enemy is, with a hint of how it fights, then what it is doing now.
+    return [phrase(wholeOf(enemy).stats.description), describeEnemy(enemy)];
   }
   if (disguisedMimicAt(tile)) {
     // Examining gives a mimic away, as it does in Shattered Pixel Dungeon.
