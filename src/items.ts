@@ -547,6 +547,28 @@ function missingStrength(name: ItemName | null, strength: number): number {
   return Math.max(0, required - strength);
 }
 
+const EQUIPMENT_KIND_LABELS: Record<EquipmentKind, string> = {
+  weapon: 'Weapon',
+  armor: 'Armor',
+  accessory: 'Accessory',
+};
+
+// The kind of an item, in English, shown beside its name in the bag. Past the potions, the thrown
+// weapons, the gear, and the food, the only item left is the iron key.
+export function itemKind(name: ItemName): string {
+  const item = ITEMS[name];
+  if (item.potion) {
+    return 'Potion';
+  }
+  if (item.thrownDamage) {
+    return 'Thrown weapon';
+  }
+  if (item.equipKind) {
+    return EQUIPMENT_KIND_LABELS[item.equipKind];
+  }
+  return item.foodTurns !== undefined ? 'Food' : 'Key';
+}
+
 // The warning shown with equipment that is too heavy for the hero, or null when it is not.
 export function tooHeavyMessage(name: ItemName, strength: number): string | null {
   // A thrown weapon is as heavy to throw as a weapon is to swing.

@@ -20,7 +20,7 @@ export const ko: Record<string, string> = {
     '가방을 열어 장비를 장착하고, 아이템을 사용할 수 있습니다.',
   'Surprise Attacks': '기습',
   'An enemy that has not seen you yet, such as one asleep or one that just came through a door or around a corner, cannot dodge your attack. Its damage keeps the same maximum but rolls from a higher minimum, so a high roll is likelier. Thrown weapons can surprise it too, but a weapon too heavy for your strength cannot.':
-    '아직 이쪽을 보지 못한 적, 이를테면 잠든 적이나 방금 문이나 모퉁이에서 나타난 적은 공격을 피하지 못합니다. 피해의 최댓값은 그대로지만 최솟값이 올라가, 높은 피해가 나올 확률이 커집니다. 던지는 무기로도 기습할 수 있지만, 힘이 모자라 무거운 무기로는 기습할 수 없습니다.',
+    '아직 이쪽을 보지 못한 적, 이를테면 잠든 적이나 방금 문이나 모퉁이에서 나타난 적은 공격을 피하지 못합니다. 피해의 최댓값은 그대로지만 최솟값이 올라가, 높은 피해가 나올 확률이 커집니다. 투척 무기로도 기습할 수 있지만, 힘이 모자라 무거운 무기로는 기습할 수 없습니다.',
   Food: '식량',
   'You get hungry as turns pass, and while hungry you stop healing over time. Open the bag and eat before you start starving, as a starving hero keeps losing HP until they eat.':
     '턴이 지날수록 배가 고파지고, 배가 고픈 동안에는 체력이 저절로 회복되지 않습니다. 굶주리기 전에 가방을 열어 음식을 먹으세요. 굶주리면 음식을 먹을 때까지 체력이 계속 줄어듭니다.',
@@ -53,8 +53,14 @@ export const ko: Record<string, string> = {
 
   // The bag.
   Damage: '피해량',
-  Armor: '방어력',
+  Defense: '방어력',
   Strength: '필요 힘',
+  Weapon: '무기',
+  'Thrown weapon': '투척 무기',
+  Armor: '갑옷',
+  Accessory: '장신구',
+  Potion: '물약',
+  Key: '열쇠',
   Equip: '장착',
   Unequip: '해제',
   Throw: '던지기',

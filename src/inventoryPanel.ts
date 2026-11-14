@@ -4,6 +4,7 @@ import {
   EQUIPMENT_SLOTS,
   INVENTORY_SLOTS,
   ITEMS,
+  itemKind,
   type Equipment,
   type EquipmentSlot,
   type ItemName,
@@ -88,8 +89,14 @@ export function createInventoryPanel({
     const look = describeItem(name);
     const reason = look.blockedReason;
 
-    const title = document.createElement('strong');
-    title.textContent = look.displayName;
+    const title = document.createElement('div');
+    title.className = 'item-title';
+    const itemName = document.createElement('strong');
+    itemName.textContent = look.displayName;
+    const kind = document.createElement('span');
+    kind.className = 'item-kind';
+    kind.textContent = t(itemKind(name));
+    title.append(itemName, kind);
     const description = document.createElement('p');
     description.className = 'item-description';
     description.textContent = reason ?? look.description;
@@ -102,7 +109,7 @@ export function createInventoryPanel({
       stats.push({ label: t('Damage'), value: `${item.thrownDamage[0]}-${item.thrownDamage[1]}` });
     }
     if (item.armor) {
-      stats.push({ label: t('Armor'), value: `${item.armor[0]}-${item.armor[1]}` });
+      stats.push({ label: t('Defense'), value: `${item.armor[0]}-${item.armor[1]}` });
     }
     if (item.strength !== undefined) {
       stats.push({
