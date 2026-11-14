@@ -111,6 +111,10 @@ export function createInventoryPanel({
     if (item.armor) {
       stats.push({ label: t('Defense'), value: `${item.armor[0]}-${item.armor[1]}` });
     }
+    // How many turns of hunger the food takes away.
+    if (item.foodTurns !== undefined) {
+      stats.push({ label: t('Fullness'), value: t('{turns} turns', { turns: item.foodTurns }) });
+    }
     if (item.strength !== undefined) {
       stats.push({
         label: t('Strength'),

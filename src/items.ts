@@ -469,16 +469,9 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
   },
 };
 
-// The description of an item, with how long food keeps hunger away.
 export function itemDescription(name: ItemName): Phrase {
-  const { description, descriptionValues, foodTurns } = ITEMS[name];
-  const text = phrase(description, descriptionValues);
-  return foodTurns === undefined
-    ? text
-    : phrase('{text} {food}', {
-        text,
-        food: phrase('Keeps hunger away for {turns} turns.', { turns: foodTurns }),
-      });
+  const { description, descriptionValues } = ITEMS[name];
+  return phrase(description, descriptionValues);
 }
 
 // Same as fighting unarmed in Shattered Pixel Dungeon with the starting 10 strength.

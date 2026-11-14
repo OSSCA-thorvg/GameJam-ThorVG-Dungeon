@@ -58,6 +58,7 @@ export const ko: Record<string, string> = {
   Damage: '피해량',
   Defense: '방어력',
   Strength: '필요 힘',
+  Fullness: '포만감',
   Weapon: '무기',
   'Thrown weapon': '투척 무기',
   Armor: '갑옷',
@@ -193,7 +194,6 @@ export const ko: Record<string, string> = {
   'Iron key': '철 열쇠',
   'A heavy old key. Carrying it, you can unlock a locked door.':
     '묵직하고 오래된 열쇠. 가지고 있으면 잠긴 문을 열 수 있다.',
-  'Keeps hunger away for {turns} turns.': '{turns}턴 동안 배고픔을 막아 준다.',
   'You are not strong enough for this weapon. You miss more and cannot surprise enemies.':
     '이 무기를 다루기에는 힘이 부족하다. 더 자주 빗나가고 기습할 수 없다.',
   'You are not strong enough for this armor. You evade less, and it blocks less.':
