@@ -262,9 +262,10 @@ export function createInventoryPanel({
     overlay.hidden = true;
   };
 
+  // The bag opens on the item chosen last, so that a stack thrown or drunk from is ready to use
+  // again. refresh() picks the first item once that one is used up.
   button.addEventListener('click', () => {
     onOpen();
-    selectFirst();
     refresh();
     overlay.hidden = false;
   });
