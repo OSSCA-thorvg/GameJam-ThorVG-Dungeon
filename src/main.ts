@@ -1004,9 +1004,18 @@ const dialog = createDialog();
 const GUIDE_CLOSE_DELAY_MS = 5000;
 
 // Each guide opens by itself the first time its situation comes up in a page load: the controls on
-// reaching floor 1, surprise attacks on first seeing an enemy, food on first getting hungry, and
-// potions on first picking one up.
-type GuideName = 'controls' | 'surprise' | 'food' | 'potions';
+// reaching floor 1, the next three on first seeing an enemy, a found or spent trap, and the stairs,
+// food on first getting hungry, potions and gear too heavy on first picking one up, and locked
+// doors on first seeing one. The help window lists them in this order.
+type GuideName =
+  | 'controls'
+  | 'surprise'
+  | 'traps'
+  | 'stairs'
+  | 'food'
+  | 'potions'
+  | 'strength'
+  | 'locked-doors';
 
 const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
   controls: () => ({
@@ -1028,6 +1037,18 @@ const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
       'An enemy that has not seen you yet, such as one asleep or one that just came through a door or around a corner, cannot dodge your attack. Its damage keeps the same maximum but rolls from a higher minimum, so a high roll is likelier. Thrown weapons can surprise it too, but a weapon too heavy for your strength cannot.',
     ),
   }),
+  traps: () => ({
+    title: t('Traps'),
+    text: t(
+      'Traps hide in the floor and go off once, when you, an enemy, or a thrown item lands on them. Each move may find a hidden trap next to you, and pressing Examine twice searches the area around you and finds every hidden trap there. A found trap is shown, so you can walk around it.',
+    ),
+  }),
+  stairs: () => ({
+    title: t('Stairs'),
+    text: t(
+      'Click the stairs to go down to the next floor. There is no way back up, so take what you need first. Items lying on the stairs have to be picked up before you can go down.',
+    ),
+  }),
   food: () => ({
     title: t('Food'),
     text: t(
@@ -1038,6 +1059,18 @@ const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
     title: t('Potions'),
     text: t(
       'Potions are unidentified, and their colors change from run to run. You learn what a potion is only by drinking it, or by throwing it and seeing what it does. After that, you know every potion of its kind.',
+    ),
+  }),
+  strength: () => ({
+    title: t('Strength and Gear'),
+    text: t(
+      'Weapons and armor need some strength, which the bag shows. Gear too heavy for you works worse: a weapon misses more and cannot make surprise attacks, and armor lets you evade less and blocks less. Strength potions raise your strength.',
+    ),
+  }),
+  'locked-doors': () => ({
+    title: t('Locked Doors'),
+    text: t(
+      'A locked door opens with an iron key found on the same floor. With the key in your bag, click the door to unlock it. The key stays in the lock.',
     ),
   }),
 };
@@ -1081,6 +1114,28 @@ function offerGuide(name: GuideName) {
     waitingGuides.add(name);
     showWaitingGuide();
   }
+}
+
+// The guides for what the hero sees. The surface has signs for its locked door and stairs instead.
+function offerSightGuides() {
+  if (floor > 0) {
+    if (seenEnemies.size > 0) {
+      offerGuide('surprise');
+    }
+    if (traps.some(({ state, position }) => state !== 'hidden' && isInView(position))) {
+      offerGuide('traps');
+    }
+    if (room.stairs && isInView(room.stairs)) {
+      offerGuide('stairs');
+    }
+    if (
+      !shownGuides.has('locked-doors') &&
+      room.tiles.some((row, y) => row.some((tile, x) => tile === 'locked-door' && isInView({ x, y })))
+    ) {
+      offerGuide('locked-doors');
+    }
+  }
+  showWaitingGuide();
 }
 
 function showHelp() {
@@ -1314,6 +1369,9 @@ function pickUpItems(tile: Point): boolean {
         if (ITEMS[thing.name].potion) {
           offerGuide('potions');
         }
+        if (tooHeavyMessage(thing.name, currentStrength())) {
+          offerGuide('strength');
+        }
       } else {
         playBounce(roomView, item.paint, tile, renderCanvas);
       }
@@ -1428,10 +1486,7 @@ function updateVision() {
     }
     showEnemy(enemy);
   }
-  if (seenEnemies.size > 0) {
-    offerGuide('surprise');
-  }
-  showWaitingGuide();
+  offerSightGuides();
 
   updateCursorTile();
 }
@@ -1815,6 +1870,7 @@ function findTrap(trap: Trap) {
   sound.play('trap-found');
   messageLog.add(phrase('You found {trap}.', { trap: phrase(TRAP_LABELS[trap.kind]) }), 'warning');
   stopWalking();
+  offerGuide('traps');
 }
 
 // After each action, the hero may find a hidden trap on a tile next to them.
@@ -1968,6 +2024,7 @@ function setOffTrap(trap: Trap, by: TrapTrigger) {
   const tellsOf = isHero || isInView(trap.position);
   if (tellsOf) {
     sound.play('trap-trigger');
+    offerGuide('traps');
   }
   const label = phrase(TRAP_LABELS[trap.kind]);
   const lead = isHero
