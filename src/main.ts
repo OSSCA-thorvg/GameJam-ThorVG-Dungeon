@@ -3763,6 +3763,28 @@ window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     cancelTargeting();
   }
+  // Tab does not move between the buttons, as the page is a game and not a form.
+  if (event.key === 'Tab') {
+    event.preventDefault();
+  }
+});
+
+// The browser's menu does not open on a right click.
+window.addEventListener('contextmenu', (event) => event.preventDefault());
+
+// A button does not take the focus when pressed, so it shows no focus ring, and a later Space or
+// Enter does not press it again.
+document.addEventListener('mousedown', (event) => {
+  if (event.target instanceof Element && event.target.closest('button')) {
+    event.preventDefault();
+  }
+});
+// A list or a slider of the settings needs the focus while it is used, and lets it go once a value
+// is chosen, for the same reasons.
+document.addEventListener('change', (event) => {
+  if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) {
+    event.target.blur();
+  }
 });
 
 // Stops what the hero was doing, before the run is replaced.

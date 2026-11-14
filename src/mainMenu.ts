@@ -36,7 +36,6 @@ export function createMainMenu(openSettings: () => void): MainMenu {
       }
       resume.hidden = !canContinue;
       menu.hidden = false;
-      (canContinue ? resume : play).focus();
       return new Promise((resolve) => {
         choose = resolve;
       });

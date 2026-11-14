@@ -247,7 +247,8 @@
           scrollbar-color: #6a6e7c #23242c;
         }
       }
-      #settings-panel label {
+      /* A row is not a label, so pressing the space beside a control does not work it. */
+      #settings-panel .setting {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -261,6 +262,12 @@
       }
       #quit-to-menu[hidden] {
         display: none;
+      }
+      /* No control shows the browser's focus ring, which a game does not have. */
+      button:focus,
+      select:focus,
+      input:focus {
+        outline: none;
       }
       #settings-panel select {
         min-height: 36px;
@@ -813,26 +820,42 @@
           <span data-i18n="Settings">Settings</span>
           <button id="settings-close" aria-label="Close" data-i18n-aria="Close"></button>
         </div>
-        <label>
+        <div class="setting">
           <span data-i18n="Language">Language</span>
-          <select id="language"></select>
-        </label>
-        <label>
+          <select id="language" aria-label="Language" data-i18n-aria="Language"></select>
+        </div>
+        <div class="setting">
           <span data-i18n="UI scale">UI scale</span>
-          <select id="ui-scale"></select>
-        </label>
-        <label>
+          <select id="ui-scale" aria-label="UI scale" data-i18n-aria="UI scale"></select>
+        </div>
+        <div class="setting">
           <span data-i18n="Sound effects">Sound effects</span>
-          <input id="sfx-volume" type="range" min="0" max="100" step="5" />
-        </label>
-        <label>
+          <input
+            id="sfx-volume"
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            aria-label="Sound effects"
+            data-i18n-aria="Sound effects"
+          />
+        </div>
+        <div class="setting">
           <span data-i18n="Music">Music</span>
-          <input id="music-volume" type="range" min="0" max="100" step="5" />
-        </label>
-        <label>
+          <input
+            id="music-volume"
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            aria-label="Music"
+            data-i18n-aria="Music"
+          />
+        </div>
+        <div class="setting">
           <span data-i18n="Mute">Mute</span>
           <button id="mute" aria-pressed="false" aria-label="Mute" data-i18n-aria="Mute"></button>
-        </label>
+        </div>
         <button id="quit-to-menu" data-i18n="Main menu" hidden>Main menu</button>
       </div>
     </div>
