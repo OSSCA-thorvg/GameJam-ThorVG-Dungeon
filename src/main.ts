@@ -709,6 +709,8 @@ let equipment: Equipment = createStartingEquipment();
 let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
 // Whether the scene of the current level is on the screen.
 let isLevelShown = false;
+// The pictures of the fixtures of the floor, like the campfire.
+let fixturePaints: { position: Point; paint: Paint }[] = [];
 let traps: Trap[] = [];
 let coffins: Coffin[] = [];
 // The coffins that the necromancer chants over, until it raises what is in them, and the ghouls it
@@ -1307,6 +1309,7 @@ function dropThing(thing: GroundThing, position: Point) {
           thing.kind === 'item' ? potionLore.lookOf(thing.name).icon : GOLD_ICON,
         );
   roomView.place(paint, position.x, position.y);
+  paint.visible(isExplored(position));
   groundItems.push({ thing, position, paint });
   enterDoor(position);
 }
@@ -1488,6 +1491,23 @@ function lookAround(openDoors: Point[]) {
     outline: vision.outline,
     tiles: vision.tiles,
   });
+  showSeenThings();
+}
+
+// What stands on a tile shows only once the tile was seen. The darkness hides an unseen tile, but a
+// tall picture on it, like a chest, would reach over the seen tiles behind it.
+function showSeenThings() {
+  for (const { position, paint } of groundItems) {
+    paint.visible(isExplored(position));
+  }
+  for (const { position, paint } of [...coffins, ...fixturePaints]) {
+    paint?.visible(isExplored(position));
+  }
+  for (const enemy of enemies) {
+    if (enemy.state === 'disguised') {
+      enemy.paint.visible(isExplored(enemy.position));
+    }
+  }
 }
 
 // Looks from the hero's tile again. Call this when the hero, an enemy, or the view distance
@@ -1566,9 +1586,11 @@ function placeHero(tile: Point) {
 // Draws an enemy while it is in view, or while the hero senses it by telepathy.
 function showEnemy(enemy: Enemy) {
   const { x, y } = enemy.position;
-  // A disguised mimic stays drawn, as a chest on the floor does, so it never vanishes out of view.
+  // A disguised mimic stays drawn once its tile was seen, as a chest on the floor does, so it never
+  // vanishes out of view.
   if (enemy.state === 'disguised') {
     roomView.place(enemy.paint, x, y);
+    enemy.paint.visible(isExplored(enemy.position));
     return;
   }
   tintCharacter(enemy.paint, tintOf(enemy.statuses));
@@ -1652,10 +1674,13 @@ function startLevel(start: Point = room.start) {
   for (const { thing, position } of floorItems) {
     dropThing(thing, position);
   }
+  fixturePaints = [];
   room.tiles.forEach((row, y) =>
     row.forEach((tile, x) => {
       if (tile === 'campfire') {
-        roomView.place(createCampfirePaint(TVG, CAMPFIRE_ICON), x, y);
+        const paint = createCampfirePaint(TVG, CAMPFIRE_ICON);
+        roomView.place(paint, x, y);
+        fixturePaints.push({ position: { x, y }, paint });
       }
     }),
   );
@@ -2114,6 +2139,7 @@ function showCoffin(coffin: Coffin) {
   }
   coffin.paint = drawCoffin(TVG, chantedCoffins.includes(coffin));
   roomView.place(coffin.paint, coffin.position.x, coffin.position.y);
+  coffin.paint.visible(isExplored(coffin.position));
 }
 
 // The undead in a coffin smashes out of it. The coffin is gone then, so it does not block the way
