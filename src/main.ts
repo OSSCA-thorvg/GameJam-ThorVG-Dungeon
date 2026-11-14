@@ -162,7 +162,7 @@ import {
   tintCharacter,
   type DamageTarget,
 } from './render';
-import { isAdjacent, isFixture, isWalkable, type Point } from './room';
+import { isAdjacent, isFixture, isWalkable, type Point, type Tile } from './room';
 import {
   addStatus,
   HARMFUL_STATUSES,
@@ -1004,14 +1004,15 @@ const dialog = createDialog();
 const GUIDE_CLOSE_DELAY_MS = 5000;
 
 // Each guide opens by itself the first time its situation comes up in a page load: the controls on
-// reaching floor 1, the next three on first seeing an enemy, a found or spent trap, and the stairs,
-// food on first getting hungry, potions and gear too heavy on first picking one up, and locked
-// doors on first seeing one. The help window lists them in this order.
+// reaching floor 1, the next four on first seeing an enemy, a found or spent trap, the stairs, and
+// a campfire, food on first getting hungry, potions and gear too heavy on first picking one up, and
+// locked doors on first seeing one. The help window lists them in this order.
 type GuideName =
   | 'controls'
   | 'surprise'
   | 'traps'
   | 'stairs'
+  | 'campfire'
   | 'food'
   | 'potions'
   | 'strength'
@@ -1047,6 +1048,12 @@ const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
     title: t('Stairs'),
     text: t(
       'Click the stairs to go down to the next floor. There is no way back up, so take what you need first. Items lying on the stairs have to be picked up before you can go down.',
+    ),
+  }),
+  campfire: () => ({
+    title: t('Campfire'),
+    text: t(
+      'Click a campfire to rest by it, which heals you over some turns, or to cook raw meat over it. You cannot use it while an enemy is in its room, and an enemy coming in stops you.',
     ),
   }),
   food: () => ({
@@ -1128,11 +1135,18 @@ function offerSightGuides() {
     if (room.stairs && isInView(room.stairs)) {
       offerGuide('stairs');
     }
-    if (
-      !shownGuides.has('locked-doors') &&
-      room.tiles.some((row, y) => row.some((tile, x) => tile === 'locked-door' && isInView({ x, y })))
-    ) {
-      offerGuide('locked-doors');
+    // Campfires and locked doors have no list of their own, so the tiles are looked through.
+    const sightTiles: [Tile, GuideName][] = [
+      ['campfire', 'campfire'],
+      ['locked-door', 'locked-doors'],
+    ];
+    for (const [kind, name] of sightTiles) {
+      if (
+        !shownGuides.has(name) &&
+        room.tiles.some((row, y) => row.some((tile, x) => tile === kind && isInView({ x, y })))
+      ) {
+        offerGuide(name);
+      }
     }
   }
   showWaitingGuide();

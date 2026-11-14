@@ -33,6 +33,8 @@ export const ko: Record<string, string> = {
   Stairs: '계단',
   'Click the stairs to go down to the next floor. There is no way back up, so take what you need first. Items lying on the stairs have to be picked up before you can go down.':
     '계단을 클릭하면 다음 층으로 내려갑니다. 다시 올라올 수는 없으니, 필요한 것을 먼저 챙기세요. 계단 위에 놓인 아이템은 주워야 내려갈 수 있습니다.',
+  'Click a campfire to rest by it, which heals you over some turns, or to cook raw meat over it. You cannot use it while an enemy is in its room, and an enemy coming in stops you.':
+    '모닥불을 클릭하면 곁에서 쉬며 몇 턴에 걸쳐 체력을 회복하거나, 날고기를 구울 수 있습니다. 같은 방에 적이 있으면 쓸 수 없고, 적이 들어오면 하던 일이 멈춥니다.',
   'Strength and Gear': '힘과 장비',
   'Weapons and armor need some strength, which the bag shows. Gear too heavy for you works worse: a weapon misses more and cannot make surprise attacks, and armor lets you evade less and blocks less. Strength potions raise your strength.':
     '무기와 갑옷에는 필요한 힘이 있으며, 가방에서 확인할 수 있습니다. 힘이 모자라면 장비의 성능이 떨어집니다. 무기는 더 자주 빗나가고 기습을 할 수 없으며, 갑옷은 회피와 방어가 줄어듭니다. 힘 물약을 마시면 힘이 오릅니다.',
