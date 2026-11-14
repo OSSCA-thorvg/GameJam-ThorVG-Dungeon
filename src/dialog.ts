@@ -8,6 +8,29 @@ export interface DialogAction {
   // Why the action cannot be done now, shown instead of the detail, if there is a reason.
   blockedReason: string | null;
   run(): void;
+  // A picture over the label, as SVG markup of art pixels.
+  icon?: string;
+}
+
+// The most screen pixels an action's icon takes each way, and the most screen pixels to an art
+// pixel. A picture of 32 art pixels, as the hero, gets 2 of them, as on the map, and a small one up
+// to 4, as the 12 by 12 icons of the screen at their largest.
+const ACTION_ICON_SIZE = 64;
+const ACTION_ICON_MAX_SCALE = 4;
+
+// Shows an icon at a whole number of screen pixels to an art pixel, so that its pixels stay square.
+function actionIcon(svg: string): HTMLImageElement {
+  const image = new Image();
+  image.className = 'dialog-action-icon';
+  image.alt = '';
+  image.addEventListener('load', () => {
+    const fit = Math.floor(ACTION_ICON_SIZE / Math.max(image.naturalWidth, image.naturalHeight));
+    const scale = Math.max(1, Math.min(ACTION_ICON_MAX_SCALE, fit));
+    image.width = image.naturalWidth * scale;
+    image.height = image.naturalHeight * scale;
+  });
+  image.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  return image;
 }
 
 // A line of a dialog that explains something shown with an icon, such as a button of the screen.
@@ -26,6 +49,8 @@ export interface DialogContent {
   onBack?: () => void;
   // Wider than the other windows, for a dialog of long lines.
   isWide?: boolean;
+  // Lays the actions out in a grid of tiles, each an icon over its label.
+  isGrid?: boolean;
   // How long the dialog ignores the close button and clicks outside it, for one that opens by
   // itself while the player may still be clicking at the game.
   closeDelayMs?: number;
@@ -104,6 +129,7 @@ export function createDialog(): Dialog {
       closeButton.classList.toggle('back', goBack !== null);
       closeButton.setAttribute('aria-label', t(goBack ? 'Back' : 'Close'));
       panel.classList.toggle('wide', content.isWide ?? false);
+      list.classList.toggle('grid', content.isGrid ?? false);
       title.textContent = content.title;
       text.textContent = content.text;
       text.hidden = content.text === '';
@@ -122,9 +148,12 @@ export function createDialog(): Dialog {
         }),
       );
       list.replaceChildren(
-        ...content.actions.map(({ label, detail, blockedReason, run }) => {
+        ...content.actions.map(({ label, detail, blockedReason, run, icon }) => {
           const button = document.createElement('button');
           button.className = 'dialog-action';
+          if (icon) {
+            button.append(actionIcon(icon));
+          }
           const name = document.createElement('strong');
           name.textContent = label;
           button.append(name);

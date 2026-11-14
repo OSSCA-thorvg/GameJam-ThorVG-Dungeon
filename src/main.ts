@@ -11,7 +11,10 @@ import {
   playShatter,
   playThrow,
 } from './throwEffect';
-import { drawCoffin, drawTrap } from './tileArt';
+import { drawCoffin, drawTrap, tilePartsSvg, tileThemeOf, trapSvg } from './tileArt';
+import { CHARACTER_ART } from './characterArt';
+import { flaskIcon, ITEM_ICONS } from './itemArt';
+import { pixelSvg } from './pixelSprite';
 import { THROWN, THROWN_WEAPON, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
   alertEnemy,
@@ -130,6 +133,7 @@ import {
   FLOORS_PER_STAGE,
   ITEM_FLOORS_PER_STAGE,
   planStagePotions,
+  POTION_COLORS,
 } from './potions';
 import {
   createRandom,
@@ -146,6 +150,7 @@ import {
   createDamageNumber,
   createEvadeText,
   createNoticeMark,
+  NOTICE_MARK_SVG,
   createSleepMark,
   createStatusText,
   createSurpriseMark,
@@ -178,7 +183,7 @@ import {
 import { campfireRoom, catacombRooms, normalRooms, startRooms } from './roomSources';
 import { loadFonts } from './fonts';
 import { createHud } from './hud';
-import { applyUiArt } from './uiArt';
+import { applyUiArt, HUD_ICONS, HUD_PALETTE } from './uiArt';
 import { fitCanvas, pixelRatio } from './screen';
 import {
   lowerCase,
@@ -1152,11 +1157,26 @@ function offerSightGuides() {
   showWaitingGuide();
 }
 
+// The pictures of the guides in the help window, from the art of the map, the bag, and the screen.
+// The tiles are those of the first stage, and the potion is a red one.
+const GUIDE_ICONS: Record<GuideName, string> = {
+  controls: CHARACTER_ART.hero.right,
+  surprise: NOTICE_MARK_SVG,
+  traps: trapSvg('spike', 'known'),
+  stairs: tilePartsSvg(['stairs-down'], tileThemeOf(0)),
+  campfire: ITEM_ICONS.campfire,
+  food: ITEM_ICONS['cooked-meat'],
+  potions: flaskIcon(POTION_COLORS.find(({ name }) => name === 'Red')!.color),
+  strength: pixelSvg(HUD_ICONS.strength, HUD_PALETTE),
+  'locked-doors': tilePartsSvg(['door-left', 'door-right', 'door-top', 'lock'], tileThemeOf(0)),
+};
+
 function showHelp() {
   dialog.open({
     title: t('Help'),
     text: '',
     isWide: true,
+    isGrid: true,
     actions: (Object.keys(GUIDES) as GuideName[])
       .filter((name) => shownGuides.has(name))
       .map((name) => ({
@@ -1164,6 +1184,7 @@ function showHelp() {
         detail: '',
         blockedReason: null,
         run: () => showGuide(name, showHelp),
+        icon: GUIDE_ICONS[name],
       })),
   });
 }

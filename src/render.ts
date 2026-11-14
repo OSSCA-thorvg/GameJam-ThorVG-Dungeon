@@ -12,7 +12,7 @@ import {
 } from './tileArt';
 import { FONT_BOLD } from './fonts';
 import { BAR_LEFT, BAR_TOP } from './hud';
-import { createPixelSprite } from './pixelSprite';
+import { createPixelSprite, pixelSvg } from './pixelSprite';
 import { drawStairsBeam, drawTileOutline } from './effectArt';
 import { t } from './i18n';
 import { STATUS_LABELS, type StatusName } from './status';
@@ -997,6 +997,9 @@ export function createTargetedText(TVG: ThorVGNamespace): Scene {
 export function createNoticeMark(TVG: ThorVGNamespace): Scene {
   return createSpeechBubble(TVG, NOTICE_BUBBLE, NOTICE_MARK_COLOR);
 }
+
+// The same mark as SVG, for the windows of the page.
+export const NOTICE_MARK_SVG = pixelSvg(NOTICE_BUBBLE, { ...BUBBLE_PALETTE, M: NOTICE_MARK_COLOR });
 
 // The mark shown over a sleeping enemy.
 export function createSleepMark(TVG: ThorVGNamespace): Scene {

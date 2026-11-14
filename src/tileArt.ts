@@ -193,8 +193,31 @@ export function createRaster() {
       }
       return scene;
     },
+    // The same pixels as SVG, one unit an art pixel, cut to the pixels that are set.
+    toSvg(): string {
+      const all = [...pixels.values()];
+      const left = Math.min(...all.map(({ x }) => x));
+      const top = Math.min(...all.map(({ y }) => y));
+      const width = Math.max(...all.map(({ x }) => x)) - left + 1;
+      const height = Math.max(...all.map(({ y }) => y)) - top + 1;
+      const paths = new Map<string, string>();
+      for (const { x, y, color } of all) {
+        const key = color.join(',');
+        paths.set(key, `${paths.get(key) ?? ''}M${x - left} ${y - top}h1v1h-1z`);
+      }
+      const body = [...paths]
+        .map(([key, d]) => {
+          const [r, g, b, a = 255] = key.split(',').map(Number);
+          return `<path fill="rgb(${r},${g},${b})" fill-opacity="${a / 255}" d="${d}"/>`;
+        })
+        .join('');
+      const size = `width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"`;
+      return `<svg xmlns="http://www.w3.org/2000/svg" ${size} shape-rendering="crispEdges">${body}</svg>`;
+    },
   };
 }
+
+type Raster = ReturnType<typeof createRaster>;
 
 // The top of a wall, lit on its far edges and shaded on its near ones. (x, y) is from the center of
 // the top.
@@ -368,6 +391,20 @@ export function drawTilePart(
   theme: TileTheme,
 ): Scene {
   const raster = createRaster();
+  paintTilePart(raster, part, tile, theme);
+  return raster.toScene(TVG, center);
+}
+
+// Tile parts drawn over one another in order, as SVG for the windows of the page.
+export function tilePartsSvg(parts: TilePart[], theme: TileTheme): string {
+  const raster = createRaster();
+  for (const part of parts) {
+    paintTilePart(raster, part, { x: 0, y: 0 }, theme);
+  }
+  return raster.toSvg();
+}
+
+function paintTilePart(raster: Raster, part: TilePart, tile: Point, theme: TileTheme) {
   const seed = tile.x * 7919 + tile.y * 104729;
   // The floor's axes over the whole map. Centers of tiles are 16 art pixels apart across and 8
   // down, so a tile is 32 long along each axis.
@@ -464,7 +501,6 @@ export function drawTilePart(
       break;
     }
   }
-  return raster.toScene(TVG, center);
 }
 
 // The pixels that the walls with these centers cover, their tops and both sides, in white. The
@@ -514,6 +550,18 @@ export function drawTrap(
   state: 'known' | 'spent',
 ): Scene {
   const raster = createRaster();
+  paintTrap(raster, kind, state);
+  return raster.toScene(TVG, { x: 0, y: 0 });
+}
+
+// A trap as SVG, for the windows of the page.
+export function trapSvg(kind: 'spike' | 'arrow', state: 'known' | 'spent'): string {
+  const raster = createRaster();
+  paintTrap(raster, kind, state);
+  return raster.toSvg();
+}
+
+function paintTrap(raster: Raster, kind: 'spike' | 'arrow', state: 'known' | 'spent') {
   const colors = TRAP_COLORS[state];
   raster.fill(diamond(0, 15), () => colors.edge);
   raster.fill(diamond(0, 13), () => colors.plate);
@@ -551,7 +599,6 @@ export function drawTrap(
       });
     });
   }
-  return raster.toScene(TVG, { x: 0, y: 0 });
 }
 
 // Placeholder colors of a wooden coffin: its lid and the cross on it, its two sides, and the dark

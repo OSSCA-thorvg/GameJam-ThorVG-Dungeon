@@ -390,6 +390,22 @@
         font-size: 18px;
         color: #b8bac2;
       }
+      /* Three tiles a row, each an icon centered in a row as tall as the largest icon (64px, see
+         dialog.ts), over its label. */
+      #dialog-actions.grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+      }
+      #dialog-actions.grid .dialog-action {
+        display: grid;
+        grid-template-rows: 64px auto;
+        place-items: center;
+        gap: 6px;
+        text-align: center;
+      }
+      .dialog-action-icon {
+        image-rendering: pixelated;
+      }
       .dialog-action:disabled,
       .dialog-action:disabled span {
         color: #7a7d86;

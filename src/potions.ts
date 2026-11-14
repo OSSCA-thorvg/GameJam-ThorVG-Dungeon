@@ -8,7 +8,7 @@ type Color = [r: number, g: number, b: number];
 
 // Every potion looks like one of these, picked anew for each run. Plain color names, so a player
 // can tell them apart at a glance.
-const POTION_COLORS: { name: string; color: Color }[] = [
+export const POTION_COLORS: { name: string; color: Color }[] = [
   { name: 'Red', color: [210, 50, 45] },
   { name: 'Orange', color: [235, 130, 30] },
   { name: 'Yellow', color: [240, 210, 40] },
