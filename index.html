@@ -584,19 +584,30 @@
         padding: 8px 20px;
         font: 22px 'Galmuri11', sans-serif;
       }
+      /* The title and the buttons stand at the left, over the picture of the dungeon's entrance that
+         ThorVG draws on the canvas behind (menuArt.ts). */
       #main-menu {
         position: fixed;
         inset: 0;
         display: flex;
         flex-direction: column;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         gap: 14px;
-        background: #14151a;
+        padding-left: max(24px, 8vw);
         color: #e8e8ec;
       }
       #main-menu[hidden] {
         display: none;
+      }
+      /* A tall screen has the menu at the top, centered, and the picture below it. */
+      @media (orientation: portrait) {
+        #main-menu {
+          align-items: center;
+          justify-content: flex-start;
+          padding: 10vh 0 0;
+          text-align: center;
+        }
       }
       /* The menu fades in over its dark background, which the splash leaves behind it. */
       #main-menu > * {
@@ -608,8 +619,16 @@
       }
       #main-menu h1 {
         margin: 0 0 24px;
-        font: bold 44px 'Galmuri11', sans-serif;
+        /* 6 times the 11 pixels the font is drawn on, so its pixels stay whole. */
+        font: bold 66px/1.2 'Galmuri11', sans-serif;
         letter-spacing: 2px;
+        text-shadow: 0 2px 0 #000;
+      }
+      /* The game's own text and buttons stay hidden behind the menu. */
+      body.menu-open
+        :is(#status, #status-tooltip, #log, #top-right, #bottom-left, #inventory-button,
+          #target-prompt, #game-over) {
+        visibility: hidden;
       }
       #main-menu button {
         width: 200px;
@@ -800,7 +819,7 @@
       </div>
     </div>
     <div id="main-menu" hidden>
-      <h1>ThorVG Dungeon</h1>
+      <h1>ThorVG<br />Dungeon</h1>
       <button id="menu-continue" data-i18n="Continue" hidden>Continue</button>
       <button id="menu-play" data-i18n="New game">New game</button>
       <button id="menu-settings" data-i18n="Settings">Settings</button>

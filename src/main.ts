@@ -66,6 +66,7 @@ import { createHazardField, spreadArea } from './hazards';
 import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
 import { createMainMenu } from './mainMenu';
+import { createMenuArt } from './menuArt';
 import { loadSettings, saveSettings, uiScaleFor, volumeOf } from './settings';
 import { createLogPanel } from './logPanel';
 import { createSettingsPanel } from './settingsPanel';
@@ -292,6 +293,30 @@ const heroHealthBar = createHeroHealthBar(TVG, renderCanvas);
 canvas.add(heroHealthBar.scene);
 const hud = createHud(TVG, renderCanvas);
 canvas.add(hud.scene);
+// The picture behind the main menu is drawn over everything, while the menu is open.
+const menuArt = createMenuArt(TVG);
+menuArt.scene.visible(false);
+canvas.add(menuArt.scene);
+let menuFrame = 0;
+
+function showMenuArt(isShown: boolean) {
+  menuArt.scene.visible(isShown);
+  cancelAnimationFrame(menuFrame);
+  menuFrame = 0;
+  if (isShown) {
+    menuArt.layout(
+      Math.round(window.innerWidth * pixelRatio()),
+      Math.round(window.innerHeight * pixelRatio()),
+    );
+    const animate = (time: number) => {
+      menuArt.showAt(time);
+      renderCanvas();
+      menuFrame = requestAnimationFrame(animate);
+    };
+    menuFrame = requestAnimationFrame(animate);
+  }
+  renderCanvas();
+}
 
 applyUiArt();
 let settings = loadSettings();
@@ -1765,6 +1790,9 @@ window.addEventListener('resize', () => {
   applySettings();
   settingsPanel.refresh();
   applyCamera();
+  if (menuFrame !== 0) {
+    showMenuArt(true);
+  }
   canvas.update().render();
 });
 
@@ -4079,7 +4107,9 @@ const mainMenu = createMainMenu(() =>
 async function openMainMenu() {
   quitButton.hidden = true;
   sound.playMusic('bgm-menu');
+  showMenuArt(true);
   const choice = await mainMenu.show(readSave() !== null);
+  showMenuArt(false);
   // The window may have been resized while the menu was open.
   fitCanvas(canvas);
   applySettings();

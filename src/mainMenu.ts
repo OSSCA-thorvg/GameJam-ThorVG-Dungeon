@@ -19,6 +19,7 @@ export function createMainMenu(openSettings: () => void): MainMenu {
 
   const pick = (choice: MenuChoice) => {
     menu.hidden = true;
+    document.body.classList.remove('menu-open');
     choose?.(choice);
     choose = null;
   };
@@ -36,6 +37,7 @@ export function createMainMenu(openSettings: () => void): MainMenu {
       }
       resume.hidden = !canContinue;
       menu.hidden = false;
+      document.body.classList.add('menu-open');
       return new Promise((resolve) => {
         choose = resolve;
       });
