@@ -968,12 +968,22 @@ export function createItemPaint(TVG: ThorVGNamespace, svg: string): Paint {
 const CAMPFIRE_PIXELS = 32;
 const CAMPFIRE_LOGS = 24.5;
 
-export function createCampfirePaint(TVG: ThorVGNamespace, svg: string): Paint {
-  const picture = new TVG.Picture();
-  picture.load(svg, { type: 'svg' });
-  picture.size(CAMPFIRE_PIXELS * ART_PIXEL, CAMPFIRE_PIXELS * ART_PIXEL);
-  picture.origin(0.5, CAMPFIRE_LOGS / CAMPFIRE_PIXELS);
-  return picture;
+// A campfire with a picture for each frame of its flicker, of which the first is shown.
+export function createCampfirePaint(
+  TVG: ThorVGNamespace,
+  frames: string[],
+): { paint: Scene; frames: Paint[] } {
+  const paint = new TVG.Scene();
+  const pictures = frames.map((svg, index) => {
+    const picture = new TVG.Picture();
+    picture.load(svg, { type: 'svg' });
+    picture.size(CAMPFIRE_PIXELS * ART_PIXEL, CAMPFIRE_PIXELS * ART_PIXEL);
+    picture.origin(0.5, CAMPFIRE_LOGS / CAMPFIRE_PIXELS);
+    picture.visible(index === 0);
+    paint.add(picture);
+    return picture;
+  });
+  return { paint, frames: pictures };
 }
 
 export function createCentipedePart(TVG: ThorVGNamespace, isHead: boolean): Scene {

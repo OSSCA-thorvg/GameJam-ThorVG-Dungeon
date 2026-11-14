@@ -484,10 +484,33 @@ const CHEST = [
   '..kkkkkkkkkkkkkkkkkkkk..',
 ];
 
-// The flames of the campfire give off light, so they keep their own colors.
-const PALETTE = mutedPalette(DRAWN_PALETTE, ['4', '5', '6']);
+// The heart of the campfire's flames gives off light, so its orange and yellow keep their colors.
+// Its red edge is muted as the rest of the art is, as its pure red stood apart from it.
+const PALETTE = mutedPalette(DRAWN_PALETTE, ['5', '6']);
 
 const icon = (rows: string[]) => pixelSvg(rows, PALETTE);
+
+// The campfire flickers through a few frames, its flames swaying to the sides more the higher they
+// are, over logs that stay still. Placeholder values: how many frames the loop has, the rows above
+// the logs, and how far the top of the flames sways, in art pixels.
+const CAMPFIRE_FRAME_COUNT = 4;
+const FLAME_ROWS = 19;
+const FLAME_SWAY = 1.6;
+
+const shiftRow = (row: string, by: number) =>
+  by > 0 ? '.'.repeat(by) + row.slice(0, -by) : by < 0 ? row.slice(-by) + '.'.repeat(-by) : row;
+
+export const CAMPFIRE_FRAMES = Array.from({ length: CAMPFIRE_FRAME_COUNT }, (_, frame) =>
+  icon(
+    CAMPFIRE.map((row, y) => {
+      if (y >= FLAME_ROWS) {
+        return row;
+      }
+      const phase = (frame / CAMPFIRE_FRAME_COUNT) * 2 * Math.PI + y * 0.6;
+      return shiftRow(row, Math.round(Math.sin(phase) * (1 - y / FLAME_ROWS) * FLAME_SWAY));
+    }),
+  ),
+);
 
 export const ITEM_ICONS = {
   'worn-shortsword': icon(WORN_SHORTSWORD),

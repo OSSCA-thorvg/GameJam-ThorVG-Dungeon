@@ -13,7 +13,7 @@ import {
 } from './throwEffect';
 import { drawCoffin, drawTrap, tilePartsSvg, tileThemeOf, trapSvg } from './tileArt';
 import { CHARACTER_ART } from './characterArt';
-import { flaskIcon, ITEM_ICONS } from './itemArt';
+import { CAMPFIRE_FRAMES, flaskIcon, ITEM_ICONS } from './itemArt';
 import { pixelSvg } from './pixelSprite';
 import { THROWN, THROWN_WEAPON, traceLine, type PathRule, type Trajectory } from './trajectory';
 import {
@@ -55,7 +55,6 @@ import { deleteSave, readSave, writeSave, type SavedEnemyKind, type SavedGame } 
 import { createBossFloor, createNecromancerFloor } from './bossFloor';
 import { showLaneWarning, type LaneWarning } from './laneWarning';
 import {
-  CAMPFIRE_ICON,
   COOK_TURNS,
   pickCampfireFloor,
   REST_HEAL_FRACTION,
@@ -760,6 +759,40 @@ let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
 let isLevelShown = false;
 // The pictures of the fixtures of the floor, like the campfire.
 let fixturePaints: { position: Point; paint: Paint }[] = [];
+// The frames of the flicker of each campfire of the floor, and the one shown, which one loop moves
+// on for all of them, drawing the canvas only when the frame changes. Placeholder value.
+const CAMPFIRE_FRAMES_PER_SECOND = 8;
+let campfireFrames: Paint[][] = [];
+let shownCampfireFrame = 0;
+let campfireLoop = 0;
+
+function placeCampfire(tile: Point) {
+  const { paint, frames } = createCampfirePaint(TVG, CAMPFIRE_FRAMES);
+  roomView.place(paint, tile.x, tile.y);
+  fixturePaints.push({ position: tile, paint });
+  frames.forEach((frame, index) => frame.visible(index === shownCampfireFrame));
+  campfireFrames.push(frames);
+  if (campfireLoop === 0) {
+    campfireLoop = requestAnimationFrame(flickerCampfires);
+  }
+}
+
+function flickerCampfires(time: number) {
+  if (campfireFrames.length === 0) {
+    campfireLoop = 0;
+    return;
+  }
+  const next = Math.floor((time / 1000) * CAMPFIRE_FRAMES_PER_SECOND) % CAMPFIRE_FRAMES.length;
+  if (next !== shownCampfireFrame) {
+    for (const frames of campfireFrames) {
+      frames[shownCampfireFrame].visible(false);
+      frames[next].visible(true);
+    }
+    shownCampfireFrame = next;
+    renderCanvas();
+  }
+  campfireLoop = requestAnimationFrame(flickerCampfires);
+}
 let traps: Trap[] = [];
 let coffins: Coffin[] = [];
 // The coffins that the necromancer chants over, until it raises what is in them, and the ghouls it
@@ -1730,12 +1763,11 @@ function startLevel(start: Point = room.start) {
     dropThing(thing, position);
   }
   fixturePaints = [];
+  campfireFrames = [];
   room.tiles.forEach((row, y) =>
     row.forEach((tile, x) => {
       if (tile === 'campfire') {
-        const paint = createCampfirePaint(TVG, CAMPFIRE_ICON);
-        roomView.place(paint, x, y);
-        fixturePaints.push({ position: { x, y }, paint });
+        placeCampfire({ x, y });
       }
     }),
   );
