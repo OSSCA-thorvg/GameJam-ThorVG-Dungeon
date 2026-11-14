@@ -442,9 +442,30 @@ export interface CharacterArt {
   left: string;
   right: string;
   pixels: number;
+  // Where the body is in the picture, facing either way: its first and last columns and its first
+  // row, in art pixels.
+  body: BodyBounds;
+}
+
+export interface BodyBounds {
+  left: number;
+  right: number;
+  top: number;
 }
 
 const mirrored = (rows: string[]) => rows.map((row) => [...row].reverse().join(''));
+
+function bodyOf(rows: string[]): BodyBounds {
+  const columns = rows.flatMap((row) => [...row].flatMap((pixel, x) => (pixel === '.' ? [] : [x])));
+  const left = Math.min(...columns);
+  const right = Math.max(...columns);
+  const last = rows.length - 1;
+  return {
+    left: Math.min(left, last - right),
+    right: Math.max(right, last - left),
+    top: rows.findIndex((row) => /[^.]/.test(row)),
+  };
+}
 
 // Each picture is drawn facing one way, and the other way is its mirror image.
 const art = (rows: string[], drawnFacing: 'left' | 'right'): CharacterArt => {
@@ -454,6 +475,7 @@ const art = (rows: string[], drawnFacing: 'left' | 'right'): CharacterArt => {
     left: drawnFacing === 'left' ? drawn : mirror,
     right: drawnFacing === 'left' ? mirror : drawn,
     pixels: rows.length,
+    body: bodyOf(rows),
   };
 };
 

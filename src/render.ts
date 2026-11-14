@@ -1,5 +1,6 @@
 import type { Paint, Scene, Shape, ThorVGNamespace } from '@thorvg/webcanvas';
-import { CHARACTER_ART, type CharacterArt } from './characterArt';
+import { CHARACTER_ART, type BodyBounds, type CharacterArt } from './characterArt';
+import { drawStatusLook, LOOK_HEADROOM, type LookArt, type StatusLook } from './statusLookArt';
 import type { EnemyKind, UndeadKind } from './enemy';
 import { isFixture, isWalkable, type Point, type Room } from './room';
 import {
@@ -26,7 +27,6 @@ export type CursorTarget = 'floor' | 'enemy' | 'item' | 'target';
 export type DamageTarget = 'enemy' | 'hero' | 'heal';
 
 // An effect that shows as a color over a character.
-export type CharacterTint = 'frozen' | 'paralyzed' | 'burning' | 'shielded';
 
 // Fire or gas lying on a tile.
 export type GasKind = 'poison' | 'paralysis';
@@ -220,13 +220,6 @@ export const STATUS_COLORS: Record<StatusName, Color> = {
   weakened: [170, 130, 220],
   shielded: [120, 190, 255],
   regenerating: [230, 70, 70],
-};
-// Placeholder colors, laid over a character with the alpha at the end.
-const CHARACTER_TINTS: Record<CharacterTint, [...Color, number]> = {
-  frozen: [130, 200, 255, 150],
-  paralyzed: [240, 220, 90, 130],
-  burning: [255, 120, 40, 130],
-  shielded: [90, 160, 255, 140],
 };
 function mapToScreen(x: number, y: number): Point {
   return {
@@ -884,8 +877,12 @@ function createCharacter(
   scene.add(left);
   scene.add(right);
   facings.set(scene, { left, right });
+  characterShapes.set(scene, { pixels: art.pixels, size, body: art.body });
   return scene;
 }
+
+// The grid of each character's picture, and where its body is in it, for the looks of statuses.
+const characterShapes = new WeakMap<Scene, { pixels: number; size: number; body: BodyBounds }>();
 
 // Turns a character to face the way from one tile to another on the screen. A move straight up or
 // down the screen keeps the way it faced.
@@ -960,12 +957,91 @@ export function createEnemyPaint(TVG: ThorVGNamespace, look: EnemyLook): Scene {
     : createCharacter(TVG, ENEMY_ART[look]);
 }
 
-// Lays a color over a character, or takes it away.
-export function tintCharacter(scene: Scene, tint: CharacterTint | null): void {
-  scene.resetEffects();
-  if (tint) {
-    scene.fillEffect(...CHARACTER_TINTS[tint]);
-  }
+export interface StatusLooks {
+  // Puts the look of a status on a character, or takes it off with null.
+  show(character: Scene, look: StatusLook | null): void;
+  // Forgets the characters of a floor that was left, and stops moving their looks.
+  clear(): void;
+}
+
+// The looks of statuses on characters, as pictures over theirs that move, like fire on a burning
+// one. Each look is drawn on the grid of the character's picture, at its size, so that their art
+// pixels match.
+export function createStatusLooks(TVG: ThorVGNamespace, render: () => void): StatusLooks {
+  const arts = new Map<string, LookArt>();
+  const shown = new Map<
+    Scene,
+    { look: StatusLook; paint: Scene; frames: Scene[]; framesPerSecond: number; current: number }
+  >();
+  let animation = 0;
+  const move = (time: number) => {
+    let hasChanged = false;
+    for (const entry of shown.values()) {
+      const next = Math.floor((time / 1000) * entry.framesPerSecond) % entry.frames.length;
+      if (next !== entry.current) {
+        entry.frames[entry.current].visible(false);
+        entry.frames[next].visible(true);
+        entry.current = next;
+        hasChanged = true;
+      }
+    }
+    if (hasChanged) {
+      render();
+    }
+    animation = shown.size > 0 ? requestAnimationFrame(move) : 0;
+  };
+
+  return {
+    show(character, look) {
+      const old = shown.get(character);
+      if (old?.look === look) {
+        return;
+      }
+      if (old) {
+        character.remove(old.paint);
+        shown.delete(character);
+      }
+      const shape = characterShapes.get(character);
+      if (!look || !shape) {
+        return;
+      }
+      const key = `${look} ${shape.pixels} ${JSON.stringify(shape.body)}`;
+      const art = arts.get(key) ?? drawStatusLook(look, shape.pixels, shape.body);
+      arts.set(key, art);
+      const scale = shape.size / shape.pixels;
+      const paint = new TVG.Scene();
+      const frames = art.frames.map((layers, index) => {
+        const scene = new TVG.Scene();
+        for (const { svg, opacity } of layers) {
+          const picture = new TVG.Picture();
+          picture.load(svg, { type: 'svg' });
+          picture.size(shape.size, shape.size + LOOK_HEADROOM * scale);
+          picture.origin(0.5, 1);
+          picture.opacity(Math.round(255 * opacity));
+          scene.add(picture);
+        }
+        scene.visible(index === 0);
+        paint.add(scene);
+        return scene;
+      });
+      character.add(paint);
+      shown.set(character, {
+        look,
+        paint,
+        frames,
+        framesPerSecond: art.framesPerSecond,
+        current: 0,
+      });
+      if (animation === 0) {
+        animation = requestAnimationFrame(move);
+      }
+    },
+    clear() {
+      shown.clear();
+      cancelAnimationFrame(animation);
+      animation = 0;
+    },
+  };
 }
 
 // Text just above the head of a character standing on the scene's local origin, in the font that

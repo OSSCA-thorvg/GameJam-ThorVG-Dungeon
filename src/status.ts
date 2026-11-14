@@ -1,4 +1,4 @@
-import type { CharacterTint } from './render';
+import type { StatusLook } from './statusLookArt';
 
 // Effects that last for some turns on the hero or an enemy.
 export type StatusName =
@@ -99,12 +99,9 @@ export function isHelpless(statuses: Statuses): boolean {
   return (['paralyzed', 'frozen', 'stunned'] as const).some((name) => hasStatus(statuses, name));
 }
 
-// The color a character is tinted with, from the effect that matters most to the player.
-export function tintOf(statuses: Statuses): CharacterTint | null {
-  const order: CharacterTint[] = ['frozen', 'paralyzed', 'burning', 'shielded'];
-  // A stunned character is tinted like a paralyzed one, as it is as helpless.
-  if (hasStatus(statuses, 'stunned') && !hasStatus(statuses, 'frozen')) {
-    return 'paralyzed';
-  }
+// The look on a character, from the effect that matters most to the player: first what keeps it
+// from acting, then what hurts it, then what guards it.
+export function statusLookOf(statuses: Statuses): StatusLook | null {
+  const order: StatusLook[] = ['frozen', 'paralyzed', 'stunned', 'burning', 'shielded'];
   return order.find((name) => hasStatus(statuses, name)) ?? null;
 }

@@ -165,7 +165,7 @@ import {
   createHeroHealthBar,
   createRoomView,
   tileDistance,
-  tintCharacter,
+  createStatusLooks,
   type DamageTarget,
 } from './render';
 import { isAdjacent, isFixture, isWalkable, type Point } from './room';
@@ -177,7 +177,7 @@ import {
   poisonDamage,
   STATUS_LABELS,
   tickStatuses,
-  tintOf,
+  statusLookOf,
   type StatusName,
   type Statuses,
 } from './status';
@@ -283,6 +283,7 @@ const statusBar = createStatusBar(
 
 const renderCanvas = () => canvas.update().render();
 const damageNumbers = createDamageNumbers(renderCanvas);
+const statusLooks = createStatusLooks(TVG, renderCanvas);
 
 // The HUD is added after the map's scene, so a new level is still drawn below it.
 const mapScene = new TVG.Scene();
@@ -948,7 +949,7 @@ function nudgeEnemy(enemy: Enemy, tile: Point, offset: Point) {
 
 // Shows the hero's effects: their colors, and the enemies sensed by telepathy.
 function updateHeroLook() {
-  tintCharacter(hero, tintOf(heroStatuses));
+  statusLooks.show(hero, statusLookOf(heroStatuses));
   hero.opacity(hasStatus(heroStatuses, 'invisible') ? INVISIBLE_OPACITY : 255);
   nudgeHero(heroPosition, { x: 0, y: 0 });
   updateVision();
@@ -1593,7 +1594,7 @@ function showEnemy(enemy: Enemy) {
     enemy.paint.visible(isExplored(enemy.position));
     return;
   }
-  tintCharacter(enemy.paint, tintOf(enemy.statuses));
+  statusLooks.show(enemy.paint, statusLookOf(enemy.statuses));
   if (seenEnemies.has(enemy)) {
     enemy.paint.opacity(255);
     roomView.place(enemy.paint, x, y);
@@ -1731,6 +1732,7 @@ function replaceLevel() {
 // Leaves the current level and makes the one of the current floor, without starting it.
 function makeLevel() {
   stopChargeWarning();
+  statusLooks.clear();
   hazards.stop();
   damageNumbers.clear();
   // The level made when the page loads is not on the screen until it starts.
@@ -2364,7 +2366,7 @@ function shootAtHero(enemy: Enemy) {
       hero.fillEffect(220, 60, 60, 255);
       renderCanvas();
       setTimeout(() => {
-        tintCharacter(hero, tintOf(heroStatuses));
+        hero.resetEffects();
         renderCanvas();
       }, HIT_FLASH_MS);
     } else {
@@ -2397,7 +2399,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
         hero.resetEffects();
         hero.fillEffect(220, 60, 60, 255);
       } else {
-        tintCharacter(hero, tintOf(heroStatuses));
+        hero.resetEffects();
       }
     },
     shake: (offset) => {
@@ -2828,7 +2830,7 @@ function playHeroAttack(enemy: Enemy) {
         enemy.paint.resetEffects();
         enemy.paint.fillEffect(255, 255, 255, 255);
       } else {
-        tintCharacter(enemy.paint, tintOf(enemy.statuses));
+        enemy.paint.resetEffects();
       }
     },
     render: () => canvas.update().render(),
