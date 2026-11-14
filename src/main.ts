@@ -2704,6 +2704,7 @@ function runEnemyTurn(onDone: () => void) {
       room,
       hero: heroPosition,
       canSeeHero,
+      isHeroInvisible: hasStatus(heroStatuses, 'invisible'),
       occupied: [...occupiedTiles(enemy), ...chestTiles(), ...knownTrapTiles()],
       canSummon: canSummon(),
       summonsAlive: [...summonedGhouls].filter((ghoul) => enemies.includes(ghoul)).length,

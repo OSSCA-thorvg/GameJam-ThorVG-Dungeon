@@ -213,6 +213,9 @@ export interface EnemyContext {
   hero: Point;
   // Whether the enemy can see the hero now.
   canSeeHero: boolean;
+  // Whether the hero is invisible, which hides them even from the bosses that always know where
+  // they are, as invisibility does from every mob in Shattered Pixel Dungeon.
+  isHeroInvisible: boolean;
   // Tiles held by the other enemies.
   occupied: Point[];
   // Whether the necromancer has two coffins to raise ghouls from.
@@ -629,12 +632,17 @@ export const necromancer: EnemyBehavior = (enemy, context) => {
   if (canSeeHero && distance <= NECROMANCER_RANGE) {
     return { type: 'shoot' };
   }
+  // It cannot go after a hero who is invisible.
+  if (context.isHeroInvisible) {
+    return { type: 'wait' };
+  }
   return stepToward(room, enemy.position, hero, occupied);
 };
 
-// The giant centipede always knows where the hero is. It moves one tile a turn along rows and
-// columns, and bites hard when the hero is next to its head. With the hero in a line along a row or a column
-// and nothing between them, it rears up for a turn, which fixes the direction and shows the line,
+// The giant centipede always knows where the hero is, unless they are invisible. It moves one tile
+// a turn along rows and columns, and bites hard when the hero is next to its head. With the hero in
+// a line along a row or a column and nothing between them, it rears up for a turn, which fixes the
+// direction and shows the line,
 // and then charges down that line. The hero can step out of the line. The charge ends in a hit on
 // whoever is in the way, or else in a crash, which leaves it stunned. After that it needs a while
 // before it can rear up again.
@@ -642,7 +650,7 @@ export const necromancer: EnemyBehavior = (enemy, context) => {
 // It never steps where its body is, except onto its tail's tile, which the tail leaves as the head
 // moves. It also avoids steps into a pocket too small to hold its body, where it would trap itself,
 // and when its own body is in the way of the hero it uncoils toward the open.
-export const centipede: EnemyBehavior = (enemy, { room, hero, occupied }) => {
+export const centipede: EnemyBehavior = (enemy, { room, hero, occupied, isHeroInvisible }) => {
   const brain = enemy.centipede!;
   brain.cooldown = Math.max(0, brain.cooldown - 1);
 
@@ -659,6 +667,12 @@ export const centipede: EnemyBehavior = (enemy, { room, hero, occupied }) => {
     const heroIndex = line.findIndex((tile) => isSameTile(tile, hero));
     const hitsHero = heroIndex >= 0;
     return { type: 'charge', path: hitsHero ? line.slice(0, heroIndex) : line, hitsHero };
+  }
+
+  // It lost the hero who went invisible, and waits for them to show again. A charge it already
+  // reared up for goes on down its line, as above.
+  if (isHeroInvisible) {
+    return { type: 'wait' };
   }
 
   if (isAdjacent(head, hero)) {
