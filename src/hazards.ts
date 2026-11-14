@@ -72,6 +72,13 @@ export interface HazardField {
   burnDown(): void;
   // Stops the fire and gas from moving, when the floor is left.
   stop(): void;
+  // What burns and lies where, to be put back with setFire() and releaseGas().
+  snapshot(): HazardSnapshot;
+}
+
+export interface HazardSnapshot {
+  fires: { tile: Point; turns: number }[];
+  gases: { kind: GasKind; tile: Point; amount: number }[];
 }
 
 export interface HazardWorld {
@@ -263,6 +270,14 @@ export function createHazardField(
       for (const kind of GAS_KINDS) {
         gasPaints[kind].clear();
       }
+    },
+    snapshot() {
+      return {
+        fires: [...fires.values()].map(({ tile, turns }) => ({ tile, turns })),
+        gases: GAS_KINDS.flatMap((kind) =>
+          [...gases[kind].values()].map(({ tile, amount }) => ({ kind, tile, amount })),
+        ),
+      };
     },
   };
 }

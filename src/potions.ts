@@ -115,6 +115,8 @@ export interface ItemLook {
 export interface PotionLore {
   lookOf(name: ItemName): ItemLook;
   identify(name: ItemName): void;
+  // The potions identified so far.
+  known(): ItemName[];
 }
 
 export function createPotionLore(random: Random): PotionLore {
@@ -150,5 +152,6 @@ export function createPotionLore(random: Random): PotionLore {
     identify(name) {
       known.add(name);
     },
+    known: () => [...known],
   };
 }

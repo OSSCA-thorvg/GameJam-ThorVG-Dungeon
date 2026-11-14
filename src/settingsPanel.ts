@@ -10,6 +10,7 @@ export interface SettingsPanelOptions {
 export interface SettingsPanel {
   // Offers the UI scales that fit the window as it is now.
   refresh(): void;
+  close(): void;
 }
 
 // The settings window, opened from the button at the top right.
@@ -85,5 +86,5 @@ export function createSettingsPanel({
   });
 
   button.hidden = false;
-  return { refresh };
+  return { refresh, close };
 }

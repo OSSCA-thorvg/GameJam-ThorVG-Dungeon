@@ -31,6 +31,8 @@ export interface MessageLog {
   add(message: Phrase, category?: MessageCategory): void;
   clear(): void;
   history(): readonly LoggedMessage[];
+  // Replaces the history, as with the log of a saved game.
+  load(messages: readonly LoggedMessage[]): void;
   // Shows the messages again, in the language now on.
   refresh(): void;
 }
@@ -60,6 +62,10 @@ export function createMessageLog(element: HTMLElement): MessageLog {
     },
     clear() {
       history.length = 0;
+      show();
+    },
+    load(messages) {
+      history.splice(0, history.length, ...messages);
       show();
     },
     refresh: show,

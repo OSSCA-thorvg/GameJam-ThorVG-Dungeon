@@ -253,6 +253,15 @@
         justify-content: space-between;
         min-height: 40px;
       }
+      #quit-to-menu {
+        width: 100%;
+        min-height: 44px;
+        margin-top: 12px;
+        font: 22px 'Galmuri11', sans-serif;
+      }
+      #quit-to-menu[hidden] {
+        display: none;
+      }
       #settings-panel select {
         min-height: 36px;
         padding: 0 30px 0 10px;
@@ -615,6 +624,7 @@
       #main-menu button,
       #game-over button,
       #target-prompt button,
+      #quit-to-menu,
       .dialog-action,
       #inventory-details button {
         color: #e8e8ec;
@@ -627,13 +637,13 @@
       }
       :is(#wait, #examine, #log-button, #inventory-button, #settings-button, #help-button,
         #inventory-close, #log-close, #settings-close, #dialog-close, #main-menu button,
-        #game-over button, #target-prompt button, .dialog-action,
+        #game-over button, #target-prompt button, #quit-to-menu, .dialog-action,
         #inventory-details button):hover:not(:disabled) {
         border-image-source: var(--button-hover);
       }
       :is(#wait, #examine, #log-button, #inventory-button, #settings-button, #help-button,
         #inventory-close, #log-close, #settings-close, #dialog-close, #main-menu button,
-        #game-over button, #target-prompt button, .dialog-action,
+        #game-over button, #target-prompt button, #quit-to-menu, .dialog-action,
         #inventory-details button):active:not(:disabled),
       #examine.active {
         border-image-source: var(--button-pressed);
@@ -784,7 +794,8 @@
     </div>
     <div id="main-menu" hidden>
       <h1>ThorVG Dungeon</h1>
-      <button id="menu-play" data-i18n="Play">Play</button>
+      <button id="menu-continue" data-i18n="Continue" hidden>Continue</button>
+      <button id="menu-play" data-i18n="New game">New game</button>
       <button id="menu-settings" data-i18n="Settings">Settings</button>
     </div>
     <div id="log-window" hidden>
@@ -822,6 +833,7 @@
           <span data-i18n="Mute">Mute</span>
           <button id="mute" aria-pressed="false" aria-label="Mute" data-i18n-aria="Mute"></button>
         </label>
+        <button id="quit-to-menu" data-i18n="Main menu" hidden>Main menu</button>
       </div>
     </div>
     <div id="dialog" hidden>

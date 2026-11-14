@@ -60,6 +60,9 @@ export interface RoomView {
   markEntrance(tile: Point): void;
   // Hides everything that was never lit, and darkens everything outside the light.
   setLight(light: Light): void;
+  // Shows tiles as seen before, as those of a saved game, which were lit before this view was made.
+  // A tile is remembered whole, as the lights that showed it are not kept.
+  rememberTiles(tiles: Point[]): void;
   // Moves a paint onto a tile and into that tile's draw layer.
   place(paint: Paint, x: number, y: number): void;
   // Moves a paint onto a tile's floor, below everything else placed on the tile.
@@ -506,6 +509,26 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
   lightMap.transform(LIGHT_MAP_SQUEEZE);
 
   const rememberedOutlines = new Set<string>();
+  const remember = (key: string, shape: Shape, outline: Point[]) => {
+    if (!rememberedOutlines.has(key)) {
+      rememberedOutlines.add(key);
+      appendLightOutline(shape, outline);
+    }
+  };
+  // The floor diamond of a tile, and the outline of a wall standing on it, top and front faces.
+  const floorOf = (x: number, y: number) => {
+    const center = tileCenter(x, y);
+    return [
+      { x: center.x, y: center.y - TILE_HEIGHT / 2 },
+      { x: center.x + TILE_WIDTH / 2, y: center.y },
+      { x: center.x, y: center.y + TILE_HEIGHT / 2 },
+      { x: center.x - TILE_WIDTH / 2, y: center.y },
+    ];
+  };
+  const wallOf = (x: number, y: number) => {
+    const [top, right, bottom, left] = floorOf(x, y);
+    return [lift(top), lift(right), right, bottom, left, lift(left)];
+  };
 
   const createLightGradient = (light: Light) => {
     const center = tileCenter(light.center.x, light.center.y);
@@ -704,13 +727,6 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
       }
     },
     setLight(light) {
-      const remember = (key: string, shape: Shape, outline: Point[]) => {
-        if (!rememberedOutlines.has(key)) {
-          rememberedOutlines.add(key);
-          appendLightOutline(shape, outline);
-        }
-      };
-
       // Moving a point along its own ray keeps the edges of the shadows where they are.
       const floorOutline = light.outline.map(({ x, y }) => {
         const rayX = x - light.center.x;
@@ -765,6 +781,20 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
       }
       floorLight.lit.fill(createLightGradient(light));
       wallLight.lit.fill(createLightGradient(light));
+    },
+    rememberTiles(tiles) {
+      for (const { x, y } of tiles) {
+        const tile = room.tiles[y][x];
+        if (tile === 'void') {
+          continue;
+        }
+        if (tile !== 'wall') {
+          remember(`floor ${x},${y}`, floorLight.remembered, floorOf(x, y));
+        }
+        if (tile === 'wall' || tile === 'door' || tile === 'locked-door') {
+          remember(`${x},${y}`, wallLight.remembered, wallOf(x, y));
+        }
+      }
     },
     place(paint, x, y) {
       placeInLayer(paint, layers[x + y], x, y);

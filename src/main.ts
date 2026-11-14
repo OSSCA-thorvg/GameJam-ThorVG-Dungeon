@@ -1,4 +1,4 @@
-import ThorVG, { type Paint } from '@thorvg/webcanvas';
+import ThorVG, { type Paint, type Scene } from '@thorvg/webcanvas';
 // The package does not export this path, so it is imported by file path.
 import wasmUrl from '../node_modules/@thorvg/webcanvas/dist/thorvg.wasm?url';
 import { playAttackEffect } from './attackEffect';
@@ -48,8 +48,10 @@ import {
   UNDEAD_KINDS,
   wholeOf,
   type Enemy,
+  type EnemyKind,
   type UndeadKind,
 } from './enemy';
+import { deleteSave, readSave, writeSave, type SavedEnemyKind, type SavedGame } from './save';
 import { createBossFloor, createNecromancerFloor } from './bossFloor';
 import { showLaneWarning, type LaneWarning } from './laneWarning';
 import {
@@ -63,7 +65,7 @@ import { createDialog, type DialogContent } from './dialog';
 import { createHazardField, spreadArea } from './hazards';
 import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
-import { showMainMenu } from './mainMenu';
+import { createMainMenu } from './mainMenu';
 import { loadSettings, saveSettings, uiScaleFor, volumeOf } from './settings';
 import { createLogPanel } from './logPanel';
 import { createSettingsPanel } from './settingsPanel';
@@ -474,14 +476,18 @@ function pickSecondStageKind(random: Random) {
 
 // A mimic in disguise, drawn as a chest on the floor is. It holds gold, one of the prizes
 // Mimic.generatePrize() of Shattered Pixel Dungeon picks from.
-function createMimic(position: Point, random: Random): Enemy {
+function createMimicDisguise(): Scene {
   const look = new TVG.Scene();
   look.add(createChest(TVG, CHEST_ICON));
+  return look;
+}
+
+function createMimic(position: Point, random: Random): Enemy {
   const mimic = createEnemy(
     mimicStats(currentStage()),
     position,
     false,
-    look,
+    createMimicDisguise(),
     createEnemyHealthBar(TVG, renderCanvas),
     createSleepMark(TVG),
     chaser,
@@ -701,6 +707,8 @@ const activePointers = new Map<number, Point>();
 let inventory: ItemStack[] = createStartingInventory();
 let equipment: Equipment = createStartingEquipment();
 let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
+// Whether the scene of the current level is on the screen.
+let isLevelShown = false;
 let traps: Trap[] = [];
 let coffins: Coffin[] = [];
 // The coffins that the necromancer chants over, until it raises what is in them, and the ghouls it
@@ -1611,7 +1619,8 @@ function musicOf(floor: number): MusicName {
   return floor % FLOORS_PER_STAGE === 0 ? tracks.boss : tracks.floor;
 }
 
-function startLevel() {
+// The hero starts at the entrance, or where they stood in a saved game.
+function startLevel(start: Point = room.start) {
   // Before the hero looks around, so that the surprise guide for an enemy in sight waits for it.
   if (floor === 1) {
     offerGuide('controls');
@@ -1633,6 +1642,7 @@ function startLevel() {
 
   roomView.scene.scale(zoom);
   mapScene.add(roomView.scene);
+  isLevelShown = true;
 
   openDoors = new Set();
   for (const enemy of enemies) {
@@ -1652,8 +1662,8 @@ function startLevel() {
   coffins.forEach(showCoffin);
   // The hero arrives by steps from the floor above.
   roomView.markEntrance(room.start);
-  heroPosition = room.start;
-  placeHero(room.start);
+  heroPosition = start;
+  placeHero(start);
   // The hero is drawn anew on each level, so the effects on them are shown again.
   updateHeroLook();
   showHeroHp({ jump: true });
@@ -1661,7 +1671,7 @@ function startLevel() {
   // A new level starts with the camera already on the hero.
   cancelAnimationFrame(cameraFrame);
   cameraFrame = 0;
-  cameraFocus = roomView.tileCenter(room.start);
+  cameraFocus = roomView.tileCenter(start);
   cameraShake = { x: 0, y: 0 };
   applyCamera();
 
@@ -1685,13 +1695,24 @@ function goDownStairs() {
   sound.play('stairs');
   replaceLevel();
   messageLog.add(phrase('You went down to the next floor.'));
+  saveGame();
 }
 
 function replaceLevel() {
+  makeLevel();
+  startLevel();
+}
+
+// Leaves the current level and makes the one of the current floor, without starting it.
+function makeLevel() {
   stopChargeWarning();
   hazards.stop();
   damageNumbers.clear();
-  mapScene.remove(roomView.scene);
+  // The level made when the page loads is not on the screen until it starts.
+  if (isLevelShown) {
+    mapScene.remove(roomView.scene);
+    isLevelShown = false;
+  }
   ({
     room,
     explored,
@@ -1705,21 +1726,10 @@ function replaceLevel() {
     trapSpecs,
     coffinSpecs,
   } = createLevel());
-  startLevel();
 }
 
 // The first line of a run.
 const greet = () => messageLog.add(phrase('You entered an unknown dungeon.'));
-
-sound.playMusic('bgm-menu');
-await showMainMenu(() => document.querySelector<HTMLButtonElement>('#settings-button')!.click());
-// The window may have been resized while the menu was open.
-fitCanvas(canvas);
-applySettings();
-settingsPanel.refresh();
-
-startLevel();
-greet();
 
 window.addEventListener('resize', () => {
   fitCanvas(canvas);
@@ -1733,17 +1743,25 @@ const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas')!;
 
 // The line that a rearing centipede is about to charge down, while it is shown.
 let chargeWarning: LaneWarning | null = null;
+// What that warning shows, kept for a saved game.
+let warningShape: { tiles: Point[]; direction: Point } | null = null;
 
 function stopChargeWarning() {
   chargeWarning?.stop();
   chargeWarning = null;
+  warningShape = null;
+}
+
+function showWarning(tiles: Point[], direction: Point) {
+  stopChargeWarning();
+  chargeWarning = showLaneWarning(TVG, roomView, tiles, direction, renderCanvas);
+  warningShape = { tiles, direction };
 }
 
 // The centipede marks the hero as its target and shows the line it will charge down. The hero has
 // this turn to leave that line.
 function startChargeWarning(lane: Point[], direction: Point) {
-  stopChargeWarning();
-  chargeWarning = showLaneWarning(TVG, roomView, lane, direction, renderCanvas);
+  showWarning(lane, direction);
   damageNumbers.show(roomView, createTargetedText(TVG), heroPosition);
   messageLog.add(phrase('The giant centipede rears up and targets you!'), 'warning');
   stopWalking();
@@ -1752,8 +1770,7 @@ function startChargeWarning(lane: Point[], direction: Point) {
 // The necromancer gathers a cone of dark magic and shows it. The hero has a couple of turns to
 // leave the cone.
 function startConeWarning(tiles: Point[], direction: Point) {
-  stopChargeWarning();
-  chargeWarning = showLaneWarning(TVG, roomView, tiles, direction, renderCanvas);
+  showWarning(tiles, direction);
   messageLog.add(phrase('The necromancer gathers dark magic!'), 'warning');
   stopWalking();
 }
@@ -2205,6 +2222,7 @@ function showEndScreen(title: string, text: string | null, buttonLabel: string) 
 
 function endGame() {
   isGameOver = true;
+  deleteSave();
   roomView.remove(hero);
   sound.play('death');
   showEndScreen('You died', null, 'Try again');
@@ -2217,6 +2235,7 @@ const WIN_DELAY_MS = 1500;
 // at once, so nothing more happens, and the screen comes up a moment later.
 function winGame() {
   isGameOver = true;
+  deleteSave();
   stopWalking();
   for (const enemy of [...enemies]) {
     roomView.remove(enemy.paint);
@@ -2600,6 +2619,7 @@ function endTurn(onDone: () => void) {
   }
   wasHasted = hasStatus(heroStatuses, 'haste');
   canvas.update().render();
+  saveGame();
 
   if (!isGameOver && isHelpless(heroStatuses)) {
     setTimeout(() => runEnemyTurn(onDone), HELPLESS_TURN_MS);
@@ -3703,10 +3723,17 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
-document.querySelector('#restart')!.addEventListener('click', () => {
+// Stops what the hero was doing, before the run is replaced.
+function interruptRun() {
+  stopWalking();
   cancelTargeting();
   campfireTask = null;
   dialog.close();
+  inventoryPanel.close();
+}
+
+function startNewRun() {
+  interruptRun();
   runSeed = newRunSeed();
   floor = 1;
   heroHp = HERO_MAX_HP;
@@ -3718,6 +3745,7 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   heroStatuses = {};
   heroHunger = createHunger();
   naturalHealProgress = 0;
+  regeneration = { total: 0, turns: 0 };
   hasActedOnce = false;
   wasHasted = false;
   skippingThisTurn.clear();
@@ -3730,7 +3758,235 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   replaceLevel();
   messageLog.clear();
   greet();
-});
+  saveGame();
+}
+
+document.querySelector('#restart')!.addEventListener('click', startNewRun);
+
+// What an enemy is, told by its stats, which each kind shares, and by the state of the bosses.
+// Every other enemy is a mimic, whose stats depend on the stage.
+function savedKindOf(enemy: Enemy): SavedEnemyKind {
+  if (enemy.necromancer) {
+    return 'necromancer';
+  }
+  if (enemy.centipede) {
+    return 'centipede-head';
+  }
+  if (enemy.owner) {
+    return 'centipede-body';
+  }
+  if (enemy.stats === UNDEAD_KINDS.ghoul) {
+    return 'ghoul';
+  }
+  if (enemy.stats === ghostStats) {
+    return 'ghost';
+  }
+  if (enemy.stats === skeletonArcherStats) {
+    return 'skeleton';
+  }
+  const kinds = Object.keys(ENEMY_KINDS) as EnemyKind[];
+  return kinds.find((kind) => ENEMY_KINDS[kind] === enemy.stats) ?? 'mimic';
+}
+
+// An enemy of a kind, with its picture and behavior, as a saved game brings it back.
+function createSavedEnemy(kind: SavedEnemyKind, position: Point, isDisguised: boolean): Enemy {
+  const make = (stats: Enemy['stats'], paint: Scene, behavior: Enemy['behavior']) =>
+    createEnemy(
+      stats,
+      position,
+      false,
+      paint,
+      createEnemyHealthBar(TVG, renderCanvas),
+      createSleepMark(TVG),
+      behavior,
+    );
+  switch (kind) {
+    case 'weak':
+    case 'medium':
+    case 'strong':
+      return make(ENEMY_KINDS[kind], createEnemyPaint(TVG, kind), chaser);
+    case 'ghoul':
+      return make(UNDEAD_KINDS.ghoul, createEnemyPaint(TVG, 'ghoul'), chaser);
+    case 'ghost':
+      return make(ghostStats, createEnemyPaint(TVG, 'ghost'), chaser);
+    case 'skeleton':
+      return make(skeletonArcherStats, createEnemyPaint(TVG, 'skeleton'), archer);
+    case 'mimic':
+      return make(
+        mimicStats(currentStage()),
+        isDisguised ? createMimicDisguise() : createEnemyPaint(TVG, 'mimic'),
+        chaser,
+      );
+    case 'centipede-head':
+      return make(centipedeStats, createCentipedePart(TVG, true), centipede);
+    case 'centipede-body':
+      return make(centipedeStats, createCentipedePart(TVG, false), bodySegment);
+    case 'necromancer':
+      return make(necromancerStats, createEnemyPaint(TVG, 'necromancer'), necromancer);
+  }
+}
+
+// Saves the run as it is at the end of a turn, so that leaving the page or the run loses nothing.
+// A run that is over is not saved.
+function saveGame() {
+  if (isGameOver) {
+    return;
+  }
+  const indexOf = (enemy: Enemy) => enemies.indexOf(enemy);
+  const inList = (index: number) => index >= 0;
+  writeSave({
+    runSeed,
+    floor,
+    killCount,
+    turnCount,
+    hero: {
+      position: heroPosition,
+      hp: heroHp,
+      maxHp: heroMaxHp,
+      level: heroLevel,
+      experience: heroExperience,
+      strength: heroStrength,
+      gold: heroGold,
+      statuses: heroStatuses,
+      hunger: heroHunger,
+      naturalHealProgress,
+      regeneration,
+      wasHasted,
+    },
+    inventory,
+    equipment,
+    knownPotions: potionLore.known(),
+    tiles: room.tiles,
+    explored: explored.map((row) => row.map((seen) => (seen ? '1' : '0')).join('')),
+    groundItems: groundItems.map(({ thing, position }) => ({ thing, position })),
+    traps: traps.map(({ position, kind, state }) => ({ position, kind, state })),
+    coffins: coffins.map(({ position, kind, waker }) => ({ position, kind, waker })),
+    chantedCoffins: chantedCoffins.map((coffin) => coffins.indexOf(coffin)).filter(inList),
+    summonedGhouls: [...summonedGhouls].map(indexOf).filter(inList),
+    skippingThisTurn: [...skippingThisTurn].map(indexOf).filter(inList),
+    enemies: enemies.map((enemy) => ({
+      kind: savedKindOf(enemy),
+      position: enemy.position,
+      hp: enemy.hp,
+      state: enemy.state,
+      target: enemy.target,
+      lastSeen: enemy.lastSeen,
+      heading: enemy.heading,
+      hasSearched: enemy.hasSearched,
+      hasSeenHero: enemy.hasSeenHero,
+      statuses: enemy.statuses,
+      loot: enemy.loot,
+      followers: enemy.followers.map(indexOf),
+      centipede: enemy.centipede,
+      necromancer: enemy.necromancer,
+    })),
+    hazards: hazards.snapshot(),
+    warning: warningShape,
+    log: [...messageLog.history()],
+  });
+}
+
+// Brings a saved run back. The floor is made again from the run seed, and what changed on it since
+// is put over it.
+function continueRun(game: SavedGame) {
+  interruptRun();
+  ({ runSeed, floor, killCount, turnCount } = game);
+  const saved = game.hero;
+  heroHp = saved.hp;
+  heroMaxHp = saved.maxHp;
+  heroLevel = saved.level;
+  heroExperience = saved.experience;
+  heroStrength = saved.strength;
+  heroGold = saved.gold;
+  heroStatuses = saved.statuses;
+  heroHunger = saved.hunger;
+  naturalHealProgress = saved.naturalHealProgress;
+  regeneration = saved.regeneration;
+  hasActedOnce = false;
+  wasHasted = saved.wasHasted;
+  potionLore = createPotionLore(createRandom(runSeed));
+  game.knownPotions.forEach((name) => potionLore.identify(name));
+  inventory = game.inventory;
+  equipment = game.equipment;
+  inventoryPanel.refresh();
+
+  makeLevel();
+  // A door that burned down or was unlocked is drawn so, and a smashed coffin left floor.
+  game.tiles.forEach((row, y) =>
+    row.forEach((tile, x) => {
+      const before = room.tiles[y][x];
+      if (tile === before) {
+        return;
+      }
+      room.tiles[y][x] = tile;
+      if (tile === 'floor' && (before === 'door' || before === 'locked-door')) {
+        roomView.burnDoor({ x, y });
+      } else if (tile === 'door' && before === 'locked-door') {
+        roomView.unlockDoor({ x, y });
+      }
+    }),
+  );
+  explored = game.explored.map((row) => [...row].map((seen) => seen === '1'));
+  roomView.rememberTiles(
+    explored.flatMap((row, y) => row.flatMap((seen, x) => (seen ? [{ x, y }] : []))),
+  );
+
+  enemies = game.enemies.map((enemy) => {
+    const restored = createSavedEnemy(enemy.kind, enemy.position, enemy.state === 'disguised');
+    Object.assign(restored, {
+      hp: enemy.hp,
+      state: enemy.state,
+      target: enemy.target,
+      lastSeen: enemy.lastSeen,
+      heading: enemy.heading,
+      hasSearched: enemy.hasSearched,
+      hasSeenHero: enemy.hasSeenHero,
+      statuses: enemy.statuses,
+      loot: enemy.loot,
+      centipede: enemy.centipede,
+      necromancer: enemy.necromancer,
+    });
+    return restored;
+  });
+  game.enemies.forEach(({ followers }, index) => {
+    if (followers.length > 0) {
+      attachBody(
+        enemies[index],
+        followers.map((follower) => enemies[follower]),
+      );
+    }
+  });
+  for (const enemy of enemies) {
+    if (!enemy.owner && enemy.hp < enemy.stats.maxHp) {
+      enemy.healthBar.show(enemy.hp / enemy.stats.maxHp, { jump: true });
+    }
+  }
+  floorItems = game.groundItems;
+  trapSpecs = game.traps.map(({ position, kind }) => ({ position, kind }));
+  coffinSpecs = game.coffins;
+
+  startLevel(saved.position);
+  traps.forEach((trap, index) => {
+    trap.state = game.traps[index].state;
+    showTrap(trap);
+  });
+  chantedCoffins = game.chantedCoffins.map((index) => coffins[index]);
+  chantedCoffins.forEach(showCoffin);
+  game.summonedGhouls.forEach((index) => summonedGhouls.add(enemies[index]));
+  skippingThisTurn.clear();
+  game.skippingThisTurn.forEach((index) => skippingThisTurn.add(enemies[index]));
+  for (const { tile, turns } of game.hazards.fires) {
+    hazards.setFire([tile], turns);
+  }
+  for (const { kind, tile, amount } of game.hazards.gases) {
+    hazards.releaseGas(kind, tile, amount);
+  }
+  if (game.warning) {
+    showWarning(game.warning.tiles, game.warning.direction);
+  }
+  messageLog.load(game.log);
+  canvas.update().render();
+}
 
 // Same wheel sensitivity as defaultWheelDelta in d3-zoom.
 function wheelExponent(event: WheelEvent): number {
@@ -3748,3 +4004,36 @@ canvasElement.addEventListener(
   },
   { passive: false },
 );
+
+// The main menu starts the game, and comes back when the player leaves a run from the settings.
+// The run left is saved already, as each turn saves it.
+const quitButton = document.querySelector<HTMLButtonElement>('#quit-to-menu')!;
+const mainMenu = createMainMenu(() =>
+  document.querySelector<HTMLButtonElement>('#settings-button')!.click(),
+);
+
+async function openMainMenu() {
+  quitButton.hidden = true;
+  sound.playMusic('bgm-menu');
+  const choice = await mainMenu.show(readSave() !== null);
+  // The window may have been resized while the menu was open.
+  fitCanvas(canvas);
+  applySettings();
+  settingsPanel.refresh();
+  quitButton.hidden = false;
+  // Read now, as a turn that was still playing out when the run was left saved it since.
+  const game = choice === 'continue' ? readSave() : null;
+  if (game) {
+    continueRun(game);
+  } else {
+    startNewRun();
+  }
+}
+
+quitButton.addEventListener('click', () => {
+  settingsPanel.close();
+  interruptRun();
+  void openMainMenu();
+});
+
+void openMainMenu();

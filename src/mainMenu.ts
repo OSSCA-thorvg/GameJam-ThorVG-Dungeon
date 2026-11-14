@@ -1,27 +1,45 @@
 // Placeholder value. How long the menu stays empty after the splash, before it fades in.
 const FADE_DELAY_MS = 200;
 
-// Shows the main menu and resolves when the player presses Play. The menu is only a start screen,
-// so it opens the settings window through the button that already does.
-export function showMainMenu(openSettings: () => void): Promise<void> {
+export type MenuChoice = 'new' | 'continue';
+
+export interface MainMenu {
+  // Shows the menu, with Continue when there is a saved game, and resolves with what the player
+  // chose.
+  show(canContinue: boolean): Promise<MenuChoice>;
+}
+
+// The start screen, which also comes back when the player leaves a run. It opens the settings
+// window through the button that already does.
+export function createMainMenu(openSettings: () => void): MainMenu {
   const menu = document.querySelector<HTMLElement>('#main-menu')!;
   const play = document.querySelector<HTMLButtonElement>('#menu-play')!;
-  // A hidden page shows the menu at once, as its fade would only play once the page shows again.
-  if (!document.hidden) {
-    menu.classList.add('faded');
-    setTimeout(() => menu.classList.remove('faded'), FADE_DELAY_MS);
-  }
-  menu.hidden = false;
-  play.focus();
+  const resume = document.querySelector<HTMLButtonElement>('#menu-continue')!;
+  let choose: ((choice: MenuChoice) => void) | null = null;
+
+  const pick = (choice: MenuChoice) => {
+    menu.hidden = true;
+    choose?.(choice);
+    choose = null;
+  };
+  play.addEventListener('click', () => pick('new'));
+  resume.addEventListener('click', () => pick('continue'));
   document.querySelector('#menu-settings')!.addEventListener('click', openSettings);
-  return new Promise((resolve) => {
-    play.addEventListener(
-      'click',
-      () => {
-        menu.hidden = true;
-        resolve();
-      },
-      { once: true },
-    );
-  });
+
+  return {
+    show(canContinue) {
+      // A hidden page shows the menu at once, as its fade would only play once the page shows
+      // again.
+      if (!document.hidden) {
+        menu.classList.add('faded');
+        setTimeout(() => menu.classList.remove('faded'), FADE_DELAY_MS);
+      }
+      resume.hidden = !canContinue;
+      menu.hidden = false;
+      (canContinue ? resume : play).focus();
+      return new Promise((resolve) => {
+        choose = resolve;
+      });
+    },
+  };
 }
