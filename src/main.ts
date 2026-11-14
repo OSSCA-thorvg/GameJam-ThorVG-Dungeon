@@ -3314,27 +3314,25 @@ function shatterPotion(name: ItemName, tile: Point) {
 
   // A helpful potion only affects an enemy it hits. The player learns what it is by seeing that.
   const { enemyEffect } = ITEMS[name];
-  const enemy = enemyEffect && enemies.find(({ position }) => isSameTile(position, tile));
-  if (!enemy) {
-    messageLog.add(phrase("The potion's flask broke, but nothing happened."));
-    return;
-  }
+  const enemy = enemies.find(({ position }) => isSameTile(position, tile));
   // Checked before the effect, because the hero still sees an enemy turn invisible.
-  const isSeen = seenEnemies.has(enemy);
-  if (enemyEffect.heal) {
-    healEnemy(enemy, enemyEffect.heal);
+  const isSeen = enemy !== undefined && seenEnemies.has(enemy);
+  if (enemy && enemyEffect) {
+    if (enemyEffect.heal) {
+      healEnemy(enemy, enemyEffect.heal);
+    }
+    if (enemyEffect.status) {
+      addEnemyStatus(enemy, enemyEffect.status.name, enemyEffect.status.turns);
+    }
+    updateVision();
+    showEnemy(enemy);
   }
-  if (enemyEffect.status) {
-    addEnemyStatus(enemy, enemyEffect.status.name, enemyEffect.status.turns);
-  }
-  updateVision();
-  showEnemy(enemy);
-  if (isSeen) {
+  if (enemy && enemyEffect && isSeen) {
     messageLog.add(phrase(enemyEffect.message, { enemy: phrase(enemy.stats.name) }));
     potionLore.identify(name);
-  } else if (isInView(tile)) {
-    // An invisible enemy in view is not seen, but the splash on it is. The player does not learn
-    // what the potion did, as they cannot see it.
+  } else if (enemy && !isSeen && isInView(tile)) {
+    // An invisible enemy in view is not seen, but the splash on it is, whether the potion did
+    // anything to it or not. The player does not learn what the potion did.
     messageLog.add(phrase('Something unseen was hit by the flask!'));
   } else {
     messageLog.add(phrase("The potion's flask broke, but nothing happened."));
