@@ -464,7 +464,7 @@ export const ITEMS: Record<ItemName, ItemDefinition> = {
   }),
   'iron-key': {
     displayName: 'Iron key',
-    description: 'A heavy old key. Click a locked door while carrying it to unlock the door.',
+    description: 'A heavy old key. Carrying it, you can unlock a locked door.',
     icon: ITEM_ICONS['iron-key'],
   },
 };

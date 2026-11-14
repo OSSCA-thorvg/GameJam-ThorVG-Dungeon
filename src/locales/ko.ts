@@ -30,19 +30,19 @@ export const ko: Record<string, string> = {
   'Potions are unidentified, and their colors change from run to run. You learn what a potion is only by drinking it, or by throwing it and seeing what it does. After that, you know every potion of its kind.':
     '물약은 감정되지 않은 상태이며, 색깔은 판마다 바뀝니다. 마셔 보거나, 던져서 효과를 보기 전에는 어떤 물약인지 알 수 없습니다. 한 번 알게 되면 같은 종류의 물약은 모두 알아볼 수 있습니다.',
   Traps: '함정',
-  'Traps hide in the floor and go off once, when you, an enemy, or a thrown item lands on them. Each move may find a hidden trap next to you, and pressing Examine twice searches the area around you and finds every hidden trap there. A found trap is shown, so you can walk around it.':
-    '함정은 바닥에 숨어 있다가, 누군가 밟거나 던진 물건이 떨어지면 한 번 작동합니다. 움직일 때마다 바로 옆의 숨은 함정을 발견할 수 있고, 살펴보기를 두 번 누르면 주변을 수색해 그 안의 숨은 함정을 모두 찾아냅니다. 발견한 함정은 화면에 보이므로 피해서 지나갈 수 있습니다.',
+  'Traps hide in the floor and go off once, when you, an enemy, or a thrown item lands on them. Each move may find a hidden trap next to you, and searching the area around you finds every hidden trap there. A found trap is shown, so you can walk around it.':
+    '함정은 바닥에 숨어 있다가, 누군가 밟거나 던진 물건이 떨어지면 한 번 작동합니다. 움직일 때마다 바로 옆의 숨은 함정을 발견할 수 있고, 주변을 수색하면 그 안의 숨은 함정을 모두 찾아냅니다. 발견한 함정은 화면에 보이므로 피해서 지나갈 수 있습니다.',
   Stairs: '계단',
-  'Click the stairs to go down to the next floor. There is no way back up, so take what you need first. Items lying on the stairs have to be picked up before you can go down.':
-    '계단을 클릭하면 다음 층으로 내려갑니다. 다시 올라올 수는 없으니, 필요한 것을 먼저 챙기세요. 계단 위에 놓인 아이템은 주워야 내려갈 수 있습니다.',
-  'Click a campfire to rest by it, which heals you over some turns, or to cook raw meat over it. You cannot use it while an enemy is in its room, and an enemy coming in stops you.':
-    '모닥불을 클릭하면 곁에서 쉬며 몇 턴에 걸쳐 체력을 회복하거나, 날고기를 구울 수 있습니다. 같은 방에 적이 있으면 쓸 수 없고, 적이 들어오면 하던 일이 멈춥니다.',
+  'The stairs lead down to the next floor. There is no way back up, so take what you need first. Items lying on the stairs have to be picked up before you can go down.':
+    '계단을 통해 다음 층으로 내려갈 수 있습니다. 다시 올라올 수는 없으니, 필요한 것을 먼저 챙기세요. 계단 위에 놓인 아이템은 주워야 내려갈 수 있습니다.',
+  'By a campfire, you can rest, which heals you over some turns, or cook raw meat. You cannot use it while an enemy is in its room, and an enemy coming in stops you.':
+    '모닥불을 통해 쉬며 몇 턴에 걸쳐 체력을 회복하거나, 날고기를 구울 수 있습니다. 같은 방에 적이 있으면 쓸 수 없고, 적이 들어오면 하던 일이 멈춥니다.',
   'Strength and Gear': '힘과 장비',
   'Weapons and armor need some strength, which the bag shows. Gear too heavy for you works worse: a weapon misses more and cannot make surprise attacks, and armor lets you evade less and blocks less. Strength potions raise your strength.':
     '무기와 갑옷에는 필요한 힘이 있으며, 가방에서 확인할 수 있습니다. 힘이 모자라면 장비의 성능이 떨어집니다. 무기는 더 자주 빗나가고 기습을 할 수 없으며, 갑옷은 회피와 방어가 줄어듭니다. 힘 물약을 마시면 힘이 오릅니다.',
   'Locked Doors': '잠긴 문',
-  'A locked door opens with an iron key found on the same floor. With the key in your bag, click the door to unlock it. The key stays in the lock.':
-    '잠긴 문은 같은 층에서 찾은 철 열쇠로 엽니다. 열쇠를 가방에 넣은 채로 문을 클릭하면 열리고, 열쇠는 자물쇠에 남습니다.',
+  'A locked door opens with an iron key found on the same floor. Carrying the key, you can unlock the door, and the key stays in the lock.':
+    '잠긴 문은 같은 층에서 찾은 철 열쇠로 엽니다. 열쇠를 지니고 있으면 문을 열 수 있고, 열쇠는 자물쇠에 남습니다.',
   Cancel: '취소',
   Language: '언어',
   'UI scale': 'UI 크기',
@@ -191,8 +191,8 @@ export const ko: Record<string, string> = {
   'Cooked meat': '익힌 고기',
   'Meat cooked through by fire. It is safe to eat.': '불에 잘 익힌 고기. 먹어도 안전하다.',
   'Iron key': '철 열쇠',
-  'A heavy old key. Click a locked door while carrying it to unlock the door.':
-    '묵직하고 오래된 열쇠. 가지고 있을 때 잠긴 문을 클릭하면 문이 열린다.',
+  'A heavy old key. Carrying it, you can unlock a locked door.':
+    '묵직하고 오래된 열쇠. 가지고 있으면 잠긴 문을 열 수 있다.',
   'Keeps hunger away for {turns} turns.': '{turns}턴 동안 배고픔을 막아 준다.',
   'You are not strong enough for this weapon. You miss more and cannot surprise enemies.':
     '이 무기를 다루기에는 힘이 부족하다. 더 자주 빗나가고 기습할 수 없다.',

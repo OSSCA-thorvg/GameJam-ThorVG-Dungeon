@@ -1029,19 +1029,19 @@ const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
   traps: () => ({
     title: t('Traps'),
     text: t(
-      'Traps hide in the floor and go off once, when you, an enemy, or a thrown item lands on them. Each move may find a hidden trap next to you, and pressing Examine twice searches the area around you and finds every hidden trap there. A found trap is shown, so you can walk around it.',
+      'Traps hide in the floor and go off once, when you, an enemy, or a thrown item lands on them. Each move may find a hidden trap next to you, and searching the area around you finds every hidden trap there. A found trap is shown, so you can walk around it.',
     ),
   }),
   stairs: () => ({
     title: t('Stairs'),
     text: t(
-      'Click the stairs to go down to the next floor. There is no way back up, so take what you need first. Items lying on the stairs have to be picked up before you can go down.',
+      'The stairs lead down to the next floor. There is no way back up, so take what you need first. Items lying on the stairs have to be picked up before you can go down.',
     ),
   }),
   campfire: () => ({
     title: t('Campfire'),
     text: t(
-      'Click a campfire to rest by it, which heals you over some turns, or to cook raw meat over it. You cannot use it while an enemy is in its room, and an enemy coming in stops you.',
+      'By a campfire, you can rest, which heals you over some turns, or cook raw meat. You cannot use it while an enemy is in its room, and an enemy coming in stops you.',
     ),
   }),
   food: () => ({
@@ -1065,7 +1065,7 @@ const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
   'locked-doors': () => ({
     title: t('Locked Doors'),
     text: t(
-      'A locked door opens with an iron key found on the same floor. With the key in your bag, click the door to unlock it. The key stays in the lock.',
+      'A locked door opens with an iron key found on the same floor. Carrying the key, you can unlock the door, and the key stays in the lock.',
     ),
   }),
 };
