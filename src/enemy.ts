@@ -632,10 +632,17 @@ export const necromancer: EnemyBehavior = (enemy, context) => {
   if (canSeeHero && distance <= NECROMANCER_RANGE) {
     return { type: 'shoot' };
   }
-  // It cannot go after a hero who is invisible.
+  // It loses a hero who is invisible, and wanders to random places until they show again.
   if (context.isHeroInvisible) {
-    return { type: 'wait' };
+    enemy.state = 'wandering';
+    const blocked = [...occupied, hero];
+    if (!enemy.target || isSameTile(enemy.position, enemy.target)) {
+      enemy.target = randomDestination(room, enemy.position, blocked);
+    }
+    return enemy.target ? stepToward(room, enemy.position, enemy.target, blocked) : { type: 'wait' };
   }
+  enemy.state = 'hunting';
+  enemy.target = null;
   return stepToward(room, enemy.position, hero, occupied);
 };
 
@@ -669,30 +676,41 @@ export const centipede: EnemyBehavior = (enemy, { room, hero, occupied, isHeroIn
     return { type: 'charge', path: hitsHero ? line.slice(0, heroIndex) : line, hitsHero };
   }
 
-  // It lost the hero who went invisible, and waits for them to show again. A charge it already
-  // reared up for goes on down its line, as above.
+  const needed = enemy.followers.length + 2;
+  const blocked = [...others, hero, head];
+
+  // It loses the hero who went invisible, and wanders to random places until they show again. A
+  // charge it already reared up for goes on down its line, as above.
+  let goal = hero;
   if (isHeroInvisible) {
-    return { type: 'wait' };
-  }
-
-  if (isAdjacent(head, hero)) {
-    return { type: 'attack' };
-  }
-
-  const direction = straightDirection(head, hero);
-  if (direction && brain.cooldown === 0) {
-    const lane = freeLine(room, head, direction, others);
-    if (lane.some((tile) => isSameTile(tile, hero))) {
-      brain.direction = direction;
-      return { type: 'windup', lane, direction };
+    enemy.state = 'wandering';
+    // The way there starts from the head, so the head is not in the way, as it is for roomAt().
+    if (!enemy.target || isSameTile(head, enemy.target)) {
+      enemy.target = randomDestination(room, head, [...others, hero]);
+    }
+    if (!enemy.target) {
+      return { type: 'wait' };
+    }
+    goal = enemy.target;
+  } else {
+    enemy.state = 'hunting';
+    enemy.target = null;
+    if (isAdjacent(head, hero)) {
+      return { type: 'attack' };
+    }
+    const direction = straightDirection(head, hero);
+    if (direction && brain.cooldown === 0) {
+      const lane = freeLine(room, head, direction, others);
+      if (lane.some((tile) => isSameTile(tile, hero))) {
+        brain.direction = direction;
+        return { type: 'windup', lane, direction };
+      }
     }
   }
 
-  const needed = enemy.followers.length + 2;
-  const blocked = [...others, hero, head];
   const roomAt = (tile: Point) => openArea(room, tile, blocked, needed);
-  const [next] = findPath(room, head, hero, others, () => true, false);
-  if (next && roomAt(next) >= needed) {
+  const [next] = findPath(room, head, goal, others, () => true, false);
+  if (next && roomAt(next) >= needed && !isSameTile(next, hero)) {
     return { type: 'move', to: next };
   }
 
@@ -703,7 +721,7 @@ export const centipede: EnemyBehavior = (enemy, { room, hero, occupied, isHeroIn
       continue;
     }
     const area = roomAt(tile);
-    const distance = Math.abs(tile.x - hero.x) + Math.abs(tile.y - hero.y);
+    const distance = Math.abs(tile.x - goal.x) + Math.abs(tile.y - goal.y);
     if (!best || area > best.area || (area === best.area && distance < best.distance)) {
       best = { tile, area, distance };
     }

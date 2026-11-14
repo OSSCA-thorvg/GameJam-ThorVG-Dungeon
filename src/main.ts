@@ -150,6 +150,7 @@ import {
   createChest,
   createDamageNumber,
   createEvadeText,
+  createLostMark,
   createNoticeMark,
   NOTICE_MARK_SVG,
   createSleepMark,
@@ -2710,10 +2711,14 @@ function runEnemyTurn(onDone: () => void) {
       summonsAlive: [...summonedGhouls].filter((ghoul) => enemies.includes(ghoul)).length,
     });
 
-    // Shown where the enemy ends its turn, so the mark does not stay behind when it moves.
+    // Shown where the enemy ends its turn, so the mark does not stay behind when it moves. An enemy
+    // that noticed the hero shows a mark, and one in view that lost them shows a question mark, as
+    // CharSprite.showLost() of Shattered Pixel Dungeon.
     const showNoticeMark = () => {
       if (!wasHunting && enemy.state === 'hunting') {
         damageNumbers.show(roomView, createNoticeMark(TVG), enemy.position);
+      } else if (wasHunting && enemy.state === 'wandering' && seenEnemies.has(enemy)) {
+        damageNumbers.show(roomView, createLostMark(TVG), enemy.position);
       }
     };
 

@@ -162,6 +162,23 @@ const ATTACK_TEXT_COLOR: Color = [245, 205, 70];
 const NOTICE_MARK_COLOR: Color = [235, 60, 50];
 // Placeholder color for the mark of a sleeping enemy, calm against the red of the notice mark.
 const SLEEP_MARK_COLOR: Color = [70, 100, 170];
+// Placeholder color for the question mark of an enemy that lost the hero, a dull yellow between the
+// alarm of the notice mark and the calm of the sleep mark.
+const LOST_MARK_COLOR: Color = [215, 175, 60];
+const LOST_BUBBLE = [
+  '.KKKKKKKK.',
+  'KWWWWWWWWK',
+  'KWWMMMMWWK',
+  'KWMMWWMMWK',
+  'KWWWWMMWWK',
+  'KWWWMMWWWK',
+  'KWWWWWWWWK',
+  'KWWWMMWWWK',
+  'KSSSSSSSSK',
+  '.KKKSSKKK.',
+  '...KSSK...',
+  '....KK....',
+];
 // Placeholder pictures of those marks in a speech bubble, so they stand out on a dark map. W is the
 // bubble, S its shaded bottom, K its outline, and M the mark. The tail ends on the character's head.
 const BUBBLE_PALETTE: Record<string, Color> = {
@@ -1101,6 +1118,11 @@ export function createTargetedText(TVG: ThorVGNamespace): Scene {
 
 export function createNoticeMark(TVG: ThorVGNamespace): Scene {
   return createSpeechBubble(TVG, NOTICE_BUBBLE, NOTICE_MARK_COLOR);
+}
+
+// The mark shown over an enemy that lost the hero.
+export function createLostMark(TVG: ThorVGNamespace): Scene {
+  return createSpeechBubble(TVG, LOST_BUBBLE, LOST_MARK_COLOR);
 }
 
 // The same mark as SVG, for the windows of the page.
