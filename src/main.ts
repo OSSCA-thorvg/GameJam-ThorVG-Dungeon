@@ -167,7 +167,7 @@ import {
   tintCharacter,
   type DamageTarget,
 } from './render';
-import { isAdjacent, isFixture, isWalkable, type Point, type Tile } from './room';
+import { isAdjacent, isFixture, isWalkable, type Point } from './room';
 import {
   addStatus,
   HARMFUL_STATUSES,
@@ -1011,7 +1011,7 @@ const GUIDE_CLOSE_DELAY_MS = 5000;
 // Each guide opens by itself the first time its situation comes up in a page load: the controls on
 // reaching floor 1, the next four on first seeing an enemy, a found or spent trap, the stairs, and
 // a campfire, food on first getting hungry, potions and gear too heavy on first picking one up, and
-// locked doors on first seeing one. The help window lists them in this order.
+// locked doors on first trying one or picking up a key. The help window lists them in this order.
 type GuideName =
   | 'controls'
   | 'surprise'
@@ -1128,31 +1128,23 @@ function offerGuide(name: GuideName) {
   }
 }
 
-// The guides for what the hero sees. The surface has signs for its locked door and stairs instead.
+// The guides for what the hero sees.
 function offerSightGuides() {
-  if (floor > 0) {
-    if (seenEnemies.size > 0) {
-      offerGuide('surprise');
-    }
-    if (traps.some(({ state, position }) => state !== 'hidden' && isInView(position))) {
-      offerGuide('traps');
-    }
-    if (room.stairs && isInView(room.stairs)) {
-      offerGuide('stairs');
-    }
-    // Campfires and locked doors have no list of their own, so the tiles are looked through.
-    const sightTiles: [Tile, GuideName][] = [
-      ['campfire', 'campfire'],
-      ['locked-door', 'locked-doors'],
-    ];
-    for (const [kind, name] of sightTiles) {
-      if (
-        !shownGuides.has(name) &&
-        room.tiles.some((row, y) => row.some((tile, x) => tile === kind && isInView({ x, y })))
-      ) {
-        offerGuide(name);
-      }
-    }
+  if (seenEnemies.size > 0) {
+    offerGuide('surprise');
+  }
+  if (traps.some(({ state, position }) => state !== 'hidden' && isInView(position))) {
+    offerGuide('traps');
+  }
+  if (room.stairs && isInView(room.stairs)) {
+    offerGuide('stairs');
+  }
+  // Campfires have no list of their own, so the tiles are looked through.
+  if (
+    !shownGuides.has('campfire') &&
+    room.tiles.some((row, y) => row.some((tile, x) => tile === 'campfire' && isInView({ x, y })))
+  ) {
+    offerGuide('campfire');
   }
   showWaitingGuide();
 }
@@ -1264,8 +1256,11 @@ function isUsedFromBeside({ x, y }: Point): boolean {
   return isFixture(room, x, y) || room.tiles[y]?.[x] === 'locked-door';
 }
 
-// A locked door opens with an iron key, which stays in the lock. Unlocking takes a turn.
+// A locked door opens with an iron key, which stays in the lock. Unlocking takes a turn. A locked
+// door is seen long before its key, which the boss of its floor holds, so its guide waits until the
+// hero tries the door or picks up the key.
 function unlockDoorAt(tile: Point) {
+  offerGuide('locked-doors');
   if (!inventory.some(({ name }) => name === 'iron-key')) {
     messageLog.add(phrase('The door is locked. You need a key to open it.'));
     return;
@@ -1406,6 +1401,9 @@ function pickUpItems(tile: Point): boolean {
         }
         if (tooHeavyMessage(thing.name, currentStrength())) {
           offerGuide('strength');
+        }
+        if (thing.name === 'iron-key') {
+          offerGuide('locked-doors');
         }
       } else {
         playBounce(roomView, item.paint, tile, renderCanvas);
