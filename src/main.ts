@@ -1811,6 +1811,9 @@ function goDownStairs() {
   sound.play('stairs');
   replaceLevel();
   messageLog.add(phrase('You went down to the next floor.'));
+  if (floorInStage() === 0) {
+    announceStage();
+  }
   saveGame();
 }
 
@@ -1845,8 +1848,24 @@ function makeLevel() {
   } = createLevel());
 }
 
-// The first line of a run.
-const greet = () => messageLog.add(phrase('You entered an unknown dungeon.'));
+// What the log tells on entering the first floor of each stage.
+const STAGE_INTROS = [
+  'You entered a sewer where a foul stench hangs in the air.',
+  'You entered a catacomb built of smooth stone bricks.',
+];
+const announceStage = () => messageLog.add(phrase(STAGE_INTROS[currentStage()]));
+
+// The story that opens a new run. The guide that waits for the first floor opens after it.
+function showSynopsis() {
+  dialog.open({
+    title: t('Prologue'),
+    text: t(
+      'As a wandering hero, you heard a rumor that monsters keep pouring out of a dungeon in a remote place. You do not know what lurks in its depths, but you set out with a worn sword in hand.',
+    ),
+    isWide: true,
+    actions: [{ label: t('Begin'), detail: '', blockedReason: null, run: showWaitingGuide }],
+  });
+}
 
 window.addEventListener('resize', () => {
   fitCanvas(canvas);
@@ -4046,7 +4065,7 @@ function interruptRun() {
   inventoryPanel.close();
 }
 
-function startNewRun() {
+function startNewRun(withSynopsis = false) {
   interruptRun();
   runSeed = newRunSeed();
   floor = 1;
@@ -4069,13 +4088,17 @@ function startNewRun() {
   inventory = createStartingInventory();
   equipment = createStartingEquipment();
   inventoryPanel.refresh();
+  // Opened before the level starts, so that the guide of the first floor waits for it.
+  if (withSynopsis) {
+    showSynopsis();
+  }
   replaceLevel();
   messageLog.clear();
-  greet();
+  announceStage();
   saveGame();
 }
 
-document.querySelector('#restart')!.addEventListener('click', startNewRun);
+document.querySelector('#restart')!.addEventListener('click', () => startNewRun());
 
 // What an enemy is, told by its stats, which each kind shares, and by the state of the bosses.
 // Every other enemy is a mimic, whose stats depend on the stage.
@@ -4344,7 +4367,7 @@ async function openMainMenu() {
   if (game) {
     continueRun(game);
   } else {
-    startNewRun();
+    startNewRun(true);
   }
 }
 

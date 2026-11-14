@@ -242,7 +242,14 @@ export const ko: Record<string, string> = {
   'The fire cooked the raw meat on the floor.': '바닥의 생고기가 불에 익었다.',
 
   // The log: the dungeon.
-  'You entered an unknown dungeon.': '미지의 던전에 들어섰다.',
+  'You entered a sewer where a foul stench hangs in the air.':
+    '코를 찌르는 악취가 감도는 하수구에 들어섰다.',
+  'You entered a catacomb built of smooth stone bricks.':
+    '매끈한 돌 벽돌로 지어진 지하 묘지에 들어섰다.',
+  Prologue: '프롤로그',
+  'As a wandering hero, you heard a rumor that monsters keep pouring out of a dungeon in a remote place. You do not know what lurks in its depths, but you set out with a worn sword in hand.':
+    '떠돌이 용사인 당신은 외진 곳의 던전에서 몬스터가 끊임없이 쏟아져 나온다는 소문을 들었다. 그 깊은 곳에 무엇이 도사리고 있는지는 알 수 없지만, 당신은 낡은 검 한 자루를 쥐고 길을 나섰다.',
+  Begin: '시작',
   'You went down to the next floor.': '다음 층으로 내려갔다.',
   'The door is locked. You need a key to open it.': '문이 잠겨 있다. 열려면 열쇠가 필요하다.',
   'You unlocked the door with the iron key.': '철 열쇠로 문을 열었다.',
