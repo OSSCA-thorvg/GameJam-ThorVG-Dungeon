@@ -2262,18 +2262,16 @@ function showEndScreen(title: string, text: string | null, buttonLabel: string) 
   body.hidden = text === null;
   document.querySelector('#restart')!.textContent = t(buttonLabel);
 
+  // What the run came to, in one sentence, as Project Zomboid tells how long a character lived.
   const countOf = (count: number, one: string, many: string) =>
     t(count === 1 ? one : many, { count });
-  document.querySelector('#run-stats')!.replaceChildren(
-    ...[
-      t('Reached floor {floor}', { floor }),
-      t('Defeated {count}', { count: countOf(killCount, '{count} enemy', '{count} enemies') }),
-      t('Lasted {count}', { count: countOf(turnCount, '{count} turn', '{count} turns') }),
-    ].map((text) => {
-      const line = document.createElement('li');
-      line.textContent = text;
-      return line;
-    }),
+  document.querySelector('#run-summary')!.textContent = t(
+    'In {turns}, you reached floor {floor} and defeated {kills} in all.',
+    {
+      turns: countOf(turnCount, '{count} turn', '{count} turns'),
+      floor,
+      kills: countOf(killCount, '{count} enemy', '{count} enemies'),
+    },
   );
   gameOverScreen.hidden = false;
 }
@@ -2282,7 +2280,10 @@ function endGame() {
   isGameOver = true;
   deleteSave();
   roomView.remove(hero);
+  // The body falls, the music stops, and the sound of the end of the run rings out.
   sound.play('death');
+  sound.playMusic(null);
+  sound.play('game-over');
   showEndScreen('You died', null, 'Try again');
 }
 
@@ -4127,6 +4128,12 @@ async function openMainMenu() {
 quitButton.addEventListener('click', () => {
   settingsPanel.close();
   interruptRun();
+  void openMainMenu();
+});
+
+// The screen at the end of a run also leads back to the main menu.
+document.querySelector('#end-to-menu')!.addEventListener('click', () => {
+  gameOverScreen.hidden = true;
   void openMainMenu();
 });
 

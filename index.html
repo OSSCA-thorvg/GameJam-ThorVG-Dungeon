@@ -572,13 +572,19 @@
         text-align: center;
         color: #c8cad2;
       }
-      #run-stats {
+      /* What the run came to, told in one sentence. */
+      #run-summary {
+        max-width: min(520px, calc(100vw - 32px));
         margin: 0;
-        padding: 0;
-        list-style: none;
         font: 22px/1.6 'Galmuri11', sans-serif;
         text-align: center;
         color: #c8cad2;
+      }
+      #end-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
       }
       #game-over button {
         padding: 8px 20px;
@@ -903,8 +909,11 @@
     <div id="game-over" hidden>
       <span id="game-over-title">You died</span>
       <p id="game-over-text" hidden></p>
-      <ul id="run-stats"></ul>
-      <button id="restart">Try again</button>
+      <p id="run-summary"></p>
+      <div id="end-actions">
+        <button id="restart">Try again</button>
+        <button id="end-to-menu" data-i18n="Main menu">Main menu</button>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -11,6 +11,7 @@ export type SoundName =
   | 'level-up'
   | 'click'
   | 'death'
+  | 'game-over'
   | 'equip-cloth'
   | 'equip-weapon'
   | 'eat'
