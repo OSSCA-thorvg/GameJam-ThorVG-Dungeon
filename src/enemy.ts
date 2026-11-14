@@ -814,12 +814,12 @@ export function disturbEnemy(part: Enemy): void {
   }
 }
 
-// Damage breaks the ice of a frozen enemy, all over a long body, which freezes whole.
-export function damageEnemy(part: Enemy, damage: number): void {
+// Damage breaks the ice of a frozen enemy, all over a long body, which freezes whole. It returns
+// whether the enemy took the damage, which a shield keeps from happening.
+export function damageEnemy(part: Enemy, damage: number): boolean {
   const enemy = wholeOf(part);
-  // A shield keeps anything from hurting what is behind it.
   if ((enemy.statuses.shielded ?? 0) > 0) {
-    return;
+    return false;
   }
   disturbEnemy(enemy);
   enemy.hp = Math.max(0, enemy.hp - damage);
@@ -828,6 +828,7 @@ export function damageEnemy(part: Enemy, damage: number): void {
   for (const each of [enemy, ...enemy.followers]) {
     delete each.statuses.frozen;
   }
+  return true;
 }
 
 export function healEnemy(part: Enemy, amount: number): void {

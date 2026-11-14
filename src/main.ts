@@ -2111,10 +2111,9 @@ function landArrow(target: ArrowTarget, damage: number) {
   }
   if (enemies.includes(target)) {
     // Like the damage number, the sound is only for an enemy in view.
-    if (seenEnemies.has(target)) {
+    if (hurtEnemy(target, damage) && seenEnemies.has(target)) {
       sound.play('hit');
     }
-    hurtEnemy(target, damage);
     if (target.hp === 0) {
       killEnemy(target);
     }
@@ -2512,13 +2511,17 @@ function damageHero(amount: number) {
   showDamage(amount, heroPosition, 'hero');
 }
 
-// The number is only shown for an enemy in view, so it does not give away the others.
-function hurtEnemy(enemy: Enemy, amount: number) {
+// The number is only shown for an enemy in view, so it does not give away the others. A shielded
+// enemy takes nothing, so no number shows. It returns whether the enemy took the damage.
+function hurtEnemy(enemy: Enemy, amount: number): boolean {
   revealMimic(enemy);
-  damageEnemy(enemy, amount);
+  if (!damageEnemy(enemy, amount)) {
+    return false;
+  }
   if (seenEnemies.has(enemy)) {
     showDamage(amount, enemy.position, 'enemy');
   }
+  return true;
 }
 
 // The log only tells of an enemy in view, so it does not give away the others. An invisible enemy in
@@ -2971,6 +2974,10 @@ function runEnemyTurn(onDone: () => void) {
         // The necromancer stands behind a shield, and the coffins it chants over turn red.
         chantedCoffins = shuffle(Math.random, summonableCoffins()).slice(0, GHOULS_PER_CHANT);
         chantedCoffins.forEach(showCoffin);
+        // What already hurts it ends, as the shield keeps new harm from reaching it.
+        for (const name of HARMFUL_STATUSES) {
+          delete enemy.statuses[name];
+        }
         addEnemyStatus(enemy, 'shielded', Infinity);
         if (isInView(enemy.position)) {
           messageLog.add(phrase('The necromancer begins to chant an unknown spell!'), 'warning');
