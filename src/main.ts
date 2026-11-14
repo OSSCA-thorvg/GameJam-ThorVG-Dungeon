@@ -3965,8 +3965,10 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
-// The browser's menu does not open on a right click.
+// The browser's menu does not open on a right click, and no picture of the page, as the title or
+// the emblem of the clear screen, can be dragged away.
 window.addEventListener('contextmenu', (event) => event.preventDefault());
+window.addEventListener('dragstart', (event) => event.preventDefault());
 
 // A button does not take the focus when pressed, so it shows no focus ring, and a later Space or
 // Enter does not press it again.
