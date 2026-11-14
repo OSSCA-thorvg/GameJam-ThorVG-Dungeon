@@ -120,12 +120,10 @@ import {
   CHEST_ICON,
   FOOD_PER_FLOOR,
   GOLD_ICON,
-  GOLD_PILES_PER_FLOOR,
   hideInChests,
   pickMimicFloor,
   rollEquipment,
   rollThrownWeapons,
-  rollGold,
   type GroundThing,
   type Loot,
 } from './loot';
@@ -135,6 +133,7 @@ import {
   ITEM_FLOORS_PER_STAGE,
   planStagePotions,
   POTION_COLORS,
+  randomPotion,
 } from './potions';
 import {
   createRandom,
@@ -394,10 +393,6 @@ function floorContents(random: Random): { loot: Loot[]; hasMimic: boolean } {
   const loot = [
     ...items.map((name): Loot => ({ kind: 'item', name })),
     ...rollThrownWeapons(random, floor),
-    ...Array.from({ length: GOLD_PILES_PER_FLOOR }, (): Loot => ({
-      kind: 'gold',
-      amount: rollGold(random, floor),
-    })),
   ];
   return { loot, hasMimic };
 }
@@ -476,8 +471,8 @@ function pickSecondStageKind(random: Random) {
   return random() < 0.5 ? ('ghost' as const) : ('skeleton' as const);
 }
 
-// A mimic in disguise, drawn as a chest on the floor is. It holds gold, one of the prizes
-// Mimic.generatePrize() of Shattered Pixel Dungeon picks from.
+// A mimic in disguise, drawn as a chest on the floor is. It holds a random potion, as the gold that
+// Mimic.generatePrize() of Shattered Pixel Dungeon can pick is not in the game.
 function createMimicDisguise(): Scene {
   const look = new TVG.Scene();
   look.add(createChest(TVG, CHEST_ICON));
@@ -493,7 +488,7 @@ function createMimic(position: Point, random: Random): Enemy {
     createEnemyHealthBar(TVG, renderCanvas),
     createSleepMark(TVG),
     chaser,
-    { kind: 'gold', amount: rollGold(random, floor) },
+    { kind: 'item', name: randomPotion(random) },
   );
   mimic.state = 'disguised';
   return mimic;
@@ -654,6 +649,7 @@ let heroMaxHp = HERO_MAX_HP;
 let heroLevel = 1;
 let heroExperience = 0;
 let heroStrength = STARTING_STRENGTH;
+// Always 0, as no gold lies on the floors. Kept with the rest of the gold for a merchant.
 let heroGold = 0;
 let heroStatuses: Statuses = {};
 // Placeholder values. The touch of a ghost lowers the hero's strength by this much for this many
@@ -938,7 +934,6 @@ function showHeroStats() {
     experience: heroExperience,
     needed: experienceToLevelUp(),
     strength: currentStrength(),
-    gold: heroGold,
   });
   statusBar.show(heroStatuses, heroHunger);
 }

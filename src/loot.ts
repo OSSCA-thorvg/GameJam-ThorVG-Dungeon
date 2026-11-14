@@ -13,7 +13,8 @@ export type Loot =
 export type GroundThing = Loot | { kind: 'chest'; contents: Loot };
 
 // The average on a floor of Shattered Pixel Dungeon, where a floor has 3.5 items and 10 of every
-// 35 items are gold.
+// 35 items are gold. Not used: no gold lies on the floors, as nothing in the game buys anything.
+// Gold and what draws and picks it up are kept for a merchant.
 export const GOLD_PILES_PER_FLOOR = 1;
 
 // Same as Level.create() of Shattered Pixel Dungeon, which puts one food on every floor but the

@@ -51,7 +51,7 @@ const RANDOM_POTION_WEIGHTS: Record<RandomPotionName, number> = {
   'experience-potion': 1,
 };
 
-function randomPotion(random: Random): RandomPotionName {
+export function randomPotion(random: Random): RandomPotionName {
   const names = Object.keys(RANDOM_POTION_WEIGHTS) as RandomPotionName[];
   const total = names.reduce((sum, name) => sum + RANDOM_POTION_WEIGHTS[name], 0);
   let roll = random() * total;
