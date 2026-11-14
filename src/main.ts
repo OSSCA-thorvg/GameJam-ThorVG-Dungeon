@@ -160,7 +160,9 @@ import {
   createTargetedText,
   createEnemyPaint,
   createHero,
+  CHARACTER_WAIST_HEIGHT,
   faceToward,
+  facingOf,
   createEnemyHealthBar,
   createItemPaint,
   createHeroHealthBar,
@@ -1671,6 +1673,7 @@ function musicOf(floor: number): MusicName {
 
 // The hero starts at the entrance, or where they stood in a saved game.
 function startLevel(start: Point = room.start) {
+  clearHeroDeath();
   // Before the hero looks around, so that the surprise guide for an enemy in sight waits for it.
   if (floor === 1) {
     offerGuide('controls');
@@ -2279,12 +2282,73 @@ function showEndScreen(title: string, text: string | null, buttonLabel: string) 
 function endGame() {
   isGameOver = true;
   deleteSave();
-  roomView.remove(hero);
-  // The body falls, the music stops, and the sound of the end of the run rings out.
+  stopWalking();
+  // The bag closes at once, as the hero can die to the enemy turn after changing equipment, while
+  // it is open.
+  inventoryPanel.close();
+  // The music stops, and the sound of the end of the run rings out as the hero falls.
   sound.play('death');
   sound.playMusic(null);
   sound.play('game-over');
-  showEndScreen('You died', null, 'Try again');
+  playHeroDeath(() => showEndScreen('You died', null, 'Try again'));
+}
+
+// Placeholder values for the death of the hero: how long everything holds still when the last blow
+// lands, how long the body takes to fall, and how long the world then takes to fade to gray and
+// blur, and how gray, dark, and blurred it ends up.
+const DEATH_PAUSE_MS = 150;
+const FALL_MS = 260;
+const WORLD_FADE_MS = 1200;
+const DEAD_WORLD_GRAY: [number, number, number] = [140, 140, 150];
+const DEAD_WORLD_TINT = 90;
+const DEAD_WORLD_BLUR = 2.5;
+let deathFrame = 0;
+
+// The hero falls over the way they face, and the world fades to a dark gray and blurs, with
+// ThorVG's tint and blur effects on the scene of the map. The HUD, on a scene of its own, stays
+// clear. The body turns about its waist, not its feet, and sinks as it turns, so it ends up lying
+// on the floor of its own tile instead of reaching across the next one.
+function playHeroDeath(onDone: () => void) {
+  const fallsTo = facingOf(hero) === 'right' ? 1 : -1;
+  const waist = CHARACTER_WAIST_HEIGHT;
+  // How far the waist sinks, so that the lying body rests on the floor: half the height of the
+  // picture, less about half the thickness of the body lying down. Placeholder value.
+  const sink = waist * 0.5;
+  const start = performance.now();
+  const animate = (now: number) => {
+    const time = now - start - DEATH_PAUSE_MS;
+    const fall = Math.min(1, Math.max(0, time / FALL_MS)) ** 2;
+    const angle = fallsTo * 90 * fall;
+    const radians = (angle * Math.PI) / 180;
+    // ThorVG turns a paint about its origin, the feet, so the turn about the waist is that turn
+    // with the waist moved back to where it was, and then down by the sink.
+    hero.rotate(angle);
+    nudgeHero(heroPosition, {
+      x: -waist * Math.sin(radians),
+      y: -waist + waist * Math.cos(radians) + sink * fall,
+    });
+    const fade = Math.min(1, Math.max(0, (time - FALL_MS) / WORLD_FADE_MS));
+    mapScene.resetEffects();
+    if (fade > 0) {
+      mapScene.tint(0, 0, 0, ...DEAD_WORLD_GRAY, DEAD_WORLD_TINT * fade);
+      mapScene.gaussianBlur(DEAD_WORLD_BLUR * fade * pixelRatio());
+    }
+    renderCanvas();
+    if (fade < 1) {
+      deathFrame = requestAnimationFrame(animate);
+    } else {
+      deathFrame = 0;
+      onDone();
+    }
+  };
+  deathFrame = requestAnimationFrame(animate);
+}
+
+// Clears what the death of the hero left on the map, for a new run.
+function clearHeroDeath() {
+  cancelAnimationFrame(deathFrame);
+  deathFrame = 0;
+  mapScene.resetEffects();
 }
 
 // Placeholder value. How long the screen waits after the necromancer falls.

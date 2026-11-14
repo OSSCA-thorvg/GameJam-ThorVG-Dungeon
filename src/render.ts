@@ -913,6 +913,11 @@ export function faceToward(paint: Paint, from: Point, to: Point): void {
   facing.right.visible(screenX > 0);
 }
 
+// Which way a character faces on the screen.
+export function facingOf(paint: Paint): 'left' | 'right' {
+  return facings.get(paint)?.left.visible() ? 'left' : 'right';
+}
+
 export function createHero(TVG: ThorVGNamespace): Scene {
   return createCharacter(TVG, CHARACTER_ART.hero, 'right');
 }

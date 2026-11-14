@@ -561,6 +561,13 @@
         background: rgb(0 0 0 / 60%);
         font: 33px 'Galmuri11', sans-serif;
         color: #e8e8ec;
+        /* Placeholder value. The screen comes up slowly over the faded world. */
+        animation: end-screen-in 0.8s ease-out;
+      }
+      @keyframes end-screen-in {
+        from {
+          opacity: 0;
+        }
       }
       #game-over[hidden] {
         display: none;
