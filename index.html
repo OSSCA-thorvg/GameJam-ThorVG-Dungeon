@@ -711,6 +711,14 @@
       #dialog-close.back::before {
         background-image: var(--icon-back);
       }
+      #dialog-close.locked {
+        cursor: default;
+      }
+      #dialog-close.locked::before {
+        width: 24px;
+        height: 24px;
+        background-image: var(--timer-icon);
+      }
       #inventory-close::before,
       #log-close::before,
       #settings-close::before,

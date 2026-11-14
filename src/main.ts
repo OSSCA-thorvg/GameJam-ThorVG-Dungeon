@@ -999,6 +999,10 @@ const inventoryPanel = createInventoryPanel({
 
 const dialog = createDialog();
 
+// A guide that opens by itself cannot be closed for a while, so that the clicks of a player who
+// was walking or attacking do not close it unread. Opened from the help window, it closes at once.
+const GUIDE_CLOSE_DELAY_MS = 5000;
+
 // The controls are explained once a page load, when the hero first reaches floor 1, and again from
 // the help window.
 let hasShownControlsGuide = false;
@@ -1007,6 +1011,7 @@ function showControlsGuide(onBack?: () => void) {
   hasShownControlsGuide = true;
   dialog.open({
     onBack,
+    closeDelayMs: onBack ? undefined : GUIDE_CLOSE_DELAY_MS,
     isWide: true,
     title: t('Controls'),
     text: t('Click a tile to move, attack, and more.'),
@@ -1031,6 +1036,7 @@ function showSurpriseGuide(onBack?: () => void) {
   hasShownSurpriseGuide = true;
   dialog.open({
     onBack,
+    closeDelayMs: onBack ? undefined : GUIDE_CLOSE_DELAY_MS,
     isWide: true,
     title: t('Surprise Attacks'),
     text: t(

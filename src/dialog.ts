@@ -1,4 +1,5 @@
 import { t } from './i18n';
+import { TIMER_FRAME_COUNT } from './uiArt';
 
 // Something the player can choose in a dialog, shown as a button.
 export interface DialogAction {
@@ -25,6 +26,9 @@ export interface DialogContent {
   onBack?: () => void;
   // Wider than the other windows, for a dialog of long lines.
   isWide?: boolean;
+  // How long the dialog ignores the close button and clicks outside it, for one that opens by
+  // itself while the player may still be clicking at the game.
+  closeDelayMs?: number;
 }
 
 export interface Dialog {
@@ -44,12 +48,44 @@ export function createDialog(): Dialog {
   const panel = document.querySelector<HTMLElement>('#dialog-panel')!;
   const closeButton = document.querySelector<HTMLButtonElement>('#dialog-close')!;
   let goBack: (() => void) | null = null;
+  let isLocked = false;
+  let lockTimer = 0;
+
+  const unlock = () => {
+    clearTimeout(lockTimer);
+    isLocked = false;
+    closeButton.disabled = false;
+    closeButton.classList.remove('locked');
+  };
+
+  // The close button shows a timer that fills over the delay, and turns back into itself after it.
+  const lock = (delayMs: number) => {
+    isLocked = true;
+    closeButton.disabled = true;
+    closeButton.classList.add('locked');
+    const start = performance.now();
+    const step = () => {
+      const frame = Math.floor(((performance.now() - start) / delayMs) * TIMER_FRAME_COUNT);
+      if (frame >= TIMER_FRAME_COUNT) {
+        unlock();
+        return;
+      }
+      closeButton.style.setProperty('--timer-icon', `var(--icon-timer-${frame})`);
+      lockTimer = window.setTimeout(step, delayMs / TIMER_FRAME_COUNT);
+    };
+    step();
+  };
 
   const close = () => {
+    unlock();
     overlay.hidden = true;
   };
   // A dialog opened from another one goes back to it instead of closing.
-  const leave = () => (goBack ? goBack() : close());
+  const leave = () => {
+    if (!isLocked) {
+      goBack ? goBack() : close();
+    }
+  };
 
   closeButton.addEventListener('click', leave);
   overlay.addEventListener('click', (event) => {
@@ -60,6 +96,10 @@ export function createDialog(): Dialog {
 
   return {
     open(content) {
+      unlock();
+      if (content.closeDelayMs) {
+        lock(content.closeDelayMs);
+      }
       goBack = content.onBack ?? null;
       closeButton.classList.toggle('back', goBack !== null);
       closeButton.setAttribute('aria-label', t(goBack ? 'Back' : 'Close'));

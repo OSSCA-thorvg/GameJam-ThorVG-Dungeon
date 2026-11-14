@@ -503,6 +503,40 @@ const SELECT_ARROW = ['aaaaaaa', '.aaaaa.', '..aaa..', '...a...'];
 const url = (svg: string) => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 const icon = (rows: string[]) => url(pixelSvg(rows, PALETTE));
 
+// The timer on a close button that cannot be pressed yet: a circle, marked o, that fills clockwise
+// from the top, one pixel a frame. It is as large as the other icons, to fill the small button.
+const TIMER = [
+  '....oooo....',
+  '..oooooooo..',
+  '.oooooooooo.',
+  '.oooooooooo.',
+  'oooooooooooo',
+  'oooooooooooo',
+  'oooooooooooo',
+  'oooooooooooo',
+  '.oooooooooo.',
+  '.oooooooooo.',
+  '..oooooooo..',
+  '....oooo....',
+];
+
+const timerOrder = TIMER.flatMap((row, y) =>
+  [...row].flatMap((key, x) => (key === 'o' ? [{ x, y }] : [])),
+)
+  .map((pixel) => {
+    const angle = Math.atan2(pixel.x + 0.5 - TIMER.length / 2, TIMER.length / 2 - pixel.y - 0.5);
+    return { ...pixel, angle: (angle + 2 * Math.PI) % (2 * Math.PI) };
+  })
+  .sort((a, b) => a.angle - b.angle);
+
+export const TIMER_FRAME_COUNT = timerOrder.length;
+
+function timerFrame(filled: number): string[] {
+  const rows = TIMER.map((row) => [...row].map((key) => (key === 'o' ? 'A' : key)));
+  timerOrder.slice(0, filled).forEach(({ x, y }) => (rows[y][x] = 'z'));
+  return rows.map((row) => row.join(''));
+}
+
 // Hands the art to the page's style sheet as custom properties, which index.html uses.
 export function applyUiArt(root: HTMLElement = document.documentElement): void {
   const properties: Record<string, string> = {
@@ -539,6 +573,12 @@ export function applyUiArt(root: HTMLElement = document.documentElement): void {
     '--icon-bag-open': icon(BAG_OPEN),
     '--icon-close': icon(CLOSE),
     '--icon-back': icon(BACK),
+    ...Object.fromEntries(
+      Array.from({ length: TIMER_FRAME_COUNT }, (_, filled) => [
+        `--icon-timer-${filled}`,
+        icon(timerFrame(filled)),
+      ]),
+    ),
   };
   for (const [name, value] of Object.entries(properties)) {
     root.style.setProperty(name, value);
