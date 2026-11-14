@@ -72,7 +72,6 @@ import {
   accuracyFactor,
   addItem,
   canSurpriseAttack,
-  createEmptyEquipment,
   createStartingEquipment,
   createStartingInventory,
   equip,
@@ -196,13 +195,6 @@ import {
 } from './i18n';
 import { createSound, type MusicName } from './sound';
 import { playSplash } from './splash';
-import {
-  createSurface,
-  hasFinishedSurface,
-  markSurfaceFinished,
-  SIGN_ICON,
-  type Sign,
-} from './surface';
 import { computeVision, DEFAULT_VIEW_DISTANCE } from './vision';
 
 const MIN_ZOOM = 0.5;
@@ -359,9 +351,7 @@ const newRunSeed = () =>
   fixedSeed === null ? Math.floor(Math.random() * 2 ** 31) : Number(fixedSeed);
 
 let runSeed = newRunSeed();
-// Floor 0 is the surface, where only the first run in a browser starts.
-const firstFloor = () => (hasFinishedSurface() ? 1 : 0);
-let floor = firstFloor();
+let floor = 1;
 // For the summary shown when the hero dies.
 let killCount = 0;
 let turnCount = 0;
@@ -545,21 +535,12 @@ function createLevel() {
     const { map, boss } = createNecromancerFloor();
     const bossRandom = createRandom(runSeed + floor);
     const coffinSpecs = planBossCoffins(map, bossRandom);
-    return finishLevel(map, [createNecromancer(boss)], [], [], [], coffinSpecs);
+    return finishLevel(map, [createNecromancer(boss)], [], [], coffinSpecs);
   }
 
   if (floor === FLOORS_PER_STAGE) {
     const { map, tiles } = createBossFloor();
-    return finishLevel(map, createCentipede(tiles), [], []);
-  }
-
-  if (floor === 0) {
-    const surface = createSurface();
-    const floorItems = surface.items.map(({ name, count, position }) => ({
-      thing: { kind: 'item', name, count } satisfies GroundThing,
-      position,
-    }));
-    return finishLevel(surface.map, [], floorItems, surface.signs);
+    return finishLevel(map, createCentipede(tiles), []);
   }
 
   const random = createRandom(runSeed + floor);
@@ -615,14 +596,13 @@ function createLevel() {
   const trapSpecs = picked
     .slice(itemCount)
     .map((position) => ({ position, kind: pick(random, trapKinds(currentStage())) }));
-  return finishLevel(room, enemies, floorItems, [], trapSpecs, planCoffins(room, random));
+  return finishLevel(room, enemies, floorItems, trapSpecs, planCoffins(room, random));
 }
 
 function finishLevel(
   room: GeneratedMap,
   enemies: Enemy[],
   floorItems: { thing: GroundThing; position: Point }[],
-  signs: Sign[],
   trapSpecs: { position: Point; kind: TrapKind }[] = [],
   coffinSpecs: CoffinSpec[] = [],
 ) {
@@ -642,7 +622,6 @@ function finishLevel(
     hero: createHero(TVG),
     enemies,
     floorItems,
-    signs,
     trapSpecs,
     coffinSpecs,
   };
@@ -658,7 +637,6 @@ let {
   hero,
   enemies,
   floorItems,
-  signs,
   trapSpecs,
   coffinSpecs,
 } = createLevel();
@@ -720,11 +698,8 @@ let cameraFrame = 0;
 let mousePosition: Point | null = null;
 let cameraDrag: { pointerId: number; start: Point; last: Point; isDragging: boolean } | null = null;
 const activePointers = new Map<number, Point>();
-// On the surface the hero starts with nothing, and picks up the starting gear lying there.
-const startingInventory = () => (floor === 0 ? [] : createStartingInventory());
-const startingEquipment = () => (floor === 0 ? createEmptyEquipment() : createStartingEquipment());
-let inventory: ItemStack[] = startingInventory();
-let equipment: Equipment = startingEquipment();
+let inventory: ItemStack[] = createStartingInventory();
+let equipment: Equipment = createStartingEquipment();
 let groundItems: { thing: GroundThing; position: Point; paint: Paint }[] = [];
 let traps: Trap[] = [];
 let coffins: Coffin[] = [];
@@ -936,7 +911,7 @@ function refreshLanguage() {
 }
 
 function showFloorLabel() {
-  floorLabel.textContent = floor === 0 ? t('Surface') : t('Floor {floor}', { floor });
+  floorLabel.textContent = t('Floor {floor}', { floor });
 }
 
 function showHeroStats() {
@@ -1277,14 +1252,6 @@ function isCampfire({ x, y }: Point): boolean {
   return room.tiles[y]?.[x] === 'campfire';
 }
 
-function signAt(tile: Point): Sign | undefined {
-  return signs.find(({ position }) => isSameTile(position, tile));
-}
-
-function readSign(sign: Sign) {
-  dialog.open({ title: t('Sign'), text: t(sign.text), actions: [] });
-}
-
 function isEnemyInCampfireRoom(): boolean {
   return enemies.some(
     ({ position, state }) =>
@@ -1606,17 +1573,13 @@ function placeEnemy(enemy: Enemy, tile: Point) {
 }
 
 // Sets up the current level's scene and state.
-// The surface has the music of the menu, as the run starts from it. Each stage has a track, and its
-// boss floor, the last of the stage, has another.
+// Each stage has a track, and its boss floor, the last of the stage, has another.
 const STAGE_MUSIC: { floor: MusicName; boss: MusicName }[] = [
   { floor: 'bgm-floor1', boss: 'bgm-boss1' },
   { floor: 'bgm-floor2', boss: 'bgm-boss2' },
 ];
 
 function musicOf(floor: number): MusicName {
-  if (floor === 0) {
-    return 'bgm-menu';
-  }
   const tracks = STAGE_MUSIC[Math.floor((floor - 1) / FLOORS_PER_STAGE)];
   return floor % FLOORS_PER_STAGE === 0 ? tracks.boss : tracks.floor;
 }
@@ -1656,16 +1619,12 @@ function startLevel() {
     row.forEach((tile, x) => {
       if (tile === 'campfire') {
         roomView.place(createCampfirePaint(TVG, CAMPFIRE_ICON), x, y);
-      } else if (tile === 'sign') {
-        roomView.place(createItemPaint(TVG, SIGN_ICON), x, y);
       }
     }),
   );
   coffins.forEach(showCoffin);
-  // The hero arrives by steps from the floor above, except on the surface.
-  if (floor > 0) {
-    roomView.markEntrance(room.start);
-  }
+  // The hero arrives by steps from the floor above.
+  roomView.markEntrance(room.start);
   heroPosition = room.start;
   placeHero(room.start);
   // The hero is drawn anew on each level, so the effects on them are shown again.
@@ -1694,18 +1653,11 @@ function canGoDownStairs() {
   );
 }
 
-// Going down from the surface finishes it, so the next runs in this browser start on floor 1.
 function goDownStairs() {
-  const wasSurface = floor === 0;
   floor++;
   sound.play('stairs');
   replaceLevel();
-  if (wasSurface) {
-    markSurfaceFinished();
-    messageLog.add(phrase('You went down into the dungeon.'));
-  } else {
-    messageLog.add(phrase('You went down to the next floor.'));
-  }
+  messageLog.add(phrase('You went down to the next floor.'));
 }
 
 function replaceLevel() {
@@ -1723,7 +1675,6 @@ function replaceLevel() {
     hero,
     enemies,
     floorItems,
-    signs,
     trapSpecs,
     coffinSpecs,
   } = createLevel());
@@ -1731,14 +1682,7 @@ function replaceLevel() {
 }
 
 // The first line of a run.
-const greet = () =>
-  messageLog.add(
-    phrase(
-      floor === 0
-        ? 'You arrived at the entrance of the dungeon.'
-        : 'You entered an unknown dungeon.',
-    ),
-  );
+const greet = () => messageLog.add(phrase('You entered an unknown dungeon.'));
 
 sound.playMusic('bgm-menu');
 await showMainMenu(() => document.querySelector<HTMLButtonElement>('#settings-button')!.click());
@@ -2905,10 +2849,7 @@ function walk() {
     if (attackTarget && canHeroReach(attackTarget)) {
       playHeroAttack(attackTarget);
     } else if (useTarget && isAdjacent(useTarget, heroPosition)) {
-      const sign = signAt(useTarget);
-      if (sign) {
-        readSign(sign);
-      } else if (room.tiles[useTarget.y][useTarget.x] === 'locked-door') {
+      if (room.tiles[useTarget.y][useTarget.x] === 'locked-door') {
         unlockDoorAt(useTarget);
       } else if (isCampfire(useTarget)) {
         openCampfire();
@@ -3490,14 +3431,12 @@ function describeTerrain({ x, y }: Point): Phrase {
       return phrase('Stairs down to the next floor.');
     case 'campfire':
       return phrase('A campfire. From a tile next to it, you can rest or cook raw meat.');
-    case 'sign':
-      return phrase('A sign. It reads: "{text}"', { text: phrase(signAt({ x, y })?.text ?? '') });
     case 'water':
       return phrase('Shallow water. It puts out the fire on whoever stands in it.');
     case 'coffin':
       return phrase('A wooden coffin.');
     default:
-      return floor > 0 && isSameTile({ x, y }, room.start)
+      return isSameTile({ x, y }, room.start)
         ? phrase('The stairs you came down. There is no way back up.')
         : phrase('The floor.');
   }
@@ -3742,7 +3681,7 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   campfireTask = null;
   dialog.close();
   runSeed = newRunSeed();
-  floor = firstFloor();
+  floor = 1;
   heroHp = HERO_MAX_HP;
   heroMaxHp = HERO_MAX_HP;
   heroLevel = 1;
@@ -3758,8 +3697,8 @@ document.querySelector('#restart')!.addEventListener('click', () => {
   potionLore = createPotionLore(createRandom(runSeed));
   killCount = 0;
   turnCount = 0;
-  inventory = startingInventory();
-  equipment = startingEquipment();
+  inventory = createStartingInventory();
+  equipment = createStartingEquipment();
   inventoryPanel.refresh();
   replaceLevel();
   messageLog.clear();

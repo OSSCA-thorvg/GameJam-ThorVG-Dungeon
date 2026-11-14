@@ -49,7 +49,6 @@ export const ko: Record<string, string> = {
   Mute: '음소거',
 
   // The top of the screen.
-  Surface: '지상',
   'Floor {floor}': '{floor}층',
   'Lv {level}': '레벨 {level}',
 
@@ -87,15 +86,6 @@ export const ko: Record<string, string> = {
   'Not while an enemy is in the room.': '방 안에 적이 있는 동안에는 할 수 없다.',
   'Your HP is already full.': '체력이 이미 가득하다.',
   'You have no raw meat.': '생고기가 없다.',
-  Sign: '표지판',
-  'You heard the rumors: a dungeon whose depths hold great riches, and from which few come back. So here you are at its entrance. Click a tile to walk there.':
-    '소문을 들었다. 깊은 곳에 큰 보물이 잠들어 있지만 돌아온 사람은 드물다는 던전. 그 입구에 지금 서 있다. 타일을 클릭하면 그곳으로 걸어간다.',
-  'Your gear lies on the ground. Walk onto an item to pick it up, then open the Bag to put on the weapon and the armor. Save the food for when you get hungry. Darts are thrown from the Bag at an enemy in sight.':
-    '장비가 바닥에 놓여 있다. 아이템 위로 걸어가면 주워지고, 가방을 열어 무기와 방어구를 착용하자. 음식은 배가 고파질 때를 위해 아껴 두자. 다트는 시야 안의 적에게 가방에서 던진다.',
-  'The way into the dungeon lies behind this locked door. Find the key, click the door to unlock it, step into the doorway, and take the stairs down. Below, click an enemy to attack it. Wait lets a turn pass.':
-    '던전으로 가는 길은 이 잠긴 문 뒤에 있다. 열쇠를 찾아 문을 클릭해 열고, 문간으로 들어가 계단으로 내려가자. 아래에서는 적을 클릭하면 공격한다. 대기를 누르면 한 턴이 지나간다.',
-  'Examine tells you about a tile or an enemy you point at. Press Examine again to search the area around you, which takes a turn and may uncover something useful.':
-    '살펴보기는 가리킨 타일이나 적에 대해 알려 준다. 살펴보기를 한 번 더 누르면 주변을 수색하는데, 한 턴이 걸리고 쓸 만한 것이 나올 수도 있다.',
   'Examine which tile?\nPress Examine again to search the area.':
     '어느 타일을 살펴볼까?\n살펴보기를 한 번 더 누르면 주변을 수색한다.',
   Search: '수색',
@@ -231,9 +221,7 @@ export const ko: Record<string, string> = {
   'The fire cooked the raw meat on the floor.': '바닥의 생고기가 불에 익었다.',
 
   // The log: the dungeon.
-  'You arrived at the entrance of the dungeon.': '던전 입구에 도착했다.',
   'You entered an unknown dungeon.': '미지의 던전에 들어섰다.',
-  'You went down into the dungeon.': '던전으로 내려갔다.',
   'You went down to the next floor.': '다음 층으로 내려갔다.',
   'The door is locked. You need a key to open it.': '문이 잠겨 있다. 열려면 열쇠가 필요하다.',
   'You unlocked the door with the iron key.': '철 열쇠로 문을 열었다.',
@@ -300,7 +288,6 @@ export const ko: Record<string, string> = {
   'Stairs down to the next floor.': '다음 층으로 내려가는 계단.',
   'A campfire. From a tile next to it, you can rest or cook raw meat.':
     '모닥불. 바로 옆 타일에서 쉬거나 생고기를 구울 수 있다.',
-  'A sign. It reads: "{text}"': '표지판. 이렇게 적혀 있다: "{text}"',
   'Shallow water. It puts out the fire on whoever stands in it.':
     '얕은 물. 들어선 대상에게 붙은 불을 꺼 준다.',
   'A wooden coffin.': '나무 관.',

@@ -62,8 +62,8 @@ export interface Dialog {
   isOpen(): boolean;
 }
 
-// The window that opens when the hero uses a fixture, like the campfire or a sign. Choosing an
-// action closes it.
+// The window that opens when the hero uses a fixture, like the campfire, or for a guide. Choosing
+// an action closes it.
 export function createDialog(): Dialog {
   const overlay = document.querySelector<HTMLElement>('#dialog')!;
   const title = document.querySelector<HTMLElement>('#dialog-title')!;

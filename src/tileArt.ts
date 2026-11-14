@@ -62,7 +62,7 @@ const TILE_THEMES: TileTheme[] = [
   },
 ];
 
-// The surface uses the first stage's tiles, and a stage past the last uses the last one's.
+// A stage past the last uses the last one's tiles.
 export const tileThemeOf = (stage: number) =>
   TILE_THEMES[Math.min(Math.max(stage, 0), TILE_THEMES.length - 1)];
 

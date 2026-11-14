@@ -48,7 +48,7 @@ export const ARROW_RANGE = 6;
 // them, diagonals included.
 export const NOTICE_CHANCE = 1 / 3;
 
-// The floors of the dungeon have traps, but not the surface or the boss floors.
+// The floors of the dungeon have traps, but not the boss floors.
 export function hasTraps(stage: number, floorInStage: number, floorsPerStage: number): boolean {
   return stage >= 0 && floorInStage < floorsPerStage - 1;
 }

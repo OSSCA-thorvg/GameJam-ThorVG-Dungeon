@@ -438,25 +438,6 @@ const CAMPFIRE = [
   '................................',
 ];
 
-const SIGN = [
-  '................',
-  '.kkkkkkkkkkkkkk.',
-  'kvvvvvvvvvvvvvvk',
-  'kbbbbbbbbbbbbbbk',
-  'kbbBBBBBBBBBBbbk',
-  'kbbbbbbbbbbbbbbk',
-  'kbbBBBBBBBBbbbbk',
-  'kbbbbbbbbbbbbbbk',
-  'kBBBBBBBbbBBBBBk',
-  '.kkkkkkkBBkkkkk.',
-  '.......kBBk.....',
-  '.......kBBk.....',
-  '.......kBBk.....',
-  '.......kBBk.....',
-  '.......kBBk.....',
-  '.......kBBk.....',
-];
-
 const FLASK = [
   '......kkkk......',
   '.....kvvvvk.....',
@@ -529,7 +510,6 @@ export const ITEM_ICONS = {
   'iron-key': icon(IRON_KEY),
   gold: icon(GOLD),
   campfire: icon(CAMPFIRE),
-  sign: icon(SIGN),
   chest: icon(CHEST),
 };
 

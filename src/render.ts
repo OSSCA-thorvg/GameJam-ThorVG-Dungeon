@@ -392,7 +392,6 @@ export function createRoomView(TVG: ThorVGNamespace, room: Room, stage: number):
         // A fixture itself is placed on its floor like an item.
         case 'floor':
         case 'campfire':
-        case 'sign':
         // The coffin itself is placed on its floor like an item.
         case 'coffin':
           addPart('floor');
