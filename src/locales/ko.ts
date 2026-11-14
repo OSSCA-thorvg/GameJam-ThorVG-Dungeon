@@ -275,9 +275,9 @@ export const ko: Record<string, string> = {
   'The {enemy} is wandering.': '{enemy|이|가} 돌아다니고 있다.',
   'The {enemy} is hunting you.': '{enemy|이|가} 당신을 쫓고 있다.',
   'Effects: {effects}.': '상태: {effects}.',
-  'A chest. Its latch twitches now and then. Opening it could be dangerous.':
-    '상자. 걸쇠가 이따금 움찔거린다. 열면 위험할지도 모른다.',
-  'A chest. Open it from a tile next to it.': '상자. 바로 옆 타일에서 열 수 있다.',
+  'A chest. Something good may be inside. Its latch twitches now and then. Opening it could be dangerous.':
+    '상자. 뭔가 좋은 게 들어 있을 수도 있다. 걸쇠가 이따금 움찔거린다. 열면 위험할지도 모른다.',
+  'A chest. Something good may be inside.': '상자. 뭔가 좋은 게 들어 있을 수도 있다.',
   '{amount} gold.': '{amount}골드.',
   'An arrow trap. When it is activated, it shoots the nearest character within {range} tiles.':
     '화살 함정. 작동하면 {range}칸 안에서 가장 가까운 대상을 쏜다.',

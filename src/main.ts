@@ -3446,7 +3446,11 @@ function describeTile(tile: Point): Phrase[] {
   }
   if (disguisedMimicAt(tile)) {
     // Examining gives a mimic away, as it does in Shattered Pixel Dungeon.
-    return [phrase('A chest. Its latch twitches now and then. Opening it could be dangerous.')];
+    return [
+      phrase(
+        'A chest. Something good may be inside. Its latch twitches now and then. Opening it could be dangerous.',
+      ),
+    ];
   }
   const things = itemsAt(tile);
   if (things.length > 0) {
@@ -3500,7 +3504,7 @@ function describeThing(thing: GroundThing): Phrase {
     case 'gold':
       return phrase('{amount} gold.', { amount: thing.amount });
     case 'chest':
-      return phrase('A chest. Open it from a tile next to it.');
+      return phrase('A chest. Something good may be inside.');
   }
 }
 
