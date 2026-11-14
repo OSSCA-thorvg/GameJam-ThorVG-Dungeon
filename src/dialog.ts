@@ -30,6 +30,7 @@ export interface DialogContent {
 export interface Dialog {
   open(content: DialogContent): void;
   close(): void;
+  isOpen(): boolean;
 }
 
 // The window that opens when the hero uses a fixture, like the campfire or a sign. Choosing an
@@ -86,9 +87,14 @@ export function createDialog(): Dialog {
           button.className = 'dialog-action';
           const name = document.createElement('strong');
           name.textContent = label;
-          const note = document.createElement('span');
-          note.textContent = blockedReason ?? detail;
-          button.append(name, note);
+          button.append(name);
+          // An action whose label says enough has no detail line.
+          const noteText = blockedReason ?? detail;
+          if (noteText !== '') {
+            const note = document.createElement('span');
+            note.textContent = noteText;
+            button.append(note);
+          }
           button.disabled = blockedReason !== null;
           button.addEventListener('click', () => {
             close();
@@ -100,5 +106,6 @@ export function createDialog(): Dialog {
       overlay.hidden = false;
     },
     close,
+    isOpen: () => !overlay.hidden,
   };
 }

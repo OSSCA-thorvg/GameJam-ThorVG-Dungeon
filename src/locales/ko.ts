@@ -11,7 +11,6 @@ export const ko: Record<string, string> = {
   Help: '도움말',
   Back: '뒤로',
   Controls: '조작',
-  'How to move, act, and use the buttons.': '이동, 행동, 버튼 사용법을 봅니다.',
   'Click a tile to move, attack, and more.': '타일을 클릭함으로써 이동/공격 등이 가능합니다.',
   'Pass a turn where you stand.': '제자리에서 한 턴을 넘길 수 있습니다.',
   'Learn about a tile or an enemy. Or press it again to search the area around you.':
@@ -19,6 +18,9 @@ export const ko: Record<string, string> = {
   'Read the messages again.': '메시지를 다시 볼 수 있습니다.',
   'Open the bag to put on your gear and use your items.':
     '가방을 열어 장비를 장착하고, 아이템을 사용할 수 있습니다.',
+  'Surprise Attacks': '기습',
+  'An enemy that has not seen you yet, such as one asleep or one that just came through a door or around a corner, cannot dodge your attack. Its damage keeps the same maximum but rolls from a higher minimum, so a high roll is likelier. Thrown weapons can surprise it too, but a weapon too heavy for your strength cannot.':
+    '아직 이쪽을 보지 못한 적, 이를테면 잠든 적이나 방금 문이나 모퉁이에서 나타난 적은 공격을 피하지 못합니다. 피해의 최댓값은 그대로지만 최솟값이 올라가, 높은 피해가 나올 확률이 커집니다. 던지는 무기로도 기습할 수 있지만, 힘이 모자라 무거운 무기로는 기습할 수 없습니다.',
   Cancel: '취소',
   Language: '언어',
   'UI scale': 'UI 크기',

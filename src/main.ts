@@ -1023,6 +1023,23 @@ function showControlsGuide(onBack?: () => void) {
   });
 }
 
+// Surprise attacks are explained once a page load, when the hero first sees an enemy, and again
+// from the help window.
+let hasShownSurpriseGuide = false;
+
+function showSurpriseGuide(onBack?: () => void) {
+  hasShownSurpriseGuide = true;
+  dialog.open({
+    onBack,
+    isWide: true,
+    title: t('Surprise Attacks'),
+    text: t(
+      'An enemy that has not seen you yet, such as one asleep or one that just came through a door or around a corner, cannot dodge your attack. Its damage keeps the same maximum but rolls from a higher minimum, so a high roll is likelier. Thrown weapons can surprise it too, but a weapon too heavy for your strength cannot.',
+    ),
+    actions: [],
+  });
+}
+
 // The help window, opened from the button at the top right, lists the guides to read again.
 const helpButton = document.querySelector<HTMLButtonElement>('#help-button')!;
 helpButton.hidden = false;
@@ -1035,9 +1052,15 @@ function showHelp() {
     actions: [
       {
         label: t('Controls'),
-        detail: t('How to move, act, and use the buttons.'),
+        detail: '',
         blockedReason: null,
         run: () => showControlsGuide(showHelp),
+      },
+      {
+        label: t('Surprise Attacks'),
+        detail: '',
+        blockedReason: null,
+        run: () => showSurpriseGuide(showHelp),
       },
     ],
   });
@@ -1369,6 +1392,10 @@ function updateVision() {
     }
     showEnemy(enemy);
   }
+  // The guide waits for another dialog to close, and the vision is updated again on the next move.
+  if (!hasShownSurpriseGuide && seenEnemies.size > 0 && !dialog.isOpen()) {
+    showSurpriseGuide();
+  }
 
   updateCursorTile();
 }
@@ -1471,6 +1498,10 @@ function musicOf(floor: number): MusicName {
 }
 
 function startLevel() {
+  // Before the hero looks around, so that the surprise guide for an enemy in sight waits for it.
+  if (floor === 1 && !hasShownControlsGuide) {
+    showControlsGuide();
+  }
   visionState = '';
   groundItems = [];
   traps = trapSpecs.map(({ position, kind }) => ({ position, kind, state: 'hidden', paint: null }));
@@ -1528,9 +1559,6 @@ function startLevel() {
   showFloorLabel();
   sound.playMusic(musicOf(floor));
   canvas.update().render();
-  if (floor === 1 && !hasShownControlsGuide) {
-    showControlsGuide();
-  }
 }
 
 // Items left on the stairs block them, so the hero has to clear them first.
