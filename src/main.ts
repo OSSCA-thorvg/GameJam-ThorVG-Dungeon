@@ -67,6 +67,11 @@ import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
 import { createMainMenu } from './mainMenu';
 import { createMenuArt } from './menuArt';
+import { EMBLEM_HEIGHT, EMBLEM_SVG, EMBLEM_WIDTH } from './emblemArt';
+
+// How many screen pixels an art pixel of the clear screen's emblem takes. Placeholder value, larger
+// than the icons of the screen, as it stands for the end of the game.
+const EMBLEM_SCALE = 6;
 import { loadSettings, saveSettings, uiScaleFor, volumeOf } from './settings';
 import { createLogPanel } from './logPanel';
 import { createSettingsPanel } from './settingsPanel';
@@ -2275,9 +2280,23 @@ function showDamage(amount: number, tile: Point, target: DamageTarget) {
 }
 
 // Shows the screen at the end of a run, with what the run came to.
-function showEndScreen(title: string, text: string | null, buttonLabel: string) {
+function showEndScreen(
+  title: string,
+  text: string | null,
+  buttonLabel: string,
+  isWin = false,
+) {
   // The hero can die to the enemy turn after changing equipment, while the bag is open.
   inventoryPanel.close();
+  // A cleared run has an emblem over its title, which is in gold.
+  gameOverScreen.classList.toggle('won', isWin);
+  const emblem = document.querySelector<HTMLImageElement>('#end-emblem')!;
+  emblem.hidden = !isWin;
+  if (isWin && !emblem.src) {
+    emblem.src = `data:image/svg+xml,${encodeURIComponent(EMBLEM_SVG)}`;
+    emblem.width = EMBLEM_WIDTH * EMBLEM_SCALE;
+    emblem.height = EMBLEM_HEIGHT * EMBLEM_SCALE;
+  }
   document.querySelector('#game-over-title')!.textContent = t(title);
   const body = document.querySelector<HTMLElement>('#game-over-text')!;
   body.textContent = text === null ? null : t(text);
@@ -2445,8 +2464,9 @@ function winGame() {
     () =>
       showEndScreen(
         'The dungeon is quiet.',
-        'With the necromancer gone, the dead lie still. Few return from this dungeon. You did.',
+        'With the necromancer gone, the monsters under his sway were cleansed, and peace returned to the dungeon. You made it safely back to the village.',
         'Play again',
+        true,
       ),
     WIN_DELAY_MS,
   );

@@ -301,8 +301,8 @@ export const ko: Record<string, string> = {
   'You died': '당신은 죽었다',
   'Try again': '다시 시도',
   'The dungeon is quiet.': '던전이 고요해졌다.',
-  'With the necromancer gone, the dead lie still. Few return from this dungeon. You did.':
-    '네크로맨서가 사라지자 죽은 자들은 잠잠해졌다. 이 던전에서 돌아오는 사람은 드물다. 당신은 돌아왔다.',
+  'With the necromancer gone, the monsters under his sway were cleansed, and peace returned to the dungeon. You made it safely back to the village.':
+    '네크로맨서가 사라지자 그의 영향을 받던 몬스터들이 정화되어 던전에 평화가 찾아왔다. 당신은 무사히 마을로 귀환했다.',
   'Play again': '다시 플레이',
   'In {turns}, you reached floor {floor} and defeated {kills} in all.':
     '{turns} 동안 {floor}층에 도달하였으며, 총 {kills}의 적을 처치했다.',

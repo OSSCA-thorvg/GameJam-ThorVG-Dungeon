@@ -572,8 +572,24 @@
       #game-over[hidden] {
         display: none;
       }
+      /* The emblem over the title of the clear screen (emblemArt.ts). */
+      #end-emblem {
+        image-rendering: pixelated;
+      }
+      #end-emblem[hidden] {
+        display: none;
+      }
+      /* A cleared run has its title in faded gold. Placeholder color. */
+      #game-over.won #game-over-title {
+        color: #d6b86e;
+      }
+      /* Korean breaks lines only at spaces, so no word is cut in two. */
+      #game-over-text,
+      #run-summary {
+        word-break: keep-all;
+      }
       #game-over-text {
-        max-width: 360px;
+        max-width: min(520px, calc(100vw - 32px));
         margin: 0;
         font: 22px/1.5 'Galmuri11', sans-serif;
         text-align: center;
@@ -914,6 +930,7 @@
       <button id="target-cancel" data-i18n="Cancel">Cancel</button>
     </div>
     <div id="game-over" hidden>
+      <img id="end-emblem" alt="" hidden />
       <span id="game-over-title">You died</span>
       <p id="game-over-text" hidden></p>
       <p id="run-summary"></p>
