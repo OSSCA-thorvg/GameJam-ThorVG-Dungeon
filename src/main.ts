@@ -1003,12 +1003,17 @@ const dialog = createDialog();
 // was walking or attacking do not close it unread. Opened from the help window, it closes at once.
 const GUIDE_CLOSE_DELAY_MS = 5000;
 
-// The controls are explained once a page load, when the hero first reaches floor 1, and again from
-// the help window.
+// The help window, opened from the button at the top right, lists the guides already shown, to
+// read again. A guide is not listed before its situation comes up, so it is read there first. The
+// button shows with the first guide.
+const helpButton = document.querySelector<HTMLButtonElement>('#help-button')!;
+
+// The controls are explained once a page load, when the hero first reaches floor 1.
 let hasShownControlsGuide = false;
 
 function showControlsGuide(onBack?: () => void) {
   hasShownControlsGuide = true;
+  helpButton.hidden = false;
   dialog.open({
     onBack,
     closeDelayMs: onBack ? undefined : GUIDE_CLOSE_DELAY_MS,
@@ -1028,12 +1033,12 @@ function showControlsGuide(onBack?: () => void) {
   });
 }
 
-// Surprise attacks are explained once a page load, when the hero first sees an enemy, and again
-// from the help window.
+// Surprise attacks are explained once a page load, when the hero first sees an enemy.
 let hasShownSurpriseGuide = false;
 
 function showSurpriseGuide(onBack?: () => void) {
   hasShownSurpriseGuide = true;
+  helpButton.hidden = false;
   dialog.open({
     onBack,
     closeDelayMs: onBack ? undefined : GUIDE_CLOSE_DELAY_MS,
@@ -1046,29 +1051,23 @@ function showSurpriseGuide(onBack?: () => void) {
   });
 }
 
-// The help window, opened from the button at the top right, lists the guides to read again.
-const helpButton = document.querySelector<HTMLButtonElement>('#help-button')!;
-helpButton.hidden = false;
-
 function showHelp() {
+  const guides = [
+    { isShown: hasShownControlsGuide, label: t('Controls'), show: showControlsGuide },
+    { isShown: hasShownSurpriseGuide, label: t('Surprise Attacks'), show: showSurpriseGuide },
+  ];
   dialog.open({
     title: t('Help'),
     text: '',
     isWide: true,
-    actions: [
-      {
-        label: t('Controls'),
+    actions: guides
+      .filter(({ isShown }) => isShown)
+      .map(({ label, show }) => ({
+        label,
         detail: '',
         blockedReason: null,
-        run: () => showControlsGuide(showHelp),
-      },
-      {
-        label: t('Surprise Attacks'),
-        detail: '',
-        blockedReason: null,
-        run: () => showSurpriseGuide(showHelp),
-      },
-    ],
+        run: () => show(showHelp),
+      })),
   });
 }
 
