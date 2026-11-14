@@ -74,6 +74,9 @@ export interface SavedGame {
   groundItems: { thing: GroundThing; position: Point }[];
   traps: { position: Point; kind: TrapKind; state: 'hidden' | 'known' | 'spent' }[];
   coffins: { position: Point; kind: UndeadKind | null; waker: 'hero' | 'boss' }[];
+  // The turns of rest the campfire has left. A save from before it was kept has none, and the
+  // campfire is then whole.
+  restTurnsLeft?: number;
   // By their place in the lists of coffins and enemies.
   chantedCoffins: number[];
   summonedGhouls: number[];

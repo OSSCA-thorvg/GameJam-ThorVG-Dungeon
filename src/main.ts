@@ -739,6 +739,9 @@ let attackTarget: Enemy | null = null;
 let useTarget: Point | null = null;
 // What the hero is doing at the campfire for some turns, or null.
 let campfireTask: { verb: string } | null = null;
+// The turns of rest that the campfire of this floor has left. A campfire gives one rest, so a rest
+// that finishes empties it, and one that is cut short leaves the rest of its turns for later.
+let restTurnsLeft = REST_TURNS;
 // Whether the player clicked the stairs, as opposed to the walk merely ending on them.
 let isWalkingToStairs = false;
 let isWalking = false;
@@ -1130,7 +1133,7 @@ const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
   campfire: () => ({
     title: t('Campfire'),
     text: t(
-      'By a campfire, you can rest, which heals you over some turns, or cook raw meat. You cannot use it while an enemy is in its room, and an enemy coming in stops you.',
+      'By a campfire, you can rest, which heals you over some turns, or cook raw meat. You cannot use it while an enemy is in its room, and an enemy coming in stops you. A campfire gives only one rest, but a rest cut short can be taken up again later.',
     ),
   }),
   food: () => ({
@@ -1741,6 +1744,7 @@ function startLevel(start: Point = room.start) {
   coffins = coffinSpecs.map((spec) => ({ ...spec, paint: null }));
   chantedCoffins = [];
   summonedGhouls.clear();
+  restTurnsLeft = REST_TURNS;
   stopWalking();
   isWalkingToStairs = false;
   isWalking = false;
@@ -3779,7 +3783,14 @@ const EXAMINE_REQUEST: TargetRequest = {
 function openCampfire() {
   const enemyNearby = isEnemyInCampfireRoom() ? t('Not while an enemy is in the room.') : null;
   const rawMeat = inventory.find(({ name }) => name === 'raw-meat')?.count ?? 0;
-  const heal = Math.round(heroMaxHp * REST_HEAL_FRACTION);
+  const restTotal = Math.round(heroMaxHp * REST_HEAL_FRACTION);
+  const heal = restTotal - Math.floor((restTotal * (REST_TURNS - restTurnsLeft)) / REST_TURNS);
+  const restBlock =
+    restTurnsLeft === 0
+      ? t('You have already rested here.')
+      : heroHp >= heroMaxHp
+        ? t('Your HP is already full.')
+        : null;
   const cookTime = COOK_TURNS === 1 ? t('one turn') : t('{turns} turns', { turns: COOK_TURNS });
   dialog.open({
     title: t('Campfire'),
@@ -3787,8 +3798,8 @@ function openCampfire() {
     actions: [
       {
         label: t('Rest'),
-        detail: t('Recover {heal} HP over {turns} turns.', { heal, turns: REST_TURNS }),
-        blockedReason: enemyNearby ?? (heroHp >= heroMaxHp ? t('Your HP is already full.') : null),
+        detail: t('Recover {heal} HP over {turns} turns.', { heal, turns: restTurnsLeft }),
+        blockedReason: enemyNearby ?? restBlock,
         run: rest,
       },
       {
@@ -3849,17 +3860,17 @@ function stopCampfireTask() {
   }
 }
 
-// The healing is spread over the turns of the rest, so a rest cut short heals part of it. A rest
-// ends early once the HP is full.
+// The healing is spread over the turns of the rest, so a rest cut short heals part of it, and takes
+// up again from where it stopped. A rest ends early once the HP is full, and that uses up the rest.
 function rest() {
   const total = Math.round(heroMaxHp * REST_HEAL_FRACTION);
-  let turn = 0;
   messageLog.add(phrase('You sit down by the fire to rest.'));
   spendCampfireTurns(
     'resting',
-    REST_TURNS,
+    restTurnsLeft,
     () => {
-      turn++;
+      const turn = REST_TURNS - restTurnsLeft + 1;
+      restTurnsLeft--;
       const amount =
         Math.floor((total * turn) / REST_TURNS) - Math.floor((total * (turn - 1)) / REST_TURNS);
       heroHp = Math.min(heroMaxHp, heroHp + amount);
@@ -3867,6 +3878,7 @@ function rest() {
       return heroHp >= heroMaxHp;
     },
     () => {
+      restTurnsLeft = 0;
       messageLog.add(phrase('You feel rested.'), 'good');
       openCampfire();
     },
@@ -4163,6 +4175,7 @@ function saveGame() {
     groundItems: groundItems.map(({ thing, position }) => ({ thing, position })),
     traps: traps.map(({ position, kind, state }) => ({ position, kind, state })),
     coffins: coffins.map(({ position, kind, waker }) => ({ position, kind, waker })),
+    restTurnsLeft,
     chantedCoffins: chantedCoffins.map((coffin) => coffins.indexOf(coffin)).filter(inList),
     summonedGhouls: [...summonedGhouls].map(indexOf).filter(inList),
     skippingThisTurn: [...skippingThisTurn].map(indexOf).filter(inList),
@@ -4272,6 +4285,7 @@ function continueRun(game: SavedGame) {
     trap.state = game.traps[index].state;
     showTrap(trap);
   });
+  restTurnsLeft = game.restTurnsLeft ?? REST_TURNS;
   chantedCoffins = game.chantedCoffins.map((index) => coffins[index]);
   chantedCoffins.forEach(showCoffin);
   game.summonedGhouls.forEach((index) => summonedGhouls.add(enemies[index]));

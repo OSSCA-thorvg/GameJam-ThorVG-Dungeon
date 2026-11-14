@@ -35,8 +35,8 @@ export const ko: Record<string, string> = {
   Stairs: '계단',
   'The stairs lead down to the next floor. There is no way back up, so take what you need first. Items lying on the stairs have to be picked up before you can go down.':
     '계단을 통해 다음 층으로 내려갈 수 있습니다. 다시 올라올 수는 없으니, 필요한 것을 먼저 챙기세요. 계단 위에 놓인 아이템은 주워야 내려갈 수 있습니다.',
-  'By a campfire, you can rest, which heals you over some turns, or cook raw meat. You cannot use it while an enemy is in its room, and an enemy coming in stops you.':
-    '모닥불을 통해 쉬며 몇 턴에 걸쳐 체력을 회복하거나, 날고기를 구울 수 있습니다. 같은 방에 적이 있으면 쓸 수 없고, 적이 들어오면 하던 일이 멈춥니다.',
+  'By a campfire, you can rest, which heals you over some turns, or cook raw meat. You cannot use it while an enemy is in its room, and an enemy coming in stops you. A campfire gives only one rest, but a rest cut short can be taken up again later.':
+    '모닥불을 통해 쉬며 몇 턴에 걸쳐 체력을 회복하거나, 날고기를 구울 수 있습니다. 같은 방에 적이 있으면 쓸 수 없고, 적이 들어오면 하던 일이 멈춥니다. 모닥불에서는 한 번만 쉴 수 있지만, 중간에 멈춘 휴식은 나중에 이어서 쉴 수 있습니다.',
   'Strength and Gear': '힘과 장비',
   'Weapons and armor need some strength, which the bag shows. Gear too heavy for you works worse: a weapon misses more and cannot make surprise attacks, and armor lets you evade less and blocks less. Strength potions raise your strength.':
     '무기와 갑옷에는 필요한 힘이 있으며, 가방에서 확인할 수 있습니다. 힘이 모자라면 장비의 성능이 떨어집니다. 무기는 더 자주 빗나가고 기습을 할 수 없으며, 갑옷은 회피와 방어가 줄어듭니다. 힘 물약을 마시면 힘이 오릅니다.',
@@ -88,6 +88,7 @@ export const ko: Record<string, string> = {
   '{turns} turns': '{turns}턴',
   'Not while an enemy is in the room.': '방 안에 적이 있는 동안에는 할 수 없다.',
   'Your HP is already full.': '체력이 이미 가득하다.',
+  'You have already rested here.': '여기서는 이미 쉬었다.',
   'You have no raw meat.': '생고기가 없다.',
   'Examine which tile?\nPress Examine again to search the area.':
     '어느 타일을 살펴볼까?\n살펴보기를 한 번 더 누르면 주변을 수색한다.',
