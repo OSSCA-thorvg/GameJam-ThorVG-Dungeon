@@ -118,6 +118,32 @@ const BAG_OPEN = [
   '..kkkkkkkk..',
 ];
 
+const HELP = [
+  '...kkkkkk...',
+  '..kzzzzzzk..',
+  '.kzzkkkkzzk.',
+  '.kzzk..kzzk.',
+  '..kk..kzzk..',
+  '.....kzzk...',
+  '....kzzk....',
+  '....kzzk....',
+  '.....kk.....',
+  '....kkkk....',
+  '....kzzk....',
+  '....kkkk....',
+];
+
+const BACK = [
+  '.kkkkk..',
+  '.kzzzzk.',
+  '.kkkkzzk',
+  '.k...kzk',
+  'kzkkkzzk',
+  'zzzzzzk.',
+  'kzkkkkk.',
+  '.k......',
+];
+
 const CLOSE = [
   '.k....k.',
   'kzk..kzk',
@@ -508,9 +534,11 @@ export function applyUiArt(root: HTMLElement = document.documentElement): void {
     '--icon-examine': icon(EXAMINE),
     '--icon-log': icon(LOG),
     '--icon-settings': icon(SETTINGS),
+    '--icon-help': icon(HELP),
     '--icon-bag': icon(BAG_CLOSED),
     '--icon-bag-open': icon(BAG_OPEN),
     '--icon-close': icon(CLOSE),
+    '--icon-back': icon(BACK),
   };
   for (const [name, value] of Object.entries(properties)) {
     root.style.setProperty(name, value);

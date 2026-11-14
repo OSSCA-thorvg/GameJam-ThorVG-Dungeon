@@ -999,6 +999,52 @@ const inventoryPanel = createInventoryPanel({
 
 const dialog = createDialog();
 
+// The controls are explained once a page load, when the hero first reaches floor 1, and again from
+// the help window.
+let hasShownControlsGuide = false;
+
+function showControlsGuide(onBack?: () => void) {
+  hasShownControlsGuide = true;
+  dialog.open({
+    onBack,
+    isWide: true,
+    title: t('Controls'),
+    text: t('Click a tile to move, attack, and more.'),
+    entries: [
+      { icon: '--icon-wait', text: t('Pass a turn where you stand.') },
+      {
+        icon: '--icon-examine',
+        text: t('Learn about a tile or an enemy. Or press it again to search the area around you.'),
+      },
+      { icon: '--icon-log', text: t('Read the messages again.') },
+      { icon: '--icon-bag', text: t('Open the bag to put on your gear and use your items.') },
+    ],
+    actions: [],
+  });
+}
+
+// The help window, opened from the button at the top right, lists the guides to read again.
+const helpButton = document.querySelector<HTMLButtonElement>('#help-button')!;
+helpButton.hidden = false;
+
+function showHelp() {
+  dialog.open({
+    title: t('Help'),
+    text: '',
+    isWide: true,
+    actions: [
+      {
+        label: t('Controls'),
+        detail: t('How to move, act, and use the buttons.'),
+        blockedReason: null,
+        run: () => showControlsGuide(showHelp),
+      },
+    ],
+  });
+}
+
+helpButton.addEventListener('click', showHelp);
+
 // Choosing a tile for an action, like the CellSelector of Shattered Pixel Dungeon. While this is
 // set, a press on a tile picks the target instead of walking there.
 interface TargetRequest {
@@ -1482,6 +1528,9 @@ function startLevel() {
   showFloorLabel();
   sound.playMusic(musicOf(floor));
   canvas.update().render();
+  if (floor === 1 && !hasShownControlsGuide) {
+    showControlsGuide();
+  }
 }
 
 // Items left on the stairs block them, so the hero has to clear them first.

@@ -8,6 +8,17 @@ export const ko: Record<string, string> = {
   Settings: '설정',
   Close: '닫기',
   Play: '시작',
+  Help: '도움말',
+  Back: '뒤로',
+  Controls: '조작',
+  'How to move, act, and use the buttons.': '이동, 행동, 버튼 사용법을 봅니다.',
+  'Click a tile to move, attack, and more.': '타일을 클릭함으로써 이동/공격 등이 가능합니다.',
+  'Pass a turn where you stand.': '제자리에서 한 턴을 넘길 수 있습니다.',
+  'Learn about a tile or an enemy. Or press it again to search the area around you.':
+    '타일 또는 적에 대해 알 수 있습니다. 또는 한 번 더 눌러 주변을 수색합니다.',
+  'Read the messages again.': '메시지를 다시 볼 수 있습니다.',
+  'Open the bag to put on your gear and use your items.':
+    '가방을 열어 장비를 장착하고, 아이템을 사용할 수 있습니다.',
   Cancel: '취소',
   Language: '언어',
   'UI scale': 'UI 크기',
