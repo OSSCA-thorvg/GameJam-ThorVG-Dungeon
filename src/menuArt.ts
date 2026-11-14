@@ -438,8 +438,8 @@ export interface MenuArt {
   scene: Scene;
   // Fits the picture to a canvas of a size in its own pixels, with the gatehouse at the right.
   layout(width: number, height: number): void;
-  // Shows the frame of the flicker for a time in milliseconds.
-  showAt(time: number): void;
+  // Shows the frame of the flicker for a time in milliseconds, and tells whether it changed.
+  showAt(time: number): boolean;
 }
 
 const loadPicture = (TVG: ThorVGNamespace, svg: string) => {
@@ -476,6 +476,7 @@ export function createMenuArt(TVG: ThorVGNamespace): MenuArt {
   });
   let ground: Picture | null = null;
   let shown = 0;
+  let shownStep = -1;
 
   return {
     scene,
@@ -558,16 +559,23 @@ export function createMenuArt(TVG: ThorVGNamespace): MenuArt {
       scene.add(ground);
     },
     showAt(time) {
-      const next = Math.floor((time / 1000) * FLAMES_PER_SECOND) % FLAME_FRAMES;
+      // The light wavers twice in each frame of the flames, so nothing changes in between.
+      const step = Math.floor((time / 1000) * FLAMES_PER_SECOND * 2);
+      if (step === shownStep) {
+        return false;
+      }
+      shownStep = step;
+      const next = Math.floor(step / 2) % FLAME_FRAMES;
       if (next !== shown) {
         flames[shown].visible(false);
         flames[next].visible(true);
         shown = next;
       }
       glows.forEach((glow, index) => {
-        const flicker = noise(index, Math.floor((time / 1000) * FLAMES_PER_SECOND * 2));
+        const flicker = noise(index, step);
         glow.opacity(Math.round(GLOW_DIM + (GLOW_BRIGHT - GLOW_DIM) * flicker));
       });
+      return true;
     },
   };
 }

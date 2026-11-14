@@ -286,7 +286,18 @@ const statusBar = createStatusBar(
   document.querySelector<HTMLElement>('#status-tooltip')!,
 );
 
-const renderCanvas = () => canvas.update().render();
+// Draws the canvas once, in the next frame, however many times it is asked to before then. Every
+// effect and loop asks through this, so several running at once, such as many dying enemies or
+// health bars, still draw the canvas once a frame.
+let renderRequest = 0;
+const renderCanvas = () => {
+  if (renderRequest === 0) {
+    renderRequest = requestAnimationFrame(() => {
+      renderRequest = 0;
+      canvas.update().render();
+    });
+  }
+};
 const damageNumbers = createDamageNumbers(renderCanvas);
 const statusLooks = createStatusLooks(TVG, renderCanvas);
 
@@ -305,6 +316,10 @@ let menuFrame = 0;
 
 function showMenuArt(isShown: boolean) {
   menuArt.scene.visible(isShown);
+  // The picture covers the whole screen, so the map and the HUD behind it are not drawn at all.
+  for (const scene of [mapScene, heroHealthBar.scene, hud.scene]) {
+    scene.visible(!isShown);
+  }
   cancelAnimationFrame(menuFrame);
   menuFrame = 0;
   if (isShown) {
@@ -312,9 +327,11 @@ function showMenuArt(isShown: boolean) {
       Math.round(window.innerWidth * pixelRatio()),
       Math.round(window.innerHeight * pixelRatio()),
     );
+    // The canvas is drawn only when the flames or their light change, a few times a second.
     const animate = (time: number) => {
-      menuArt.showAt(time);
-      renderCanvas();
+      if (menuArt.showAt(time)) {
+        renderCanvas();
+      }
       menuFrame = requestAnimationFrame(animate);
     };
     menuFrame = requestAnimationFrame(animate);
@@ -1491,7 +1508,7 @@ function followHero() {
     }
 
     applyCamera();
-    canvas.update().render();
+    renderCanvas();
     cameraFrame = isSettled ? 0 : requestAnimationFrame(step);
   };
 
@@ -1736,7 +1753,7 @@ function startLevel(start: Point = room.start) {
   gameOverScreen.hidden = true;
   showFloorLabel();
   sound.playMusic(musicOf(floor));
-  canvas.update().render();
+  renderCanvas();
 }
 
 // Items left on the stairs block them, so the hero has to clear them first.
@@ -1798,7 +1815,7 @@ window.addEventListener('resize', () => {
   if (menuFrame !== 0) {
     showMenuArt(true);
   }
-  canvas.update().render();
+  renderCanvas();
 });
 
 const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas')!;
@@ -1890,7 +1907,7 @@ function playCharge(enemy: Enemy, path: Point[], hitsHero: boolean, onDone: () =
         showEnemy(segment);
       }
     }
-    canvas.update().render();
+    renderCanvas();
     onDone();
   };
 
@@ -2561,7 +2578,7 @@ function playEnemyAttack(enemy: Enemy, onDone: () => void, { isAmbush = false } 
       cameraShake = offset;
       applyCamera();
     },
-    render: () => canvas.update().render(),
+    render: renderCanvas,
     onHit: () => {
       if (isHit) {
         const damage = isAmbush
@@ -2597,7 +2614,7 @@ function passTurn(onDone: () => void, hasActed?: Enemy) {
       endGame();
     }
     if (isGameOver) {
-      canvas.update().render();
+      renderCanvas();
       onDone();
       return;
     }
@@ -2608,7 +2625,7 @@ function passTurn(onDone: () => void, hasActed?: Enemy) {
     }
     if (wasHasted && hasStatus(heroStatuses, 'haste') && !hasActedOnce) {
       hasActedOnce = true;
-      canvas.update().render();
+      renderCanvas();
       onDone();
       return;
     }
@@ -2773,7 +2790,7 @@ function feelHunger() {
 // hero gets hungrier. While the hero cannot act, the next turn follows by itself.
 function endTurn(onDone: () => void) {
   if (isGameOver) {
-    canvas.update().render();
+    renderCanvas();
     onDone();
     return;
   }
@@ -2802,7 +2819,7 @@ function endTurn(onDone: () => void) {
     endGame();
   }
   wasHasted = hasStatus(heroStatuses, 'haste');
-  canvas.update().render();
+  renderCanvas();
   saveGame();
 
   if (!isGameOver && isHelpless(heroStatuses)) {
@@ -2999,7 +3016,7 @@ function playHeroAttack(enemy: Enemy) {
         enemy.paint.resetEffects();
       }
     },
-    render: () => canvas.update().render(),
+    render: renderCanvas,
     onHit: () => {
       if (isHit) {
         sound.play(isSurprise ? 'crit' : 'hit');
@@ -4208,7 +4225,7 @@ function continueRun(game: SavedGame) {
     showWarning(game.warning.tiles, game.warning.direction);
   }
   messageLog.load(game.log);
-  canvas.update().render();
+  renderCanvas();
 }
 
 // Same wheel sensitivity as defaultWheelDelta in d3-zoom.
@@ -4223,7 +4240,7 @@ canvasElement.addEventListener(
     event.preventDefault();
     setZoom(zoom * 2 ** wheelExponent(event));
     applyCamera();
-    canvas.update().render();
+    renderCanvas();
   },
   { passive: false },
 );
