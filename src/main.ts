@@ -168,6 +168,7 @@ import {
   createItemPaint,
   createHeroHealthBar,
   createRoomView,
+  type RoomView,
   tileDistance,
   createStatusLooks,
   type DamageTarget,
@@ -2318,19 +2319,28 @@ function playEnemyDeath(enemy: Enemy) {
     y: -pivot + pivot * Math.cos(radians) + sink,
   });
   renderCanvas();
-  const start = performance.now();
-  const animate = (now: number) => {
-    const fade = Math.min(1, Math.max(0, (now - start - ENEMY_DEAD_HOLD_MS) / ENEMY_FADE_MS));
-    paint.opacity(Math.round(255 * (1 - fade)));
-    renderCanvas();
-    if (fade < 1) {
-      requestAnimationFrame(animate);
-    } else {
-      roomView.remove(paint);
-      renderCanvas();
+  deadBodies.push({ paint, view: roomView, start: performance.now() });
+  if (deadBodiesFrame === 0) {
+    deadBodiesFrame = requestAnimationFrame(fadeDeadBodies);
+  }
+}
+
+// The bodies of the enemies that dropped dead, fading away in one loop together, so that the
+// canvas is drawn once a frame however many die at once, as when the necromancer falls.
+const deadBodies: { paint: Paint; view: RoomView; start: number }[] = [];
+let deadBodiesFrame = 0;
+
+function fadeDeadBodies(now: number) {
+  for (const body of [...deadBodies]) {
+    const fade = Math.min(1, Math.max(0, (now - body.start - ENEMY_DEAD_HOLD_MS) / ENEMY_FADE_MS));
+    body.paint.opacity(Math.round(255 * (1 - fade)));
+    if (fade >= 1) {
+      body.view.remove(body.paint);
+      deadBodies.splice(deadBodies.indexOf(body), 1);
     }
-  };
-  requestAnimationFrame(animate);
+  }
+  renderCanvas();
+  deadBodiesFrame = deadBodies.length > 0 ? requestAnimationFrame(fadeDeadBodies) : 0;
 }
 
 // Placeholder values for the death of the hero: how long everything holds still when the last blow
@@ -2400,8 +2410,13 @@ function winGame() {
   isGameOver = true;
   deleteSave();
   stopWalking();
+  // They drop dead as any enemy does, those in view falling over and fading away.
   for (const enemy of [...enemies]) {
-    roomView.remove(enemy.paint);
+    if (seenEnemies.has(enemy)) {
+      playEnemyDeath(enemy);
+    } else {
+      roomView.remove(enemy.paint);
+    }
     roomView.remove(enemy.healthBar.scene);
     roomView.remove(enemy.sleepMark);
     enemies.splice(enemies.indexOf(enemy), 1);
