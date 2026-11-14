@@ -56,7 +56,7 @@ import {
   REST_HEAL_FRACTION,
   REST_TURNS,
 } from './campfire';
-import { createDialog } from './dialog';
+import { createDialog, type DialogContent } from './dialog';
 import { createHazardField, spreadArea } from './hazards';
 import { createHunger, hungerState, satisfyHunger, tickHunger } from './hunger';
 import { createInventoryPanel } from './inventoryPanel';
@@ -1003,21 +1003,13 @@ const dialog = createDialog();
 // was walking or attacking do not close it unread. Opened from the help window, it closes at once.
 const GUIDE_CLOSE_DELAY_MS = 5000;
 
-// The help window, opened from the button at the top right, lists the guides already shown, to
-// read again. A guide is not listed before its situation comes up, so it is read there first. The
-// button shows with the first guide.
-const helpButton = document.querySelector<HTMLButtonElement>('#help-button')!;
+// Each guide opens by itself the first time its situation comes up in a page load: the controls on
+// reaching floor 1, surprise attacks on first seeing an enemy, food on first getting hungry, and
+// potions on first picking one up.
+type GuideName = 'controls' | 'surprise' | 'food' | 'potions';
 
-// The controls are explained once a page load, when the hero first reaches floor 1.
-let hasShownControlsGuide = false;
-
-function showControlsGuide(onBack?: () => void) {
-  hasShownControlsGuide = true;
-  helpButton.hidden = false;
-  dialog.open({
-    onBack,
-    closeDelayMs: onBack ? undefined : GUIDE_CLOSE_DELAY_MS,
-    isWide: true,
+const GUIDES: Record<GuideName, () => Omit<DialogContent, 'actions'>> = {
+  controls: () => ({
     title: t('Controls'),
     text: t('Click a tile to move, attack, and more.'),
     entries: [
@@ -1029,44 +1021,80 @@ function showControlsGuide(onBack?: () => void) {
       { icon: '--icon-log', text: t('Read the messages again.') },
       { icon: '--icon-bag', text: t('Open the bag to put on your gear and use your items.') },
     ],
-    actions: [],
-  });
-}
-
-// Surprise attacks are explained once a page load, when the hero first sees an enemy.
-let hasShownSurpriseGuide = false;
-
-function showSurpriseGuide(onBack?: () => void) {
-  hasShownSurpriseGuide = true;
-  helpButton.hidden = false;
-  dialog.open({
-    onBack,
-    closeDelayMs: onBack ? undefined : GUIDE_CLOSE_DELAY_MS,
-    isWide: true,
+  }),
+  surprise: () => ({
     title: t('Surprise Attacks'),
     text: t(
       'An enemy that has not seen you yet, such as one asleep or one that just came through a door or around a corner, cannot dodge your attack. Its damage keeps the same maximum but rolls from a higher minimum, so a high roll is likelier. Thrown weapons can surprise it too, but a weapon too heavy for your strength cannot.',
     ),
+  }),
+  food: () => ({
+    title: t('Food'),
+    text: t(
+      'You get hungry as turns pass, and while hungry you stop healing over time. Open the bag and eat before you start starving, as a starving hero keeps losing HP until they eat.',
+    ),
+  }),
+  potions: () => ({
+    title: t('Potions'),
+    text: t(
+      'Potions are unidentified, and their colors change from run to run. You learn what a potion is only by drinking it, or by throwing it and seeing what it does. After that, you know every potion of its kind.',
+    ),
+  }),
+};
+
+// The help window, opened from the button at the top right, lists the guides already shown, to
+// read again. A guide is not listed before its situation comes up, so it is read there first. The
+// button shows with the first guide.
+const helpButton = document.querySelector<HTMLButtonElement>('#help-button')!;
+const shownGuides = new Set<GuideName>();
+// Guides whose situation came up while another dialog was open. They open one at a time, as the
+// vision is updated on the next moves.
+const waitingGuides = new Set<GuideName>();
+
+function showGuide(name: GuideName, onBack?: () => void) {
+  shownGuides.add(name);
+  waitingGuides.delete(name);
+  helpButton.hidden = false;
+  // A guide that opens by itself stops a walk, which would go on under the dialog.
+  if (!onBack) {
+    stopWalking();
+  }
+  dialog.open({
+    ...GUIDES[name](),
+    onBack,
+    closeDelayMs: onBack ? undefined : GUIDE_CLOSE_DELAY_MS,
+    isWide: true,
     actions: [],
   });
 }
 
+function showWaitingGuide() {
+  const [next] = waitingGuides;
+  if (next && !dialog.isOpen()) {
+    showGuide(next);
+  }
+}
+
+// The situation of a guide came up, which opens the guide if it was never shown.
+function offerGuide(name: GuideName) {
+  if (!shownGuides.has(name)) {
+    waitingGuides.add(name);
+    showWaitingGuide();
+  }
+}
+
 function showHelp() {
-  const guides = [
-    { isShown: hasShownControlsGuide, label: t('Controls'), show: showControlsGuide },
-    { isShown: hasShownSurpriseGuide, label: t('Surprise Attacks'), show: showSurpriseGuide },
-  ];
   dialog.open({
     title: t('Help'),
     text: '',
     isWide: true,
-    actions: guides
-      .filter(({ isShown }) => isShown)
-      .map(({ label, show }) => ({
-        label,
+    actions: (Object.keys(GUIDES) as GuideName[])
+      .filter((name) => shownGuides.has(name))
+      .map((name) => ({
+        label: GUIDES[name]().title,
         detail: '',
         blockedReason: null,
-        run: () => show(showHelp),
+        run: () => showGuide(name, showHelp),
       })),
   });
 }
@@ -1283,6 +1311,9 @@ function pickUpItems(tile: Point): boolean {
         hasPickedUp = true;
         // Same wording as you_now_have of Hero in Shattered Pixel Dungeon.
         messageLog.add(phrase('You picked up: {item}.', { item: stackName(thing.name, count) }));
+        if (ITEMS[thing.name].potion) {
+          offerGuide('potions');
+        }
       } else {
         playBounce(roomView, item.paint, tile, renderCanvas);
       }
@@ -1397,10 +1428,10 @@ function updateVision() {
     }
     showEnemy(enemy);
   }
-  // The guide waits for another dialog to close, and the vision is updated again on the next move.
-  if (!hasShownSurpriseGuide && seenEnemies.size > 0 && !dialog.isOpen()) {
-    showSurpriseGuide();
+  if (seenEnemies.size > 0) {
+    offerGuide('surprise');
   }
+  showWaitingGuide();
 
   updateCursorTile();
 }
@@ -1504,8 +1535,8 @@ function musicOf(floor: number): MusicName {
 
 function startLevel() {
   // Before the hero looks around, so that the surprise guide for an enemy in sight waits for it.
-  if (floor === 1 && !hasShownControlsGuide) {
-    showControlsGuide();
+  if (floor === 1) {
+    offerGuide('controls');
   }
   visionState = '';
   groundItems = [];
@@ -2459,6 +2490,7 @@ function feelHunger() {
   const after = hungerState(heroHunger);
   if (after !== before && after === 'hungry') {
     messageLog.add(phrase('You are getting hungry.'), 'warning');
+    offerGuide('food');
   }
   if (after !== before && after === 'starving') {
     messageLog.add(phrase('You are starving! You will keep losing HP until you eat.'), 'danger');
