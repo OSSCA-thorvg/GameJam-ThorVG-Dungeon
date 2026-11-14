@@ -445,50 +445,72 @@ export interface CharacterArt {
   // Where the body is in the picture, facing either way: its first and last columns and its first
   // row, in art pixels.
   body: BodyBounds;
+  // How it falls when it dies: one that stands falls on its side, and a beast or a thing rolls
+  // onto its back.
+  fall: 'side' | 'back';
 }
 
 export interface BodyBounds {
   left: number;
   right: number;
   top: number;
+  // The first row, from the top, where the bulk of the body starts: one at least half as wide as
+  // the widest row. Above it are only thin parts, as eye stalks or claws.
+  bulkTop: number;
+  // How far the bulk of the body reaches in front, from the middle of the picture: to the last
+  // column, on the side it faces, at least half as tall as the tallest column. Past it are only thin
+  // parts, as a staff or the hem of a robe.
+  frontReach: number;
 }
 
 const mirrored = (rows: string[]) => rows.map((row) => [...row].reverse().join(''));
 
-function bodyOf(rows: string[]): BodyBounds {
+function bodyOf(rows: string[], drawnFacing: 'left' | 'right'): BodyBounds {
   const columns = rows.flatMap((row) => [...row].flatMap((pixel, x) => (pixel === '.' ? [] : [x])));
   const left = Math.min(...columns);
   const right = Math.max(...columns);
   const last = rows.length - 1;
+  const widths = rows.map((row) => [...row].filter((pixel) => pixel !== '.').length);
+  const widest = Math.max(...widths);
+  const heights = [...rows[0]].map((_, x) => rows.filter((row) => row[x] !== '.').length);
+  const tallest = Math.max(...heights);
+  const bulkColumns = heights.flatMap((height, x) => (height >= tallest / 2 ? [x] : []));
+  const middle = rows[0].length / 2;
   return {
     left: Math.min(left, last - right),
     right: Math.max(right, last - left),
     top: rows.findIndex((row) => /[^.]/.test(row)),
+    bulkTop: widths.findIndex((width) => width >= widest / 2),
+    frontReach:
+      drawnFacing === 'left'
+        ? middle - Math.min(...bulkColumns)
+        : Math.max(...bulkColumns) + 1 - middle,
   };
 }
 
 // Each picture is drawn facing one way, and the other way is its mirror image.
-const art = (rows: string[], drawnFacing: 'left' | 'right'): CharacterArt => {
+const art = (rows: string[], drawnFacing: 'left' | 'right', fall: 'side' | 'back'): CharacterArt => {
   const drawn = pixelSvg(rows, PALETTE);
   const mirror = pixelSvg(mirrored(rows), PALETTE);
   return {
     left: drawnFacing === 'left' ? drawn : mirror,
     right: drawnFacing === 'left' ? mirror : drawn,
     pixels: rows.length,
-    body: bodyOf(rows),
+    body: bodyOf(rows, drawnFacing),
+    fall,
   };
 };
 
 export const CHARACTER_ART = {
-  hero: art(HERO, 'right'),
-  rat: art(RAT, 'left'),
-  crab: art(CRAB, 'left'),
-  bat: art(BAT, 'left'),
-  ghoul: art(GHOUL, 'left'),
-  ghost: art(GHOST, 'left'),
-  skeleton: art(SKELETON, 'left'),
-  necromancer: art(NECROMANCER, 'left'),
-  mimic: art(MIMIC, 'left'),
-  'centipede-head': art(CENTIPEDE_HEAD, 'left'),
-  'centipede-body': art(CENTIPEDE_BODY, 'left'),
+  hero: art(HERO, 'right', 'side'),
+  rat: art(RAT, 'left', 'back'),
+  crab: art(CRAB, 'left', 'back'),
+  bat: art(BAT, 'left', 'back'),
+  ghoul: art(GHOUL, 'left', 'side'),
+  ghost: art(GHOST, 'left', 'side'),
+  skeleton: art(SKELETON, 'left', 'side'),
+  necromancer: art(NECROMANCER, 'left', 'side'),
+  mimic: art(MIMIC, 'left', 'back'),
+  'centipede-head': art(CENTIPEDE_HEAD, 'left', 'back'),
+  'centipede-body': art(CENTIPEDE_BODY, 'left', 'back'),
 };

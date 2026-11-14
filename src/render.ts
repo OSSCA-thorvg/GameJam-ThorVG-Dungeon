@@ -894,12 +894,15 @@ function createCharacter(
   scene.add(left);
   scene.add(right);
   facings.set(scene, { left, right });
-  characterShapes.set(scene, { pixels: art.pixels, size, body: art.body });
+  characterShapes.set(scene, { pixels: art.pixels, size, body: art.body, fall: art.fall });
   return scene;
 }
 
 // The grid of each character's picture, and where its body is in it, for the looks of statuses.
-const characterShapes = new WeakMap<Scene, { pixels: number; size: number; body: BodyBounds }>();
+const characterShapes = new WeakMap<
+  Scene,
+  { pixels: number; size: number; body: BodyBounds; fall: 'side' | 'back' }
+>();
 
 // Turns a character to face the way from one tile to another on the screen. A move straight up or
 // down the screen keeps the way it faced.
@@ -916,6 +919,25 @@ export function faceToward(paint: Paint, from: Point, to: Point): void {
 // Which way a character faces on the screen.
 export function facingOf(paint: Paint): 'left' | 'right' {
   return facings.get(paint)?.left.visible() ? 'left' : 'right';
+}
+
+// How a character falls when it dies (CharacterArt.fall): the height above its feet of the middle
+// of its body, which it turns about, how far it turns, and how far that middle sinks, in screen
+// pixels before the zoom. Each way, it sinks until the bulk of its body is on the floor, as only
+// thin parts would hold it up otherwise. One that falls on its side falls forward, and its front
+// goes down, so the middle sinks to the reach of the bulk in front above the floor, past a staff or
+// the hem of a robe. One upside down has its top at the bottom, so it sinks by the thin parts on
+// its top, as eye stalks or claws.
+export function fallOf(paint: Paint): { pivot: number; turn: number; sink: number } {
+  const shape = characterShapes.get(paint as Scene);
+  if (!shape) {
+    return { pivot: CHARACTER_WAIST_HEIGHT, turn: 90, sink: CHARACTER_WAIST_HEIGHT / 2 };
+  }
+  const scale = shape.size / shape.pixels;
+  const pivot = ((shape.pixels - shape.body.top) * scale) / 2;
+  return shape.fall === 'side'
+    ? { pivot, turn: 90, sink: pivot - shape.body.frontReach * scale }
+    : { pivot, turn: 180, sink: (shape.body.bulkTop - shape.body.top) * scale };
 }
 
 export function createHero(TVG: ThorVGNamespace): Scene {

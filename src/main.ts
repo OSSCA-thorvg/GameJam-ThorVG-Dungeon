@@ -163,6 +163,7 @@ import {
   CHARACTER_WAIST_HEIGHT,
   faceToward,
   facingOf,
+  fallOf,
   createEnemyHealthBar,
   createItemPaint,
   createHeroHealthBar,
@@ -2293,6 +2294,45 @@ function endGame() {
   playHeroDeath(() => showEndScreen('You died', null, 'Try again'));
 }
 
+// Placeholder values for the death of an enemy: how long its body lies still, and then how long
+// it takes to fade away.
+const ENEMY_DEAD_HOLD_MS = 150;
+const ENEMY_FADE_MS = 450;
+
+// An enemy drops dead at once, on its side the way it faces or onto its back (fallOf()), with no
+// turn in between, which hits harder than a slow fall in pixel art. It lies still for a moment,
+// then fades away and is taken out of the room. The game goes on meanwhile, as nothing waits for
+// it.
+function playEnemyDeath(enemy: Enemy) {
+  const { paint, position } = enemy;
+  const { pivot, turn, sink } = fallOf(paint);
+  const side = facingOf(paint) === 'right' ? 1 : -1;
+  const angle = side * turn;
+  const radians = (angle * Math.PI) / 180;
+  // ThorVG turns a paint about its origin, the feet, so the turn about the middle of the body is
+  // that turn with the middle moved back to where it was, and then down by the sink. A levitating
+  // body drops to the floor.
+  paint.rotate(angle);
+  roomView.nudge(paint, position, {
+    x: -pivot * Math.sin(radians),
+    y: -pivot + pivot * Math.cos(radians) + sink,
+  });
+  renderCanvas();
+  const start = performance.now();
+  const animate = (now: number) => {
+    const fade = Math.min(1, Math.max(0, (now - start - ENEMY_DEAD_HOLD_MS) / ENEMY_FADE_MS));
+    paint.opacity(Math.round(255 * (1 - fade)));
+    renderCanvas();
+    if (fade < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      roomView.remove(paint);
+      renderCanvas();
+    }
+  };
+  requestAnimationFrame(animate);
+}
+
 // Placeholder values for the death of the hero: how long everything holds still when the last blow
 // lands, how long the body takes to fall, and how long the world then takes to fade to gray and
 // blur, and how gray, dark, and blurred it ends up.
@@ -2411,7 +2451,12 @@ function killEnemy(part: Enemy) {
     messageLog.add(phrase('You defeated the {enemy}.', { enemy: phrase(enemy.stats.name) }));
   }
   for (const piece of [enemy, ...enemy.followers]) {
-    roomView.remove(piece.paint);
+    // One in view falls over and fades away. The rest go at once, as no one sees them.
+    if (seenEnemies.has(piece)) {
+      playEnemyDeath(piece);
+    } else {
+      roomView.remove(piece.paint);
+    }
     roomView.remove(piece.healthBar.scene);
     roomView.remove(piece.sleepMark);
     enemies.splice(enemies.indexOf(piece), 1);
@@ -2925,7 +2970,12 @@ function playHeroAttack(enemy: Enemy) {
     lunge: scalePoint(tileDistance(attackerTile, enemy.position), LUNGE_DISTANCE / steps),
     isMiss: !isHit,
     moveAttacker: (offset) => nudgeHero(attackerTile, offset),
-    moveTarget: (offset) => nudgeEnemy(enemy, enemy.position, offset),
+    // A body that dropped dead at the blow is not pushed back any more.
+    moveTarget: (offset) => {
+      if (enemies.includes(enemy)) {
+        nudgeEnemy(enemy, enemy.position, offset);
+      }
+    },
     flashTarget: (isFlashing) => {
       if (isFlashing) {
         enemy.paint.resetEffects();
@@ -2945,6 +2995,10 @@ function playHeroAttack(enemy: Enemy) {
         attackEnemy(enemy, heroPosition, damage);
         roomView.remove(enemy.sleepMark);
         showDamage(damage, enemy.position, 'enemy');
+        // The enemy drops dead as the blow lands, not once the hero has stepped back.
+        if (enemy.hp === 0) {
+          killEnemy(enemy);
+        }
       } else {
         sound.play('miss');
         alertEnemy(enemy, heroPosition);
@@ -2954,9 +3008,6 @@ function playHeroAttack(enemy: Enemy) {
     },
     onEnd: () => {
       finishAttackEffect = null;
-      if (enemy.hp === 0) {
-        killEnemy(enemy);
-      }
       passTurn(() => {});
     },
   });
