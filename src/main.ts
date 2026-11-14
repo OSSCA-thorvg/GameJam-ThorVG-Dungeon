@@ -3332,6 +3332,10 @@ function shatterPotion(name: ItemName, tile: Point) {
   if (isSeen) {
     messageLog.add(phrase(enemyEffect.message, { enemy: phrase(enemy.stats.name) }));
     potionLore.identify(name);
+  } else if (isInView(tile)) {
+    // An invisible enemy in view is not seen, but the splash on it is. The player does not learn
+    // what the potion did, as they cannot see it.
+    messageLog.add(phrase('Something unseen was hit by the flask!'));
   } else {
     messageLog.add(phrase("The potion's flask broke, but nothing happened."));
   }

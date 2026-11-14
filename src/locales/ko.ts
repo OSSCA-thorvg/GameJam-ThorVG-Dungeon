@@ -214,6 +214,7 @@ export const ko: Record<string, string> = {
   'You ate the {item}.': '{item|을|를} 먹었다.',
   'Your stomach churns. The meat was bad!': '속이 뒤틀린다. 고기가 상했다!',
   "The potion's flask broke, but nothing happened.": '물약 병이 깨졌지만 아무 일도 일어나지 않았다.',
+  'Something unseen was hit by the flask!': '보이지 않는 무언가가 물약 병에 맞았다!',
   'The {item} breaks.': '{item|이|가} 부러졌다.',
   'Throw the {item} where?': '{item|을|를} 어디로 던질까?',
   'You picked up {amount} gold.': '{amount}골드를 주웠다.',
